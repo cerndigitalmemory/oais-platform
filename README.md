@@ -5,11 +5,11 @@ Web API, built on Django, managing workflows for the CERN Digital Memory OAIS pl
 Main goals of the platforms are:
 
 - Trigger resource harvesting and produce BagIt packages, using the [bagit-create](https://gitlab.cern.ch/digitalmemory/bagit-create) tool;
-- Trigger enduro/Archivematica ingestions and sorrounding workflows;
+- Trigger the preservations and sorrounding workflows;
 	- Evaluation of a3m, an alternative Archivemeativa version (gRPC service);
 	- Interface with a distributed deployment of Archivematica;
-- Send final data packages to the new CERN Tape Archive (CTA);
-- Implement workflows to send final data to Archiver.eu platforms and evaluate their interfaces, performance and behaviour on processing metadata;
+	- Send SIPs to Archiver.eu platforms and evaluate their interfaces, performance and behaviour on ingestions and processing metadata;
+- Send prepared AIPs to the new CERN Tape Archive (CTA);
 - Maintain a *registry* of the successfully harvested and ingested resources, processing and exposing metadata;
 - Expose resources on an access system (powered by Invenio?), exploiting the metadata and revisions features of the CERN AIP specification.
 
