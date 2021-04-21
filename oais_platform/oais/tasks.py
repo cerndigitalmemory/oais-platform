@@ -8,11 +8,11 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@task(bind=True, name="process")
-def process(self):
-    logger.info("Task started")
+@task(name="process", bind=True)
+def process(self, rec_id):
+    logger.info("Task started", self)
     res = bic.process(
-        recid=1,
+        recid=rec_id,
         source="cds",
     )
     self.update_state(state="PROGRESS", meta={"bagit_res": res})

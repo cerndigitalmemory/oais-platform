@@ -45,7 +45,8 @@ class RecordViewSet(viewsets.ModelViewSet):
 
 
 def harvest(request, rec_id):
-    task_id = process.apply_async()
+
+    task_id = process.apply_async(args=(rec_id,))
     return HttpResponse(f"You requested recid {rec_id}. Celery task is {task_id}")
 
 
