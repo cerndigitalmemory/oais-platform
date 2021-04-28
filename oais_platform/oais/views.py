@@ -44,10 +44,9 @@ class RecordViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-def harvest(request, rec_id):
-
-    task_id = process.apply_async(args=(rec_id,))
-    return HttpResponse(f"You requested recid {rec_id}. Celery task is {task_id}")
+def harvest(request, rec_id, source):
+    task_id = process.apply_async(args=(rec_id, source,))
+    return HttpResponse(f"You requested recid {rec_id} from {source}. Celery task is {task_id}")
 
 
 def task_status(request, task_id):

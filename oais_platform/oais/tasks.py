@@ -9,10 +9,10 @@ logger = get_task_logger(__name__)
 
 
 @task(name="process", bind=True)
-def process(self, rec_id):
+def process(self, rec_id, source):
     logger.info("Task started", self)
     res = bic.process(
         recid=rec_id,
-        source="cds",
+        source=source,
     )
     self.update_state(state="PROGRESS", meta={"bagit_res": res})
