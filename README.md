@@ -16,6 +16,7 @@ Main goals of the platforms are:
 ## Requirements
 
 Redis:
+
 ```bash
 # Install
 apt install redis
@@ -24,7 +25,7 @@ apt install redis
 vim /etc/redis/redis.conf
 # Restart systemd service
 systemctl restart redis
-# Up and running at 127.0.0.1:6379
+# Redis will be up and running at 127.0.0.1:6379
 ```
 
 Setting up a virtual environment:
@@ -38,7 +39,7 @@ BagIt Create tool (development):
 ```bash
 git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/bagit-create.git
 # bagit_create should be in the root folder of the project
-mv bagit-create/bagit-create/bagit_create bagit_create
+mv bagit-create/bagit_create/ .
 # install BIC requirements
 pip install -r bagit_create/requirements.txt
 ```
@@ -64,4 +65,12 @@ On a separate shell, fire up a celery worker:
 celery -A oais_platform.celery worker -l INFO
 ```
 
-API web interface is online at http://localhost:8000/
+Optionally, start flower this way to get a dashboard to monitor celery tasks:
+```bash
+flower -A oais_platform.celery --port=5555
+```
+
+Exposed endpoints:
+
+- web interface is online at http://localhost:8000/
+- flower dashboard at http://localhost:5555/
