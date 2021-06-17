@@ -45,7 +45,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+
     "oais_platform",
+    "oais_platform.oais",
 ]
 
 MIDDLEWARE = [
