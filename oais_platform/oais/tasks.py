@@ -14,5 +14,8 @@ def process(self, rec_id, source):
     res = bic.process(
         recid=rec_id,
         source=source,
+        loglevel=2,
+        ark_json=False,
+        ark_json_rel=False,
     )
     self.update_state(state="PROGRESS", meta={"bagit_res": res})

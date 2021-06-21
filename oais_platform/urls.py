@@ -29,7 +29,7 @@ router.register(r"records", views.RecordViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
-    path("harvest/<int:rec_id>/<str:source>/", views.harvest, name="harvest"),
-    path("task-status/<str:task_id>/", views.task_status, name="task_status"),
+    path("harvest/<int:rec_id>/<str:source>", views.harvest, name="harvest"),
+    path("task-status/<str:task_id>", views.task_status, name="task_status"),
     path("search/<str:source>", views.search, name="search")
 ]
