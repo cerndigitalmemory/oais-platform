@@ -15,7 +15,10 @@ Including another URLconf
 """
 
 from django.urls import include, path
+
 from rest_framework import routers
+from rest_framework.authtoken import views as authtoken_views
+
 from oais_platform.oais import views
 
 router = routers.DefaultRouter()
@@ -29,6 +32,7 @@ router.register(r"records", views.RecordViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("auth", authtoken_views.obtain_auth_token),
     path("harvest/<int:rec_id>/<str:source>", views.harvest, name="harvest"),
     path("task-status/<str:task_id>", views.task_status, name="task_status"),
     path("search/<str:source>", views.search, name="search")
