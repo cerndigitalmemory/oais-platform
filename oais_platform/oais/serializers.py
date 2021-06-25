@@ -1,5 +1,5 @@
-from django.contrib.auth.models import User, Group
-from oais_platform.oais.models import Record
+from django.contrib.auth.models import Group, User
+from oais_platform.oais.models import Archive, Record
 from rest_framework import serializers
 
 
@@ -16,6 +16,13 @@ class GroupSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class RecordSerializer(serializers.HyperlinkedModelSerializer):
-	class Meta:
-		model = Record
-		fields = ['url', 'id', 'source']
+    class Meta:
+        model = Record
+        fields = ['url', 'id', 'source']
+
+
+class ArchiveSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = Archive
+        fields = ["id", "record", "creator",
+                  "creation_date", "celery_task_id", "status"]

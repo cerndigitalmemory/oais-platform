@@ -1,8 +1,40 @@
+from django.contrib.auth.models import User
 from django.db import models
+from django.utils import timezone
 
 # Create your models here.
+
 
 class Record(models.Model):
     url = models.CharField(max_length=100)
     recid = models.CharField(max_length=50)
     source = models.CharField(max_length=50)
+
+
+class ArchiveStatus(models.IntegerChoices):
+    PENDING = 1
+    IN_PROGRESS = 2
+    FAILED = 3
+    COMPLETED = 4
+
+
+class Archive(models.Model):
+    record = models.ForeignKey(Record, on_delete=models.PROTECT)
+    creator = models.ForeignKey(User, on_delete=models.PROTECT, null=True)
+    creation_date = models.DateTimeField(default=timezone.now)
+    celery_task_id = models.CharField(max_length=50, null=True, default=None)
+    status = models.IntegerField(
+        choices=ArchiveStatus.choices, default=ArchiveStatus.PENDING)
+
+    def set_in_progress(self, task_id):
+        self.celery_task_id = task_id
+        self.status = ArchiveStatus.IN_PROGRESS
+        self.save()
+
+    def set_completed(self):
+        self.status = ArchiveStatus.COMPLETED
+        self.save()
+
+    def set_failed(self):
+        self.status = ArchiveStatus.FAILED
+        self.save()

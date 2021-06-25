@@ -25,15 +25,15 @@ router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
 router.register(r"records", views.RecordViewSet)
-
+router.register(r"archives", views.ArchiveViewSet)
 
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
     path("", include(router.urls)),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
-    path("auth", authtoken_views.obtain_auth_token),
-    path("harvest/<int:rec_id>/<str:source>", views.harvest, name="harvest"),
-    path("task-status/<str:task_id>", views.task_status, name="task_status"),
-    path("search/<str:source>", views.search, name="search")
+    path("auth/", authtoken_views.obtain_auth_token),
+    path("harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"),
+    path("task-status/<str:task_id>/", views.task_status, name="task_status"),
+    path("search/<str:source>/", views.search, name="search")
 ]

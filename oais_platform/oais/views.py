@@ -4,13 +4,15 @@ import pymarc
 import requests
 from django.contrib.auth.models import Group, User
 from django.http import HttpResponse
+from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest, ServiceUnavailable
-from oais_platform.oais.models import Record
-from oais_platform.oais.serializers import (GroupSerializer, RecordSerializer,
-                                            UserSerializer)
+from oais_platform.oais.models import Archive, Record
+from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
+                                            RecordSerializer, UserSerializer)
 from rest_framework import permissions, viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.reverse import reverse
 
 from .tasks import process
 
@@ -45,9 +47,35 @@ class RecordViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-def harvest(request, rec_id, source):
-    task_id = process.apply_async(args=(rec_id, source,))
-    return HttpResponse(f"You requested recid {rec_id} from {source}. Celery task is {task_id}")
+class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Archive.objects.all()
+    serializer_class = ArchiveSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def harvest(request, recid, source):
+    if source == "cds-test":
+        url = f"https://cds-test.cern.ch/record/{recid}"
+    elif source == "cds":
+        url = f"https://cds.cern.ch/record/{recid}"
+
+    record, _ = Record.objects.get_or_create(
+        recid=recid,
+        source=source,
+        defaults={"url": url}
+    )
+
+    archive = Archive.objects.create(
+        record=record,
+        creator=request.user,
+    )
+
+    process.delay(archive.id)
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id}))
 
 
 def task_status(request, task_id):
