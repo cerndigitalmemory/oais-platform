@@ -9,6 +9,7 @@ from oais_platform.oais.exceptions import BadRequest, ServiceUnavailable
 from oais_platform.oais.models import Archive, Record
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             RecordSerializer, UserSerializer)
+from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -56,10 +57,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def harvest(request, recid, source):
-    if source == "cds-test":
-        url = f"https://cds-test.cern.ch/record/{recid}"
-    elif source == "cds":
-        url = f"https://cds.cern.ch/record/{recid}"
+    try:
+        url = get_source(source).get_record_url(recid)
+    except InvalidSource:
+        raise BadRequest("Invalid source")
 
     record, _ = Record.objects.get_or_create(
         recid=recid,
@@ -89,45 +90,9 @@ def search(request, source):
         raise BadRequest("Missing parameter q")
     query = request.GET["q"]
 
-    results = None
-    if source == "cds-test":
-        results = search_cds("https://cds-test.cern.ch", source, query)
-    elif source == "cds":
-        results = search_cds("https://cds.cern.ch", source, query)
-
-    if not results:
+    try:
+        results = get_source(source).search(query)
+    except InvalidSource:
         raise BadRequest("Invalid source")
 
     return Response(results)
-
-
-def search_cds(baseUrl, source, query):
-    try:
-        req = requests.get(baseUrl + "/search",
-                           params={"p": query, "of": "xm"})
-    except:
-        raise ServiceUnavailable("Cannot perform search")
-
-    if not req.ok:
-        raise ServiceUnavailable(
-            f"Search failed with error code {req.status_code}")
-
-    # Parse MARC XML
-    records = pymarc.parse_xml_to_array(io.BytesIO(req.content))
-    results = []
-    for record in records:
-        recid = record["001"].value()
-
-        authors = []
-        for author in record.get_fields("100", "700"):
-            authors.append(author["a"])
-
-        results.append({
-            "url": f"{baseUrl}/record/{recid}",
-            "recid": recid,
-            "title": record.title(),
-            "authors": authors,
-            "source": source
-        })
-
-    return results
