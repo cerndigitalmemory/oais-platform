@@ -18,11 +18,14 @@ class GroupSerializer(serializers.HyperlinkedModelSerializer):
 class RecordSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Record
-        fields = ['url', 'id', 'source']
+        fields = ["url", "id", "recid", "source"]
 
 
 class ArchiveSerializer(serializers.HyperlinkedModelSerializer):
+    creator = UserSerializer()
+    record = RecordSerializer()
+
     class Meta:
         model = Archive
-        fields = ["id", "record", "creator",
+        fields = ["url", "id", "record", "creator",
                   "creation_date", "celery_task_id", "status"]
