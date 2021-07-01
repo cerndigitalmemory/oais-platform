@@ -5,20 +5,21 @@ import requests
 from django.contrib.auth.models import Group, User
 from django.http import HttpResponse
 from django.shortcuts import redirect
-from oais_platform.oais.exceptions import BadRequest, ServiceUnavailable
+from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Record
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             RecordSerializer, UserSerializer)
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
 from .tasks import process
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(viewsets.ModelViewSet, PaginationMixin):
     """
     API endpoint that allows users to be viewed or edited.
     """
@@ -26,6 +27,12 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True)
+    def archives(self, request, pk=None):
+        user = self.get_object()
+        archives = user.archives.all()
+        return self.make_paginated_response(archives, ArchiveSerializer)
 
 
 class GroupViewSet(viewsets.ModelViewSet):
@@ -38,7 +45,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-class RecordViewSet(viewsets.ModelViewSet):
+class RecordViewSet(viewsets.ModelViewSet, PaginationMixin):
     """
     API endpoint that allows records to be viewed or edited.
     """
@@ -46,6 +53,12 @@ class RecordViewSet(viewsets.ModelViewSet):
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True)
+    def archives(self, request, pk=None):
+        record = self.get_object()
+        archives = record.archives.all()
+        return self.make_paginated_response(archives, ArchiveSerializer)
 
 
 class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
