@@ -10,6 +10,9 @@ class Record(models.Model):
     recid = models.CharField(max_length=50)
     source = models.CharField(max_length=50)
 
+    class Meta:
+        unique_together = ["recid", "source"]
+
 
 class ArchiveStatus(models.IntegerChoices):
     PENDING = 1
@@ -19,8 +22,10 @@ class ArchiveStatus(models.IntegerChoices):
 
 
 class Archive(models.Model):
-    record = models.ForeignKey(Record, on_delete=models.PROTECT)
-    creator = models.ForeignKey(User, on_delete=models.PROTECT, null=True)
+    record = models.ForeignKey(
+        Record, on_delete=models.PROTECT, related_name="archives")
+    creator = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, related_name="archives")
     creation_date = models.DateTimeField(default=timezone.now)
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     status = models.IntegerField(
