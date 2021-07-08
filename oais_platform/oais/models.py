@@ -19,6 +19,8 @@ class ArchiveStatus(models.IntegerChoices):
     IN_PROGRESS = 2
     FAILED = 3
     COMPLETED = 4
+    WAITING_APPROVAL = 5
+    REJECTED = 6
 
 
 class Archive(models.Model):
@@ -29,7 +31,7 @@ class Archive(models.Model):
     creation_date = models.DateTimeField(default=timezone.now)
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     status = models.IntegerField(
-        choices=ArchiveStatus.choices, default=ArchiveStatus.PENDING)
+        choices=ArchiveStatus.choices, default=ArchiveStatus.WAITING_APPROVAL)
 
     def set_in_progress(self, task_id):
         self.celery_task_id = task_id

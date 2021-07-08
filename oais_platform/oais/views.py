@@ -7,11 +7,11 @@ from django.http import HttpResponse
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Record
+from oais_platform.oais.models import Archive, ArchiveStatus, Record
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             RecordSerializer, UserSerializer)
 from oais_platform.oais.sources import InvalidSource, get_source
-from rest_framework import permissions, viewsets
+from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
@@ -19,7 +19,7 @@ from rest_framework.reverse import reverse
 from .tasks import process
 
 
-class UserViewSet(viewsets.ModelViewSet, PaginationMixin):
+class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows users to be viewed or edited.
     """
@@ -35,7 +35,7 @@ class UserViewSet(viewsets.ModelViewSet, PaginationMixin):
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
@@ -45,7 +45,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-class RecordViewSet(viewsets.ModelViewSet, PaginationMixin):
+class RecordViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows records to be viewed or edited.
     """
@@ -61,10 +61,18 @@ class RecordViewSet(viewsets.ModelViewSet, PaginationMixin):
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
-class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
+class ArchiveViewSet(mixins.ListModelMixin,
+                     mixins.RetrieveModelMixin,
+                     mixins.UpdateModelMixin,
+                     viewsets.GenericViewSet):
     queryset = Archive.objects.all()
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def perform_update(self, serializer):
+        archive = serializer.save()
+        if archive.status == ArchiveStatus.PENDING:
+            process.delay(archive.id)
 
 
 @api_view(["POST"])
@@ -85,8 +93,6 @@ def harvest(request, recid, source):
         record=record,
         creator=request.user,
     )
-
-    process.delay(archive.id)
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id}))

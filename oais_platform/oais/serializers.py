@@ -1,6 +1,7 @@
 from django.contrib.auth.models import Group, User
-from oais_platform.oais.models import Archive, Record
+from oais_platform.oais.models import Archive, ArchiveStatus, Record
 from rest_framework import serializers
+from rest_framework.serializers import ValidationError
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -29,3 +30,19 @@ class ArchiveSerializer(serializers.ModelSerializer):
         model = Archive
         fields = ["id", "record", "creator",
                   "creation_date", "celery_task_id", "status"]
+
+    def update(self, instance, validated_data):
+        new_status = validated_data.pop("status", instance.status)
+        if len(validated_data) != 0:
+            raise ValidationError("Only status can be updated")
+
+        if new_status != instance.status:
+            if instance.status != ArchiveStatus.WAITING_APPROVAL:
+                raise ValidationError("Archive is not waiting for approval")
+            if new_status not in (ArchiveStatus.PENDING, ArchiveStatus.REJECTED):
+                raise ValidationError(
+                    "New status is not 'pending' or 'rejected'")
+            instance.status = new_status
+
+        instance.save()
+        return instance
