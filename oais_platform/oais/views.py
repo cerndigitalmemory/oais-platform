@@ -1,7 +1,3 @@
-import io
-
-import pymarc
-import requests
 from django.contrib.auth.models import Group, User
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -11,8 +7,9 @@ from oais_platform.oais.models import Archive, ArchiveStatus, Record
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             RecordSerializer, UserSerializer)
 from oais_platform.oais.sources import InvalidSource, get_source
-from rest_framework import mixins, permissions, viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
@@ -61,18 +58,38 @@ class RecordViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
-class ArchiveViewSet(mixins.ListModelMixin,
-                     mixins.RetrieveModelMixin,
-                     mixins.UpdateModelMixin,
-                     viewsets.GenericViewSet):
-    queryset = Archive.objects.all()
+class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Archive.objects.all().order_by("-creation_date")
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def perform_update(self, serializer):
-        archive = serializer.save()
-        if archive.status == ArchiveStatus.PENDING:
+    def approve_or_reject(self, request, permission, approved):
+        user = request.user
+        if not user.has_perm(permission):
+            raise PermissionDenied()
+
+        archive = self.get_object()
+        if archive.status != ArchiveStatus.WAITING_APPROVAL:
+            raise BadRequest("Archive is not waiting for approval")
+
+        archive.status = ArchiveStatus.PENDING if approved else ArchiveStatus.REJECTED
+        archive.save()
+
+        if approved:
             process.delay(archive.id)
+
+        serializer = self.get_serializer(archive)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["POST"], url_path="actions/approve")
+    def approve(self, request, pk=None):
+        return self.approve_or_reject(
+            request, "oais.can_approve_archive", approved=True)
+
+    @action(detail=True, methods=["POST"], url_path="actions/reject")
+    def reject(self, request, pk=None):
+        return self.approve_or_reject(
+            request, "oais.can_reject_archive", approved=False)
 
 
 @api_view(["POST"])

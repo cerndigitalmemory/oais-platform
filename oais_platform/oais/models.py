@@ -33,6 +33,12 @@ class Archive(models.Model):
     status = models.IntegerField(
         choices=ArchiveStatus.choices, default=ArchiveStatus.WAITING_APPROVAL)
 
+    class Meta:
+        permissions = [
+            ("can_approve_archive", "Can approve an archival request"),
+            ("can_reject_archive", "Can reject an archival request"),
+        ]
+
     def set_in_progress(self, task_id):
         self.celery_task_id = task_id
         self.status = ArchiveStatus.IN_PROGRESS
