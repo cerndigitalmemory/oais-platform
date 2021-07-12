@@ -4,9 +4,14 @@ from rest_framework import serializers
 
 
 class UserSerializer(serializers.ModelSerializer):
+    permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "username"]
+        fields = ["id", "username", "permissions"]
+
+    def get_permissions(self, obj):
+        return obj.get_all_permissions()
 
 
 class GroupSerializer(serializers.ModelSerializer):
