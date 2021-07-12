@@ -132,3 +132,10 @@ def search(request, source):
         raise BadRequest("Invalid source")
 
     return Response(results)
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def me(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
