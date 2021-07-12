@@ -121,6 +121,7 @@ def task_status(request, task_id):
 
 
 @api_view()
+@permission_classes([permissions.IsAuthenticated])
 def search(request, source):
     if "q" not in request.GET:
         raise BadRequest("Missing parameter q")
