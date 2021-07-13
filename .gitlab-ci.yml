@@ -1,0 +1,8 @@
+test:
+  parallel:
+    matrix:
+      - IMAGE: ["python:3.6", "python:3.7"]
+  image: $IMAGE
+  script:
+    - pip install -r requirements.txt
+    - python manage.py test
