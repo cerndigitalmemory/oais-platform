@@ -74,3 +74,8 @@ Exposed endpoints:
 
 - web interface is online at http://localhost:8000/
 - flower dashboard at http://localhost:5555/
+
+## Run tests
+```bash
+python manage.py test
+```
