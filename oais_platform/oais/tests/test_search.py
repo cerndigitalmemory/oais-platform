@@ -12,8 +12,7 @@ from rest_framework.test import APITestCase
 class SearchTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user("user", "", "pw")
-        self.token = Token.objects.create(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION="Token " + self.token.key)
+        self.client.force_authenticate(user=self.user)
 
     def test_search_wrong_source(self):
         url = reverse("search", args=["wrong"])

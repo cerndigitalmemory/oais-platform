@@ -13,8 +13,8 @@ from rest_framework.test import APITestCase
 class HarvestTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user("user", "", "pw")
-        self.token = Token.objects.create(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION="Token " + self.token.key)
+        self.client.force_authenticate(user=self.user)
+
 
     def test_harvest_wrong_source(self):
         url = reverse("harvest", args=["1", "wrong"])
@@ -52,9 +52,9 @@ class HarvestTests(APITestCase):
         self.assertEqual(record.url, source.get_record_url("1"))
 
     def test_harvest_not_authenticated(self):
-        self.client.credentials()
+        self.client.force_authenticate(user=None)
 
         url = reverse("harvest", args=["1", "test"])
         response = self.client.post(url, format="json", follow=True)
 
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

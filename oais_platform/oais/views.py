@@ -1,3 +1,4 @@
+from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -5,7 +6,8 @@ from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, ArchiveStatus, Record
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
-                                            RecordSerializer, UserSerializer)
+                                            LoginSerializer, RecordSerializer,
+                                            UserSerializer)
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -140,3 +142,27 @@ def search(request, source):
 def me(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def login(request):
+    serializer = LoginSerializer(data=request.data)
+    if serializer.is_valid():
+        username = serializer.data["username"]
+        password = serializer.data["password"]
+
+        user = auth.authenticate(username=username, password=password)
+        if user is not None:
+            auth.login(request, user)
+            return redirect(reverse("me", request=request))
+        else:
+            raise BadRequest("Cannot authenticate user")
+
+    raise BadRequest("Missing username or password")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def logout(request):
+    auth.logout(request)
+    return Response({"status": "success"})

@@ -32,7 +32,10 @@ router.register(r"archives", views.ArchiveViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
-    path("auth/", authtoken_views.obtain_auth_token),
+
+    path("login/", views.login, name="login"),
+    path("logout/", views.logout, name="logout"),
+
     path("me/", views.me, name="me"),
     path("harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"),
     path("task-status/<str:task_id>/", views.task_status, name="task_status"),

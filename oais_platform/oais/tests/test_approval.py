@@ -16,21 +16,20 @@ class ApprovalTests(APITestCase):
             codename="can_approve_archive")
 
         self.user = User.objects.create_user("user", "", "pw")
-        self.token = Token.objects.create(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION="Token " + self.token.key)
+        self.client.force_authenticate(user=self.user)
 
         self.record = Record.objects.create(recid="1", source="test", url="")
         self.archive = Archive.objects.create(
             record=self.record, creator=self.user)
 
     def test_reject_not_authenticated(self):
-        self.client.credentials()
+        self.client.force_authenticate(user=None)
 
         url = reverse("archive-reject", args=[self.archive.id])
         response = self.client.post(url, format="json")
 
         self.archive.refresh_from_db()
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
 
     def test_reject_without_permission(self):
@@ -53,13 +52,13 @@ class ApprovalTests(APITestCase):
         self.assertEqual(self.archive.status, ArchiveStatus.REJECTED)
 
     def test_approve_not_authenticated(self):
-        self.client.credentials()
+        self.client.force_authenticate(user=None)
 
         url = reverse("archive-approve", args=[self.archive.id])
         response = self.client.post(url, format="json")
 
         self.archive.refresh_from_db()
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
 
     def test_approve_without_permission(self):
