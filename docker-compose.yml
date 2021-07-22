@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  oais_platform:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/oais_platform
+    command: >
+      sh -c "python3 manage.py migrate &&
+             python3 manage.py runserver 0.0.0.0:8000"
+    # The redis service is exposed at redis:6379 by compose
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - ./.env.dev
+
+  redis:
+    image: redis:alpine
+  celery:
+    restart: always
+    build:
+      context: .
+    command: celery -A oais_platform.celery worker -l INFO
+    volumes:
+      - .:/oais_platform
+    env_file:
+      - ./.env.dev
+    depends_on:
+      - redis
+      - oais_platform
