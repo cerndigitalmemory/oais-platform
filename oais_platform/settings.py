@@ -35,6 +35,26 @@ CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
 
+# OpenID Connect
+OIDC_RP_CLIENT_ID = "Put here the Client ID"
+# SECURITY WARNING: the client secret must be kept secret!
+OIDC_RP_CLIENT_SECRET = "Put here the Client Secret"
+OIDC_OP_AUTHORIZATION_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
+OIDC_OP_TOKEN_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/token"
+OIDC_OP_USER_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
+OIDC_OP_JWKS_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
+OIDC_RP_SIGN_ALGO = "RS256"
+# Path to redirect to on successful login.
+# This is used to fetch the user information from the SPA.
+LOGIN_REDIRECT_URL = "/index.html#/login/callback"
+
+
+AUTHENTICATION_BACKENDS = [
+    "oais_platform.oais.auth.CERNAuthenticationBackend",
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+
 # Application definition
 
 INSTALLED_APPS = [

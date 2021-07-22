@@ -30,12 +30,15 @@ router.register(r"archives", views.ArchiveViewSet)
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
-    path("", include(router.urls)),
+    # Auth endpoint used by the browsable API of DRF
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
-
+    # Auth endpoint used for CERN SSO using OpenID Connect
+    path("oidc/", include("mozilla_django_oidc.urls")),
+    # Auth endpoints used to login/logout (local accounts)
     path("login/", views.login, name="login"),
     path("logout/", views.logout, name="logout"),
-
+    # API
+    path("", include(router.urls)),
     path("me/", views.me, name="me"),
     path("harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"),
     path("task-status/<str:task_id>/", views.task_status, name="task_status"),
