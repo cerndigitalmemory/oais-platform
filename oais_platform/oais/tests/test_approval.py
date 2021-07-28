@@ -14,13 +14,16 @@ class ApprovalTests(APITestCase):
             codename="can_reject_archive")
         self.approve_permission = Permission.objects.get(
             codename="can_approve_archive")
+        self.access_permission = Permission.objects.get(
+            codename="can_access_all_archives")
 
-        self.user = User.objects.create_user("user", "", "pw")
-        self.client.force_authenticate(user=self.user)
+        self.creator = User.objects.create_user("creator", password="pw")
+        self.other_user = User.objects.create_user("other", password="pw")
+        self.client.force_authenticate(user=self.creator)
 
         self.record = Record.objects.create(recid="1", source="test", url="")
         self.archive = Archive.objects.create(
-            record=self.record, creator=self.user)
+            record=self.record, creator=self.creator)
 
     def test_reject_not_authenticated(self):
         self.client.force_authenticate(user=None)
@@ -41,8 +44,8 @@ class ApprovalTests(APITestCase):
         self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
 
     def test_reject_with_permission(self):
-        self.user.user_permissions.add(self.reject_permission)
-        self.user.save()
+        self.creator.user_permissions.add(self.reject_permission)
+        self.creator.save()
 
         url = reverse("archive-reject", args=[self.archive.id])
         response = self.client.post(url, format="json")
@@ -71,8 +74,8 @@ class ApprovalTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.process.delay")
     def test_approve_with_permission(self, process_delay):
-        self.user.user_permissions.add(self.approve_permission)
-        self.user.save()
+        self.creator.user_permissions.add(self.approve_permission)
+        self.creator.save()
 
         url = reverse("archive-approve", args=[self.archive.id])
         response = self.client.post(url, format="json")
@@ -83,8 +86,8 @@ class ApprovalTests(APITestCase):
         process_delay.assert_called_once_with(self.archive.id)
 
     def test_reject_not_waiting_approval(self):
-        self.user.user_permissions.add(self.reject_permission)
-        self.user.save()
+        self.creator.user_permissions.add(self.reject_permission)
+        self.creator.save()
 
         url = reverse("archive-reject", args=[self.archive.id])
         for archive_status in ArchiveStatus.values:
@@ -101,3 +104,59 @@ class ApprovalTests(APITestCase):
 
             self.archive.refresh_from_db()
             self.assertEqual(self.archive.status, archive_status)
+
+    def test_reject_other_user_with_perm(self):
+        self.other_user.user_permissions.add(self.reject_permission)
+        self.other_user.user_permissions.add(self.access_permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-reject", args=[self.archive.id])
+        response = self.client.post(url, format="json")
+
+        self.archive.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.archive.status, ArchiveStatus.REJECTED)
+
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_approve_other_user_with_perm(self, process_delay):
+        self.other_user.user_permissions.add(self.approve_permission)
+        self.other_user.user_permissions.add(self.access_permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-approve", args=[self.archive.id])
+        response = self.client.post(url, format="json")
+
+        self.archive.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.archive.status, ArchiveStatus.PENDING)
+        process_delay.assert_called_once_with(self.archive.id)
+
+    def test_reject_other_user_without_access_perm(self):
+        self.other_user.user_permissions.add(self.reject_permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-reject", args=[self.archive.id])
+        response = self.client.post(url, format="json")
+
+        self.archive.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+
+    def test_approve_other_user_without_access_perm(self):
+        self.other_user.user_permissions.add(self.approve_permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-approve", args=[self.archive.id])
+        response = self.client.post(url, format="json")
+
+        self.archive.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)

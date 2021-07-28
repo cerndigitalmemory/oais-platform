@@ -35,6 +35,7 @@ class Archive(models.Model):
 
     class Meta:
         permissions = [
+            ("can_access_all_archives", "Can access all the archival requests"),
             ("can_approve_archive", "Can approve an archival request"),
             ("can_reject_archive", "Can reject an archival request"),
         ]

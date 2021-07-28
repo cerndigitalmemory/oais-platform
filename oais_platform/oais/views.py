@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, ArchiveStatus, Record
+from oais_platform.oais.permissions import filter_archives_by_user_perms
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             LoginSerializer, RecordSerializer,
                                             UserSerializer)
@@ -27,10 +28,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True)
+    @action(detail=True, url_name="user-archives")
     def archives(self, request, pk=None):
         user = self.get_object()
-        archives = user.archives.all()
+        archives = filter_archives_by_user_perms(
+            user.archives.all(), request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -53,10 +55,11 @@ class RecordViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = RecordSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True)
+    @action(detail=True, url_name="record-archives")
     def archives(self, request, pk=None):
         record = self.get_object()
-        archives = record.archives.all()
+        archives = filter_archives_by_user_perms(
+            record.archives.all(), request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -64,6 +67,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Archive.objects.all().order_by("-creation_date")
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return filter_archives_by_user_perms(
+            super().get_queryset(), self.request.user)
 
     def approve_or_reject(self, request, permission, approved):
         user = request.user
