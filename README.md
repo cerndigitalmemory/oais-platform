@@ -46,6 +46,13 @@ pip install -r bagit_create/requirements.txt
 
 ## Run
 
+Secrets:
+```bash
+# Secrets for OpenID Connect
+export OIDC_RP_CLIENT_ID="Put here the Client ID"
+export OIDC_RP_CLIENT_SECRET="Put here the Client Secret"
+```
+
 Django stuff:
 
 ```bash

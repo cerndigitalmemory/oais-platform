@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/3.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.1/ref/settings/
 """
-
+from os import environ
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -29,16 +29,18 @@ ALLOWED_HOSTS = []
 
 # Celery
 
-CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
-CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
+CELERY_BROKER_URL = environ.get(
+    "CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = environ.get(
+    "CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
 
 # OpenID Connect
-OIDC_RP_CLIENT_ID = "Put here the Client ID"
+OIDC_RP_CLIENT_ID = environ.get("OIDC_RP_CLIENT_ID")
 # SECURITY WARNING: the client secret must be kept secret!
-OIDC_RP_CLIENT_SECRET = "Put here the Client Secret"
+OIDC_RP_CLIENT_SECRET = environ.get("OIDC_RP_CLIENT_SECRET")
 OIDC_OP_AUTHORIZATION_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
 OIDC_OP_TOKEN_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/token"
 OIDC_OP_USER_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
