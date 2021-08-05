@@ -166,3 +166,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # CORS
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+# Import local settings
+from oais_platform.local_settings import *
