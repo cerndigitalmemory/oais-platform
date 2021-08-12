@@ -1,5 +1,6 @@
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
@@ -77,12 +78,17 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
         if not user.has_perm(permission):
             raise PermissionDenied()
 
-        archive = self.get_object()
-        if archive.status != ArchiveStatus.WAITING_APPROVAL:
-            raise BadRequest("Archive is not waiting for approval")
-
-        archive.status = ArchiveStatus.PENDING if approved else ArchiveStatus.REJECTED
-        archive.save()
+        # Make sure the status of the archive is read and updated atomically,
+        # otherwise multiple harvesting task might be scheduled.
+        with transaction.atomic():
+            archive = self.get_object()
+            if archive.status != ArchiveStatus.WAITING_APPROVAL:
+                raise BadRequest("Archive is not waiting for approval")
+            if approved:
+                archive.status = ArchiveStatus.PENDING
+            else:
+                archive.status = ArchiveStatus.REJECTED
+            archive.save()
 
         if approved:
             process.delay(archive.id)
