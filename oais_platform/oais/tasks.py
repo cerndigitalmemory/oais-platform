@@ -12,6 +12,14 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
     archive_id = args[0]
     archive = Archive.objects.get(pk=archive_id)
     if status == states.SUCCESS:
+        
+        if "success" in retval.lower():
+            archive.set_completed()
+        else:
+            logger.error(
+                f"Error while harvesting archive {archive_id}")
+            archive.set_failed()
+        '''
         if retval["status"] == 0:
             archive.set_completed()
         else:
@@ -20,6 +28,7 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
             logger.error(
                 f"Error while harvesting archive {archive_id}: {errormsg}")
             archive.set_failed()
+        '''
     else:
         archive.set_failed()
 
@@ -35,8 +44,6 @@ def process(self, archive_id):
         recid=archive.record.recid,
         source=archive.record.source,
         loglevel=2,
-        ark_json=False,
-        ark_json_rel=False,
     )
 
     return bagit_result
