@@ -1,7 +1,6 @@
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from django.http import HttpResponse
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
@@ -128,11 +127,6 @@ def harvest(request, recid, source):
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id}))
-
-
-def task_status(request, task_id):
-    task = process.AsyncResult(task_id=task_id)
-    return HttpResponse(f"{task.status}, {task.info.get('bagit_res')}")
 
 
 @api_view()
