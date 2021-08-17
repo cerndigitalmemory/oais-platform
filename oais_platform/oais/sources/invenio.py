@@ -13,9 +13,6 @@ def get_dict_value(dct, keys):
             return None
     return dct
 
-class InvalidJSONKey(Exception):
-    pass
-
 class ConfigFileUnavailable(Exception):
     pass
 
@@ -82,7 +79,5 @@ class Invenio(Source):
                 "authors": authors,
                 "source": self.source
             })
-
-        print(len(results))
         
         return results
