@@ -15,7 +15,14 @@ Main goals of the platforms are:
 
 ## Requirements
 
-Redis:
+On a Debian system:
+
+```bash
+# Required to build `psycopg2`
+apt install libpq-dev python3-dev
+```
+
+Install Redis
 
 ```bash
 # Install
@@ -28,21 +35,15 @@ systemctl restart redis
 # Redis will be up and running at 127.0.0.1:6379
 ```
 
-Setting up a virtual environment:
+Set up a virtual environment and install python requirements
+
 ```bash
 python -m venv env
 source env/bin/activate
 pip install -r requirements.txt
 ```
 
-BagIt Create tool (development):
-```bash
-git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/bagit-create.git
-# bagit_create should be in the root folder of the project
-mv bagit-create/bagit_create/ .
-# install BIC requirements
-pip install -r bagit_create/requirements.txt
-```
+Alternatively, a Docker Compose setup is provided in this repository.
 
 ## Run
 
