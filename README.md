@@ -47,7 +47,8 @@ Alternatively, a Docker Compose setup is provided in this repository.
 
 ## Run
 
-Secrets:
+To enable the CERN SSO login, set Client ID and Client Secret from your application on https://application-portal.web.cern.ch/. Documentation can be found at https://auth.docs.cern.ch/applications/sso-registration/.
+
 ```bash
 # Secrets for OpenID Connect
 export OIDC_RP_CLIENT_ID="Put here the Client ID"
