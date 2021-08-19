@@ -48,11 +48,16 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path(
-                    "harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"
-                ),
+                path("harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"),
                 path("search/<str:source>/", views.search, name="search"),
             ]
         ),
     )
 ]
+
+# Uncomment the following lines to serve the contents of the "static" folder in
+#  the root of the repository as static.
+# (This can be used during development to serve a build of `oais-web`)
+
+# from django.conf.urls.static import static
+# urlpatterns += static("/", document_root="static")
