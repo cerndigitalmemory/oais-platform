@@ -1,4 +1,4 @@
-bagit-create==0.0.6
+bagit-create==0.0.7
 celery==4.4.7
 Django==3.2.4
 djangorestframework==3.12.4
