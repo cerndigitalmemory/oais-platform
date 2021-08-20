@@ -17,8 +17,10 @@ class CDS(Source):
 
     def search(self, query):
         try:
+            # The "sc" parameter (split by collection) is used to provide
+            # search results consistent with the ones from the CDS website
             req = requests.get(self.baseURL + "/search",
-                               params={"p": query, "of": "xm"})
+                               params={"p": query, "of": "xm", "sc": 1})
         except:
             raise ServiceUnavailable("Cannot perform search")
 
@@ -36,10 +38,16 @@ class CDS(Source):
             for author in record.get_fields("100", "700"):
                 authors.append(author["a"])
 
+            title = record.title()
+            # If the title is not present, show the meeting name
+            meeting_name = record["111"]
+            if not title and meeting_name:
+                title = meeting_name["a"]
+
             results.append({
                 "url": self.get_record_url(recid),
                 "recid": recid,
-                "title": record.title(),
+                "title": title,
                 "authors": authors,
                 "source": self.source
             })
