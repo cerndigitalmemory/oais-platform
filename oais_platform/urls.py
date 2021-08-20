@@ -13,7 +13,6 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-
 from django.urls import include, path
 
 from rest_framework import routers
@@ -48,7 +47,12 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path("harvest/<int:recid>/<str:source>/", views.harvest, name="harvest"),
+                path(
+                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
+                ),
+                path(
+                    "task-status/<str:task_id>/", views.task_status, name="task_status"
+                ),
                 path("search/<str:source>/", views.search, name="search"),
             ]
         ),
