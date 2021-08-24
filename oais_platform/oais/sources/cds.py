@@ -5,7 +5,6 @@ import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
-
 class CDS(Source):
 
     def __init__(self, source, baseURL):
@@ -15,12 +14,14 @@ class CDS(Source):
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
 
-    def search(self, query):
+    def search(self, query, page=1):
+        size = 10
+        
         try:
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
             req = requests.get(self.baseURL + "/search",
-                               params={"p": query, "of": "xm", "sc": 1})
+                               params={"p": query, "of": "xm", "rg": size, "jrec": int(size)*(int(page)-1)+1})
         except:
             raise ServiceUnavailable("Cannot perform search")
 
@@ -53,3 +54,4 @@ class CDS(Source):
             })
 
         return results
+    

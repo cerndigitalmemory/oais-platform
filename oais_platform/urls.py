@@ -50,10 +50,7 @@ urlpatterns = [
                 path(
                     "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
                 ),
-                path(
-                    "task-status/<str:task_id>/", views.task_status, name="task_status"
-                ),
-                path("search/<str:source>/", views.search, name="search"),
+                path("search/<str:source>/", views.search, name="search")
             ]
         ),
     )
@@ -63,5 +60,5 @@ urlpatterns = [
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
 
-# from django.conf.urls.static import static
-# urlpatterns += static("/", document_root="static")
+from django.conf.urls.static import static
+urlpatterns += static("/", document_root="static")
