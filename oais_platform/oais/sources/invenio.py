@@ -82,4 +82,9 @@ class Invenio(Source):
                 "source": self.source
             })
         
-        return results
+        # Get total number of hits
+        total_num_hits = data["hits"]["total"]
+
+        print("Total number of hits: " + str(total_num_hits))
+
+        return {"total_num_hits" : total_num_hits, "results": results}

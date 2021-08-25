@@ -5,6 +5,8 @@ import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
+import re
+
 class CDS(Source):
 
     def __init__(self, source, baseURL):
@@ -53,5 +55,15 @@ class CDS(Source):
                 "source": self.source
             })
 
-        return results
+        if(len(records) > 0):
+            # Get total number of hits
+            pattern = "<!-- Search-Engine-Total-Number-Of-Results:(.*?)-->"
+
+            total_num_hits = int(re.search(pattern, req.text).group(1))
+        else:
+            total_num_hits = 0
+
+        print("Total number of hits: " + str(total_num_hits))
+
+        return {"total_num_hits" : total_num_hits, "results": results}
     

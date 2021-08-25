@@ -45,8 +45,10 @@ class SearchTests(APITestCase):
         for args in get_source.call_args_list:
             self.assertEqual(args, mock.call("test"))
 
-        self.assertEqual(len(response.data), 1)
-        record = response.data[0]
+        self.assertEqual(response.data["total_num_hits"], 1)
+        
+        self.assertEqual(len(response.data["results"]), 1)
+        record = response.data["results"][0]
         self.assertEqual(record["recid"], "1")
         self.assertEqual(record["url"], source.get_record_url("1"))
         self.assertEqual(record["title"], "query")
