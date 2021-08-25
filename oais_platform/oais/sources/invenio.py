@@ -85,6 +85,6 @@ class Invenio(Source):
         # Get total number of hits
         total_num_hits = data["hits"]["total"]
 
-        print("Total number of hits: " + str(total_num_hits))
+        if (self.source == "zenodo" and total_num_hits > 10000): total_num_hits = 10000
 
         return {"total_num_hits" : total_num_hits, "results": results}
