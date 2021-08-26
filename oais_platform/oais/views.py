@@ -139,9 +139,14 @@ def search(request, source):
         page = 1
     else:
         page = request.GET["p"]
+
+    if "s" not in request.GET:
+        size = 20
+    else:
+        size = request.GET["s"]
     
     try:
-        results = get_source(source).search(query, page)
+        results = get_source(source).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 

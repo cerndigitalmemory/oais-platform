@@ -7,5 +7,5 @@ class Source(ABC):
         pass
 
     @abstractmethod
-    def search(self, query, page=1):
+    def search(self, query, page=1, size=20):
         pass

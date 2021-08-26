@@ -6,7 +6,7 @@ class TestSource(Source):
     def get_record_url(self, recid):
         return f"https://example.com/record/{recid}"
 
-    def search(self, query, page=1):
+    def search(self, query, page=1, size=20):
         return {
             "total_num_hits": 1,
             "results": [{

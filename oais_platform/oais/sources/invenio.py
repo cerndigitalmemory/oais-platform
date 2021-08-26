@@ -39,9 +39,7 @@ class Invenio(Source):
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
 
-    def search(self, query, page=1):
-        size = 10
-        
+    def search(self, query, page=1, size=20):
         try:
             req = requests.get(self.baseURL + "/records?q=" + query + "&size=" + str(size) + "&page=" + str(page))
         except:

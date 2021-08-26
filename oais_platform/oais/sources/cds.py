@@ -16,9 +16,7 @@ class CDS(Source):
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
 
-    def search(self, query, page=1):
-        size = 10
-        
+    def search(self, query, page=1, size=20):   
         try:
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
@@ -62,8 +60,6 @@ class CDS(Source):
             total_num_hits = int(re.search(pattern, req.text).group(1))
         else:
             total_num_hits = 0
-
-        print("Total number of hits: " + str(total_num_hits))
 
         return {"total_num_hits" : total_num_hits, "results": results}
     
