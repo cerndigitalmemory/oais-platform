@@ -152,6 +152,16 @@ def search(request, source):
 
     return Response(results)
 
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def search_by_id(request, source, recid):
+    try:
+        result = get_source(source).search_by_id(recid.strip())
+    except InvalidSource:
+        raise BadRequest("Invalid source")
+
+    return Response(result)
+
 
 @api_view()
 @permission_classes([permissions.IsAuthenticated])

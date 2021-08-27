@@ -37,7 +37,7 @@ class Invenio(Source):
             raise ValueError("No configuration found")
 
     def get_record_url(self, recid):
-        return f"{self.baseURL}/record/{recid}"
+        return f"{self.baseURL}/records/{recid}"
 
     def search(self, query, page=1, size=20):
         try:
@@ -86,3 +86,42 @@ class Invenio(Source):
         if (self.source == "zenodo" and total_num_hits > 10000): total_num_hits = 10000
 
         return {"total_num_hits" : total_num_hits, "results": results}
+
+    def search_by_id(self, recid):
+        result = []
+        
+        try:
+            req = requests.get(self.get_record_url(recid))
+        except:
+            raise ServiceUnavailable("Cannot perform search")
+
+        if req.ok:
+            record = json.loads(req.text)
+            result.append(self.parse_record(record))
+
+        return {"result" : result}
+
+    def parse_record(self, record):
+        recid_key_list = self.config["recid"].split(",")
+        recid = get_dict_value(record, recid_key_list)
+        if not isinstance(recid,str):
+            recid = str(recid)
+
+        authors_key_list = self.config["authors"].split(",")
+        authors_list = get_dict_value(record, authors_key_list)
+        authors = []
+        if authors_list:
+            for author in authors_list:
+                author_name_key_list = self.config["author_name"].split(",")
+                authors.append(get_dict_value(author,author_name_key_list)) 
+
+        url_key_list = self.config["url"].split(",")
+        title_key_list = self.config["title"].split(",")
+        
+        return {
+            "url": get_dict_value(record, url_key_list),
+            "recid": recid,
+            "title": get_dict_value(record, title_key_list),
+            "authors": authors,
+            "source": self.source
+        }

@@ -1,4 +1,5 @@
 import io
+from xml.sax import SAXParseException
 
 import pymarc
 import requests
@@ -33,25 +34,7 @@ class CDS(Source):
         records = pymarc.parse_xml_to_array(io.BytesIO(req.content))
         results = []
         for record in records:
-            recid = record["001"].value()
-
-            authors = []
-            for author in record.get_fields("100", "700"):
-                authors.append(author["a"])
-
-            title = record.title()
-            # If the title is not present, show the meeting name
-            meeting_name = record["111"]
-            if not title and meeting_name:
-                title = meeting_name["a"]
-
-            results.append({
-                "url": self.get_record_url(recid),
-                "recid": recid,
-                "title": title,
-                "authors": authors,
-                "source": self.source
-            })
+            results.append(self.parse_record(record))
 
         if(len(records) > 0):
             # Get total number of hits
@@ -62,4 +45,45 @@ class CDS(Source):
             total_num_hits = 0
 
         return {"total_num_hits" : total_num_hits, "results": results}
-    
+
+    def search_by_id(self, recid):
+        result = []
+        
+        try:
+            # The "sc" parameter (split by collection) is used to provide
+            # search results consistent with the ones from the CDS website
+            req = requests.get(self.get_record_url(recid),
+                               params={"of": "xm"})
+        except:
+            raise ServiceUnavailable("Cannot perform search")
+
+        if req.ok:
+            try:
+                record = pymarc.parse_xml_to_array(io.BytesIO(req.content))[0]
+                result.append(self.parse_record(record))
+            except SAXParseException:
+                # If authentication failed page is returned
+                result = []
+
+        return {"result" : result}
+
+    def parse_record(self, record):
+        recid = record["001"].value()
+        
+        authors = []
+        for author in record.get_fields("100", "700"):
+            authors.append(author["a"])
+
+        title = record.title()
+        # If the title is not present, show the meeting name
+        meeting_name = record["111"]
+        if not title and meeting_name:
+            title = meeting_name["a"]
+
+        return {
+            "url": self.get_record_url(recid),
+            "recid": recid,
+            "title": title,
+            "authors": authors,
+            "source": self.source
+        }
