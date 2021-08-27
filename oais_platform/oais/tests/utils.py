@@ -10,10 +10,21 @@ class TestSource(Source):
         return {
             "total_num_hits": 1,
             "results": [{
-            "url": self.get_record_url("1"),
-            "recid": "1",
-            "title": query,
-            "authors": [],
-            "source": "test"
-        }]
+                "url": self.get_record_url("1"),
+                "recid": "1",
+                "title": query,
+                "authors": [],
+                "source": "test"
+            }]
+        }
+
+    def search_by_id(self, recid):
+        return {
+            "result": [{
+                "url": self.get_record_url("1"),
+                "recid": "1",
+                "title": "test",
+                "authors": [],
+                "source": "test"
+            }]
         }
