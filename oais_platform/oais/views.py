@@ -128,7 +128,6 @@ def harvest(request, recid, source):
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id}))
 
-
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def search(request, source):
@@ -136,12 +135,32 @@ def search(request, source):
         raise BadRequest("Missing parameter q")
     query = request.GET["q"]
 
+    if "p" not in request.GET:
+        page = 1
+    else:
+        page = request.GET["p"]
+
+    if "s" not in request.GET:
+        size = 20
+    else:
+        size = request.GET["s"]
+    
     try:
-        results = get_source(source).search(query)
+        results = get_source(source).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
     return Response(results)
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def search_by_id(request, source, recid):
+    try:
+        result = get_source(source).search_by_id(recid.strip())
+    except InvalidSource:
+        raise BadRequest("Invalid source")
+
+    return Response(result)
 
 
 @api_view()

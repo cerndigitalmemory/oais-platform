@@ -1,10 +1,12 @@
 import io
+from xml.sax import SAXParseException
 
 import pymarc
 import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
+import re
 
 class CDS(Source):
 
@@ -15,12 +17,12 @@ class CDS(Source):
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
 
-    def search(self, query):
+    def search(self, query, page=1, size=20):   
         try:
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
             req = requests.get(self.baseURL + "/search",
-                               params={"p": query, "of": "xm", "sc": 1})
+                               params={"p": query, "of": "xm", "rg": size, "jrec": int(size)*(int(page)-1)+1})
         except:
             raise ServiceUnavailable("Cannot perform search")
 
@@ -32,24 +34,56 @@ class CDS(Source):
         records = pymarc.parse_xml_to_array(io.BytesIO(req.content))
         results = []
         for record in records:
-            recid = record["001"].value()
+            results.append(self.parse_record(record))
 
-            authors = []
-            for author in record.get_fields("100", "700"):
-                authors.append(author["a"])
+        if(len(records) > 0):
+            # Get total number of hits
+            pattern = "<!-- Search-Engine-Total-Number-Of-Results:(.*?)-->"
 
-            title = record.title()
-            # If the title is not present, show the meeting name
-            meeting_name = record["111"]
-            if not title and meeting_name:
-                title = meeting_name["a"]
+            total_num_hits = int(re.search(pattern, req.text).group(1))
+        else:
+            total_num_hits = 0
 
-            results.append({
-                "url": self.get_record_url(recid),
-                "recid": recid,
-                "title": title,
-                "authors": authors,
-                "source": self.source
-            })
+        return {"total_num_hits" : total_num_hits, "results": results}
 
-        return results
+    def search_by_id(self, recid):
+        result = []
+        
+        try:
+            # The "sc" parameter (split by collection) is used to provide
+            # search results consistent with the ones from the CDS website
+            req = requests.get(self.get_record_url(recid),
+                               params={"of": "xm"})
+        except:
+            raise ServiceUnavailable("Cannot perform search")
+
+        if req.ok:
+            try:
+                record = pymarc.parse_xml_to_array(io.BytesIO(req.content))[0]
+                result.append(self.parse_record(record))
+            except SAXParseException:
+                # If authentication failed page is returned
+                result = []
+
+        return {"result" : result}
+
+    def parse_record(self, record):
+        recid = record["001"].value()
+        
+        authors = []
+        for author in record.get_fields("100", "700"):
+            authors.append(author["a"])
+
+        title = record.title()
+        # If the title is not present, show the meeting name
+        meeting_name = record["111"]
+        if not title and meeting_name:
+            title = meeting_name["a"]
+
+        return {
+            "url": self.get_record_url(recid),
+            "recid": recid,
+            "title": title,
+            "authors": authors,
+            "source": self.source
+        }
