@@ -1,10 +1,13 @@
+import logging
+import os, zipfile, time
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
+from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, ArchiveStatus, Record
+from oais_platform.oais.models import Archive, ArchiveStage, ArchiveStatus, Record
 from oais_platform.oais.permissions import filter_archives_by_user_perms
 from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
                                             LoginSerializer, RecordSerializer,
@@ -16,7 +19,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from .tasks import process
+from .tasks import process, validate
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -90,7 +93,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
             archive.save()
 
         if approved:
-            process.delay(archive.id)
+            if archive.stage == ArchiveStage.WAITING_HARVEST:
+                process.delay(archive.id)
+                validate.delay(archive.id, archive.path_to_sip)
+            elif archive.stage == ArchiveStage.SIP_EXISTS:
+                validate.delay(archive.id, archive.path_to_sip)
 
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
@@ -127,6 +134,70 @@ def harvest(request, recid, source):
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id}))
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def upload(request):
+    file = request.FILES.getlist('file')[0]
+
+    base_path = os.path.join(os.getcwd(), "tmp")
+    
+    # Save compressed SIP
+    compressed_path = os.path.join(base_path, 'compressed.zip') 
+    destination = open(compressed_path, 'wb+')
+    for chunk in file.chunks():
+        destination.write(chunk)
+    destination.close()
+
+    # Extract it
+    with zipfile.ZipFile(compressed_path, "r") as compressed:
+        compressed.extractall(base_path)
+
+    os.remove(compressed_path)
+
+    # Get directory name from compressed filename
+    sip_dir = file.name.split('.')[0]
+
+    ## Will be useful when sip.json is according to spec
+    # Finding sip.json and extracting information from it
+    '''
+    sip_path = os.path.join(base_path, sip_dir)
+    sip_data_path = os.path.join(sip_path, "data")
+
+    for name in os.listdir(sip_data_path):
+        abs_path = os.path.join(sip_data_path, name)
+        if os.path.isdir(abs_path):
+            for filename in os.listdir(abs_path):
+                if filename == "sip.json":
+                    sip_json_path = os.path.join(abs_path, filename)
+                    print(sip_json_path)
+    '''
+
+    # WORKAROUND FOR NOW
+    sip_data = sip_dir.split("::")
+    source = sip_data[1]
+    recid = sip_data[2]
+
+    try:
+        url = get_source(source).get_record_url(recid)
+    except InvalidSource:
+        raise BadRequest("Invalid source")
+
+    record, _ = Record.objects.get_or_create(
+        recid=recid,
+        source=source,
+        defaults={"url": url}
+    )
+
+    archive = Archive.objects.create(
+        record=record,
+        creator=request.user,
+        stage=ArchiveStage.SIP_EXISTS,
+        path_to_sip = os.path.join(base_path, sip_dir)
+    )
+
+    return Response({"msg" : "SIP uploaded waiting for approval, see Archives page"})
+
 
 @api_view()
 @permission_classes([permissions.IsAuthenticated])

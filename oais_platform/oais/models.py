@@ -22,6 +22,10 @@ class ArchiveStatus(models.IntegerChoices):
     WAITING_APPROVAL = 5
     REJECTED = 6
 
+class ArchiveStage(models.IntegerChoices):
+    WAITING_HARVEST = 1
+    SIP_EXISTS = 2
+    VALID_SIP = 3
 
 class Archive(models.Model):
     record = models.ForeignKey(
@@ -32,6 +36,9 @@ class Archive(models.Model):
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     status = models.IntegerField(
         choices=ArchiveStatus.choices, default=ArchiveStatus.WAITING_APPROVAL)
+    stage = models.IntegerField(
+        choices=ArchiveStage.choices, default=ArchiveStage.WAITING_HARVEST)
+    path_to_sip = models.CharField(max_length=100, null=True, default=None)
 
     class Meta:
         permissions = [
@@ -51,4 +58,12 @@ class Archive(models.Model):
 
     def set_failed(self):
         self.status = ArchiveStatus.FAILED
+        self.save()
+
+    def set_sip_exists(self):
+        self.stage = ArchiveStage.SIP_EXISTS
+        self.save()
+
+    def set_valid_sip(self):
+        self.stage = ArchiveStage.VALID_SIP
         self.save()
