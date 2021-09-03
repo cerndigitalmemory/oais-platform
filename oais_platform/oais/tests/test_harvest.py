@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, ArchiveStatus, Record
+from oais_platform.oais.models import Archive, Status, Record
 from oais_platform.oais.tests.utils import TestSource
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -43,7 +43,7 @@ class HarvestTests(APITestCase):
         self.assertEqual(Record.objects.count(), 1)
 
         archive = Archive.objects.all()[0]
-        self.assertEqual(archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(archive.status, Status.WAITING_APPROVAL)
         self.assertEqual(archive.creator, self.user)
 
         record = archive.record
