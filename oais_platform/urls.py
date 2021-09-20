@@ -51,7 +51,11 @@ urlpatterns = [
                     "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
                 ),
                 path("search/<str:source>/", views.search, name="search"),
-                path("search/<str:source>/<str:recid>/", views.search_by_id, name="search_by_id")
+                path(
+                    "search/<str:source>/<str:recid>/",
+                    views.search_by_id,
+                    name="search_by_id",
+                ),
             ]
         ),
     )

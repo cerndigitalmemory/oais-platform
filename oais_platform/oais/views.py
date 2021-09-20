@@ -6,9 +6,13 @@ from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, ArchiveStatus, Record
 from oais_platform.oais.permissions import filter_archives_by_user_perms
-from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer,
-                                            LoginSerializer, RecordSerializer,
-                                            UserSerializer)
+from oais_platform.oais.serializers import (
+    ArchiveSerializer,
+    GroupSerializer,
+    LoginSerializer,
+    RecordSerializer,
+    UserSerializer,
+)
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -31,8 +35,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=True, url_name="user-archives")
     def archives(self, request, pk=None):
         user = self.get_object()
-        archives = filter_archives_by_user_perms(
-            user.archives.all(), request.user)
+        archives = filter_archives_by_user_perms(user.archives.all(), request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -58,8 +61,7 @@ class RecordViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=True, url_name="record-archives")
     def archives(self, request, pk=None):
         record = self.get_object()
-        archives = filter_archives_by_user_perms(
-            record.archives.all(), request.user)
+        archives = filter_archives_by_user_perms(record.archives.all(), request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -69,8 +71,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return filter_archives_by_user_perms(
-            super().get_queryset(), self.request.user)
+        return filter_archives_by_user_perms(super().get_queryset(), self.request.user)
 
     def approve_or_reject(self, request, permission, approved):
         user = request.user
@@ -98,12 +99,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["POST"], url_path="actions/approve")
     def approve(self, request, pk=None):
         return self.approve_or_reject(
-            request, "oais.can_approve_archive", approved=True)
+            request, "oais.can_approve_archive", approved=True
+        )
 
     @action(detail=True, methods=["POST"], url_path="actions/reject")
     def reject(self, request, pk=None):
         return self.approve_or_reject(
-            request, "oais.can_reject_archive", approved=False)
+            request, "oais.can_reject_archive", approved=False
+        )
 
 
 @api_view(["POST"])
@@ -115,9 +118,7 @@ def harvest(request, recid, source):
         raise BadRequest("Invalid source")
 
     record, _ = Record.objects.get_or_create(
-        recid=recid,
-        source=source,
-        defaults={"url": url}
+        recid=recid, source=source, defaults={"url": url}
     )
 
     archive = Archive.objects.create(
@@ -126,7 +127,9 @@ def harvest(request, recid, source):
     )
 
     return redirect(
-        reverse("archive-detail", request=request, kwargs={"pk": archive.id}))
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
+
 
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
@@ -144,13 +147,14 @@ def search(request, source):
         size = 20
     else:
         size = request.GET["s"]
-    
+
     try:
         results = get_source(source).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
     return Response(results)
+
 
 @api_view()
 @permission_classes([permissions.IsAuthenticated])

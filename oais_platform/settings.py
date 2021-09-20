@@ -29,10 +29,8 @@ ALLOWED_HOSTS = []
 
 # Celery
 
-CELERY_BROKER_URL = environ.get(
-    "CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = environ.get(
-    "CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
@@ -41,10 +39,18 @@ CELERY_TASK_SERIALIZER = "json"
 OIDC_RP_CLIENT_ID = environ.get("OIDC_RP_CLIENT_ID")
 # SECURITY WARNING: the client secret must be kept secret!
 OIDC_RP_CLIENT_SECRET = environ.get("OIDC_RP_CLIENT_SECRET")
-OIDC_OP_AUTHORIZATION_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
-OIDC_OP_TOKEN_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/token"
-OIDC_OP_USER_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
-OIDC_OP_JWKS_ENDPOINT = "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
+OIDC_OP_AUTHORIZATION_ENDPOINT = (
+    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
+)
+OIDC_OP_TOKEN_ENDPOINT = (
+    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/token"
+)
+OIDC_OP_USER_ENDPOINT = (
+    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
+)
+OIDC_OP_JWKS_ENDPOINT = (
+    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
+)
 OIDC_RP_SIGN_ALGO = "RS256"
 # Path to redirect to on successful login.
 # This is used to fetch the user information from the SPA.
@@ -53,7 +59,7 @@ LOGIN_REDIRECT_URL = "/index.html#/login/callback"
 
 AUTHENTICATION_BACKENDS = [
     "oais_platform.oais.auth.CERNAuthenticationBackend",
-    'django.contrib.auth.backends.ModelBackend',
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 

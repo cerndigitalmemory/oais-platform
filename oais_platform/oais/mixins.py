@@ -6,9 +6,11 @@ class PaginationMixin:
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = serializer_class(
-                page, context={"request": self.request}, many=True)
+                page, context={"request": self.request}, many=True
+            )
             return self.get_paginated_response(serializer.data)
 
         serializer = serializer_class(
-            queryset, context={"request": self.request}, many=True)
+            queryset, context={"request": self.request}, many=True
+        )
         return Response(serializer.data)

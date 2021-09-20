@@ -25,13 +25,16 @@ class ArchiveStatus(models.IntegerChoices):
 
 class Archive(models.Model):
     record = models.ForeignKey(
-        Record, on_delete=models.PROTECT, related_name="archives")
+        Record, on_delete=models.PROTECT, related_name="archives"
+    )
     creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="archives")
+        User, on_delete=models.PROTECT, null=True, related_name="archives"
+    )
     creation_date = models.DateTimeField(default=timezone.now)
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     status = models.IntegerField(
-        choices=ArchiveStatus.choices, default=ArchiveStatus.WAITING_APPROVAL)
+        choices=ArchiveStatus.choices, default=ArchiveStatus.WAITING_APPROVAL
+    )
 
     class Meta:
         permissions = [

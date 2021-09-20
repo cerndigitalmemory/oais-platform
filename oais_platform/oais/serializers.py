@@ -17,7 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
 class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
-        fields = ['url', 'name']
+        fields = ["url", "name"]
 
 
 class RecordSerializer(serializers.ModelSerializer):
@@ -32,8 +32,15 @@ class ArchiveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Archive
-        fields = ["id", "record", "creator",
-                  "creation_date", "celery_task_id", "status"]
+        fields = [
+            "id",
+            "record",
+            "creator",
+            "creation_date",
+            "celery_task_id",
+            "status",
+        ]
+
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)

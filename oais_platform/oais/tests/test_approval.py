@@ -10,20 +10,18 @@ from rest_framework.test import APITestCase
 
 class ApprovalTests(APITestCase):
     def setUp(self):
-        self.reject_permission = Permission.objects.get(
-            codename="can_reject_archive")
-        self.approve_permission = Permission.objects.get(
-            codename="can_approve_archive")
+        self.reject_permission = Permission.objects.get(codename="can_reject_archive")
+        self.approve_permission = Permission.objects.get(codename="can_approve_archive")
         self.access_permission = Permission.objects.get(
-            codename="can_access_all_archives")
+            codename="can_access_all_archives"
+        )
 
         self.creator = User.objects.create_user("creator", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
         self.client.force_authenticate(user=self.creator)
 
         self.record = Record.objects.create(recid="1", source="test", url="")
-        self.archive = Archive.objects.create(
-            record=self.record, creator=self.creator)
+        self.archive = Archive.objects.create(record=self.record, creator=self.creator)
 
     def test_reject_not_authenticated(self):
         self.client.force_authenticate(user=None)
@@ -100,7 +98,8 @@ class ApprovalTests(APITestCase):
 
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertEqual(
-                response.data["detail"], "Archive is not waiting for approval")
+                response.data["detail"], "Archive is not waiting for approval"
+            )
 
             self.archive.refresh_from_db()
             self.assertEqual(self.archive.status, archive_status)

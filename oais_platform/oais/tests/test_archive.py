@@ -7,15 +7,13 @@ from rest_framework.test import APITestCase
 
 class ArchiveTests(APITestCase):
     def setUp(self):
-        self.permission = Permission.objects.get(
-            codename="can_access_all_archives")
+        self.permission = Permission.objects.get(codename="can_access_all_archives")
 
         self.creator = User.objects.create_user("creator", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
 
         self.record = Record.objects.create(recid="1", source="test", url="")
-        self.archive = Archive.objects.create(
-            record=self.record, creator=self.creator)
+        self.archive = Archive.objects.create(record=self.record, creator=self.creator)
 
     def test_archive_list_creator(self):
         self.client.force_authenticate(user=self.creator)

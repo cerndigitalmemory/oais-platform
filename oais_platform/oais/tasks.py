@@ -12,14 +12,13 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
     archive_id = args[0]
     archive = Archive.objects.get(pk=archive_id)
     if status == states.SUCCESS:
-    
+
         if retval["status"] == 0:
             archive.set_completed()
         else:
             # bagit_create returned an error
             errormsg = retval["errormsg"]
-            logger.error(
-                f"Error while harvesting archive {archive_id}: {errormsg}")
+            logger.error(f"Error while harvesting archive {archive_id}: {errormsg}")
             archive.set_failed()
     else:
         archive.set_failed()

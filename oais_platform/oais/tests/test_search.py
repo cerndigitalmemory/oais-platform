@@ -46,7 +46,7 @@ class SearchTests(APITestCase):
             self.assertEqual(args, mock.call("test"))
 
         self.assertEqual(response.data["total_num_hits"], 1)
-        
+
         self.assertEqual(len(response.data["results"]), 1)
         record = response.data["results"][0]
         self.assertEqual(record["recid"], "1")
