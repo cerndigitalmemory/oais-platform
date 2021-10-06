@@ -93,11 +93,6 @@ class Indico(Source):
             if not isinstance(recid, str):
                 recid = str(recid)
             url = self.get_record_url(recid)
-
-            title_key_list = self.config["title"].split(",")
-
-            # ADD CONTRIBUTIONS
-
             title_key_list = self.config["title"].split(",")
 
             results.append(
@@ -109,9 +104,6 @@ class Indico(Source):
                     "source": self.source,
                 }
             )
-
-        # Get total number of hits
-        # total_num_hits = data["count"]
 
         return {"total_num_hits": total_num_hits, "results": results}
 

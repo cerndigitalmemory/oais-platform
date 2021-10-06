@@ -30,11 +30,13 @@ def process(self, archive_id):
 
     archive = Archive.objects.get(pk=archive_id)
     archive.set_in_progress(self.request.id)
-
+    print(archive.record.recid, archive.record.source)
     bagit_result = bic.process(
         recid=archive.record.recid,
         source=archive.record.source,
         loglevel=2,
+        target=None,
+        localsource=None,
     )
 
     return bagit_result
