@@ -5,6 +5,7 @@ from oais_platform.oais.sources.source import Source
 
 import configparser, os
 
+
 def get_dict_value(dct, keys):
     for key in keys:
         try:
@@ -13,11 +14,12 @@ def get_dict_value(dct, keys):
             return None
     return dct
 
+
 class ConfigFileUnavailable(Exception):
     pass
 
-class Invenio(Source):
 
+class Invenio(Source):
     def __init__(self, source, baseURL):
         self.source = source
         self.baseURL = baseURL
@@ -27,12 +29,14 @@ class Invenio(Source):
         self.config = None
 
         if len(self.config_file.sections()) == 0:
-            raise ConfigFileUnavailable(f"Could not read config file for Invenio instance: {source}")
+            raise ConfigFileUnavailable(
+                f"Could not read config file for Invenio instance: {source}"
+            )
 
         for instance in self.config_file.sections():
             if instance == source:
                 self.config = self.config_file[instance]
-        
+
         if not self.config:
             raise ValueError("No configuration found")
 
@@ -41,24 +45,31 @@ class Invenio(Source):
 
     def search(self, query, page=1, size=20):
         try:
-            req = requests.get(self.baseURL + "/records?q=" + query + "&size=" + str(size) + "&page=" + str(page))
+            req = requests.get(
+                self.baseURL
+                + "/records?q="
+                + query
+                + "&size="
+                + str(size)
+                + "&page="
+                + str(page)
+            )
         except:
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
-            raise ServiceUnavailable(
-                f"Search failed with error code {req.status_code}")
+            raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
 
         # Parse JSON response
         data = json.loads(req.text)
         records_key_list = self.config["records"].split(",")
         records = get_dict_value(data, records_key_list)
-        
+
         results = []
         for record in records:
             recid_key_list = self.config["recid"].split(",")
             recid = get_dict_value(record, recid_key_list)
-            if not isinstance(recid,str):
+            if not isinstance(recid, str):
                 recid = str(recid)
 
             authors_key_list = self.config["authors"].split(",")
@@ -67,29 +78,32 @@ class Invenio(Source):
             if authors_list:
                 for author in authors_list:
                     author_name_key_list = self.config["author_name"].split(",")
-                    authors.append(get_dict_value(author,author_name_key_list)) 
+                    authors.append(get_dict_value(author, author_name_key_list))
 
             url_key_list = self.config["url"].split(",")
             title_key_list = self.config["title"].split(",")
-            
-            results.append({
-                "url": get_dict_value(record, url_key_list),
-                "recid": recid,
-                "title": get_dict_value(record, title_key_list),
-                "authors": authors,
-                "source": self.source
-            })
-        
+
+            results.append(
+                {
+                    "url": get_dict_value(record, url_key_list),
+                    "recid": recid,
+                    "title": get_dict_value(record, title_key_list),
+                    "authors": authors,
+                    "source": self.source,
+                }
+            )
+
         # Get total number of hits
         total_num_hits = data["hits"]["total"]
 
-        if (self.source == "zenodo" and total_num_hits > 10000): total_num_hits = 10000
+        if self.source == "zenodo" and total_num_hits > 10000:
+            total_num_hits = 10000
 
-        return {"total_num_hits" : total_num_hits, "results": results}
+        return {"total_num_hits": total_num_hits, "results": results}
 
     def search_by_id(self, recid):
         result = []
-        
+
         try:
             req = requests.get(self.get_record_url(recid))
         except:
@@ -99,12 +113,12 @@ class Invenio(Source):
             record = json.loads(req.text)
             result.append(self.parse_record(record))
 
-        return {"result" : result}
+        return {"result": result}
 
     def parse_record(self, record):
         recid_key_list = self.config["recid"].split(",")
         recid = get_dict_value(record, recid_key_list)
-        if not isinstance(recid,str):
+        if not isinstance(recid, str):
             recid = str(recid)
 
         authors_key_list = self.config["authors"].split(",")
@@ -113,15 +127,15 @@ class Invenio(Source):
         if authors_list:
             for author in authors_list:
                 author_name_key_list = self.config["author_name"].split(",")
-                authors.append(get_dict_value(author,author_name_key_list)) 
+                authors.append(get_dict_value(author, author_name_key_list))
 
         url_key_list = self.config["url"].split(",")
         title_key_list = self.config["title"].split(",")
-        
+
         return {
             "url": get_dict_value(record, url_key_list),
             "recid": recid,
             "title": get_dict_value(record, title_key_list),
             "authors": authors,
-            "source": self.source
+            "source": self.source,
         }

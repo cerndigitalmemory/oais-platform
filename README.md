@@ -45,7 +45,9 @@ pip install -r requirements.txt
 
 Alternatively, a Docker Compose setup is provided in this repository.
 
-## Run
+## Configuration
+
+### CERN SSO
 
 To enable the CERN SSO login, set Client ID and Client Secret from your application on https://application-portal.web.cern.ch/. Documentation can be found at https://auth.docs.cern.ch/applications/sso-registration/.
 
@@ -54,6 +56,16 @@ To enable the CERN SSO login, set Client ID and Client Secret from your applicat
 export OIDC_RP_CLIENT_ID="Put here the Client ID"
 export OIDC_RP_CLIENT_SECRET="Put here the Client Secret"
 ```
+
+### Sentry
+
+To set up Sentry, set the endpoint with the `SENTRY_DSN` environment variable. To get this value go to your Sentry instance dashboard - Settings - (Select or create a project) - SDK Setup - DSN.
+
+```
+export SENTRY_DSN="Put here the Sentry SDK client key"
+```
+
+## Run
 
 Django stuff:
 
