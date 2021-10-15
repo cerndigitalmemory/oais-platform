@@ -15,7 +15,6 @@ class HarvestTests(APITestCase):
         self.user = User.objects.create_user("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
-
     def test_harvest_wrong_source(self):
         url = reverse("harvest", args=["1", "wrong"])
         response = self.client.post(url, format="json")

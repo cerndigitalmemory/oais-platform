@@ -20,7 +20,7 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
     job_id = args[1]
     job = Job.objects.get(pk=job_id)
     if status == states.SUCCESS:
-    
+
         if retval["status"] == 0:
             # TODO set path from bic return? for validation
             archive.path_to_sip = os.path.join(os.getcwd(),'tmp')
