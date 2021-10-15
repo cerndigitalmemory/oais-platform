@@ -32,15 +32,8 @@ class ArchiveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Archive
-        fields = [
-            "id",
-            "record",
-            "creator",
-            "creation_date",
-            "celery_task_id",
-            "status",
-        ]
-
+        fields = ["id", "record", "creator",
+                  "creation_date", "celery_task_id", "status", "stage"]
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
