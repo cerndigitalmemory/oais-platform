@@ -40,15 +40,28 @@ class Indico(Source):
             raise ValueError("No configuration found")
 
     def get_record_url(self, recid):
+        """
+        Returns the API endpoint of the event with the given ID
+        """
         return f"{self.baseURL}/event/{recid}"
 
     def get_record_by_id(self, recid):
+        """
+        Returns the export API endpoint of the event with the given ID
+        """
         return f"{self.baseURL}/export/event/{recid}.json"
 
     def search(self, query, page=1, size=20):
         """
-        makes a GET request to get the number of all the records
+        Look for a record on Indico using the /export/event/ API endpoint
+        given a query.
+        Returns a list of results and a tentatively total numer of results
         """
+
+        # Try to get an idea of the total number of results
+        # Pagination is unreliable on Indico API.
+        # See related ticket: https://github.com/indico/indico/issues/5106
+
         try:
             req = requests.get(
                 self.baseURL + "/search/api/search?q=" + query + "&type=event"
@@ -58,9 +71,8 @@ class Indico(Source):
         data = json.loads(req.text)
         total_num_hits = int(data["total"])
 
-        """
-        ABOVE THAT COMMENT IS THE CODE TO GET THE NUMBER OF RESULTS 
-        """
+        # Perform the search
+
         try:
             req = requests.get(
                 self.baseURL
