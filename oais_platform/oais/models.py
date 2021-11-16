@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
 from datetime import datetime
+import pytz
 
 # Create your models here.
 
@@ -14,6 +15,7 @@ class Record(models.Model):
     class Meta:
         unique_together = ["recid", "source"]
 
+
 class Status(models.IntegerChoices):
     PENDING = 1
     IN_PROGRESS = 2
@@ -22,6 +24,7 @@ class Status(models.IntegerChoices):
     WAITING_APPROVAL = 5
     REJECTED = 6
 
+
 class Stages(models.IntegerChoices):
     HARVEST_REQUESTED = 1
     HARVESTING = 2
@@ -29,6 +32,7 @@ class Stages(models.IntegerChoices):
     CHECKING_REGISTRY = 4
     VALIDATION = 5
     UPLOADING = 6
+
 
 class Archive(models.Model):
     record = models.ForeignKey(
@@ -40,7 +44,8 @@ class Archive(models.Model):
     creation_date = models.DateTimeField(default=timezone.now)
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     status = models.IntegerField(
-        choices=Status.choices, default=Status.WAITING_APPROVAL)
+        choices=Status.choices, default=Status.WAITING_APPROVAL
+    )
     path_to_sip = models.CharField(max_length=100, null=True, default=None)
 
     class Meta:
@@ -71,19 +76,21 @@ class Archive(models.Model):
         jobs = self.jobs.all().order_by("-start_date")
         return jobs[0]
 
+
 class Job(models.Model):
-    archive = models.ForeignKey(
-        Archive, on_delete=models.PROTECT, related_name="jobs")
+    archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="jobs")
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     start_date = models.DateTimeField(default=timezone.now)
     finish_date = models.DateTimeField(default=None, null=True)
     stage = models.IntegerField(
-        choices=Stages.choices, default=Stages.HARVEST_REQUESTED)
+        choices=Stages.choices, default=Stages.HARVEST_REQUESTED
+    )
     status = models.IntegerField(
-        choices=Status.choices, default=Status.WAITING_APPROVAL)
+        choices=Status.choices, default=Status.WAITING_APPROVAL
+    )
 
     class Meta:
-        unique_together = ["archive", "stage","start_date"]
+        unique_together = ["archive", "stage", "start_date"]
 
     def set_in_progress(self, task_id):
         self.celery_task_id = task_id
@@ -92,15 +99,15 @@ class Job(models.Model):
 
     def set_failed(self):
         self.status = Status.FAILED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()
 
     def set_rejected(self):
         self.status = Status.REJECTED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()
 
     def set_completed(self):
         self.status = Status.COMPLETED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()
