@@ -52,8 +52,12 @@ urlpatterns = [
                 ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
-                path("search/<str:source>/<str:recid>/", views.search_by_id, name="search_by_id"),
-                path("archive/<int:id>/jobs/", views.get_jobs, name="archive_jobs")
+                path(
+                    "search/<str:source>/<str:recid>/",
+                    views.search_by_id,
+                    name="search_by_id",
+                ),
+                path("archive/<int:id>/jobs/", views.get_jobs, name="archive_jobs"),
             ]
         ),
     )
@@ -63,5 +67,6 @@ urlpatterns = [
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
 
-# from django.conf.urls.static import static
-# urlpatterns += static("/", document_root="static")
+from django.conf.urls.static import static
+
+urlpatterns += static("/", document_root="static")
