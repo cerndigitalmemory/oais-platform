@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, ArchiveStatus, Record
+from oais_platform.oais.models import Archive, Status, Record
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -31,7 +31,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
 
     def test_reject_without_permission(self):
         url = reverse("archive-reject", args=[self.archive.id])
@@ -39,7 +39,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
 
     def test_reject_with_permission(self):
         self.creator.user_permissions.add(self.reject_permission)
@@ -50,7 +50,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.status, ArchiveStatus.REJECTED)
+        self.assertEqual(self.archive.status, Status.REJECTED)
 
     def test_approve_not_authenticated(self):
         self.client.force_authenticate(user=None)
@@ -60,7 +60,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
 
     def test_approve_without_permission(self):
         url = reverse("archive-approve", args=[self.archive.id])
@@ -68,7 +68,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
 
     @patch("oais_platform.oais.tasks.process.delay")
     def test_approve_with_permission(self, process_delay):
@@ -80,7 +80,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.status, ArchiveStatus.PENDING)
+        self.assertEqual(self.archive.status, Status.PENDING)
         process_delay.assert_called_once_with(self.archive.id)
 
     def test_reject_not_waiting_approval(self):
@@ -88,8 +88,8 @@ class ApprovalTests(APITestCase):
         self.creator.save()
 
         url = reverse("archive-reject", args=[self.archive.id])
-        for archive_status in ArchiveStatus.values:
-            if archive_status == ArchiveStatus.WAITING_APPROVAL:
+        for archive_status in Status.values:
+            if archive_status == Status.WAITING_APPROVAL:
                 continue
             self.archive.status = archive_status
             self.archive.save()
@@ -116,7 +116,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.status, ArchiveStatus.REJECTED)
+        self.assertEqual(self.archive.status, Status.REJECTED)
 
     @patch("oais_platform.oais.tasks.process.delay")
     def test_approve_other_user_with_perm(self, process_delay):
@@ -131,7 +131,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.status, ArchiveStatus.PENDING)
+        self.assertEqual(self.archive.status, Status.PENDING)
         process_delay.assert_called_once_with(self.archive.id)
 
     def test_reject_other_user_without_access_perm(self):
@@ -145,7 +145,7 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
 
     def test_approve_other_user_without_access_perm(self):
         self.other_user.user_permissions.add(self.approve_permission)
@@ -158,4 +158,4 @@ class ApprovalTests(APITestCase):
 
         self.archive.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(self.archive.status, ArchiveStatus.WAITING_APPROVAL)
+        self.assertEqual(self.archive.status, Status.WAITING_APPROVAL)
