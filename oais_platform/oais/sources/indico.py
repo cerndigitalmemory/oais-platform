@@ -24,12 +24,6 @@ class Indico(Source):
                 f"Could not read config file for Indico instance: {source}"
             )
 
-        if source == "indico":
-            self.config = self.config_file["indico"]
-
-        if not self.config:
-            raise ValueError("No configuration found")
-
     def get_record_url(self, recid):
         """
         Returns the API endpoint of the event with the given ID
@@ -85,30 +79,20 @@ class Indico(Source):
 
         # Parse JSON response
         data = json.loads(req.text)
+        # Gets the results from the parsed JSON
         records = data["results"]
         results = []
+
+        # for each record get the recid, the url, the title and the source
         for record in records:
-            recid = record["id"]
-
-            if not isinstance(recid, str):
-                recid = str(recid)
-            url = self.get_record_url(recid)
-
-            results.append(
-                {
-                    "url": url,
-                    "recid": recid,
-                    "title": record["title"],
-                    "authors": [],
-                    "source": self.source,
-                }
-            )
+            results.append(self.parse_record(record))
 
         return {"total_num_hits": total_num_hits, "results": results}
 
     def search_by_id(self, recid):
         """
-        Makes the search using the ID of the record
+        Look for a record on Indico given a record ID.
+        Returns the resulting record if exists
         """
         result = []
 
@@ -125,6 +109,9 @@ class Indico(Source):
         return {"result": result}
 
     def parse_record(self, record):
+        """
+        Parses each record returned from the API and returns the necessairy values
+        """
         recid = record["id"]
         if not isinstance(recid, str):
             recid = str(recid)
