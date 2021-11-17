@@ -6,15 +6,6 @@ from oais_platform.oais.sources.source import Source
 import configparser, os
 
 
-def get_dict_value(dct, keys):
-    for key in keys:
-        try:
-            dct = dct[key]
-        except KeyError:
-            return None
-    return dct
-
-
 class ConfigFileUnavailable(Exception):
     pass
 
@@ -94,24 +85,20 @@ class Indico(Source):
 
         # Parse JSON response
         data = json.loads(req.text)
-        records_key_list = self.config["results"].split(",")
-        records = get_dict_value(data, records_key_list)
-
+        records = data["results"]
         results = []
         for record in records:
-            recid_key_list = self.config["recid"].split(",")
-            recid = get_dict_value(record, recid_key_list)
+            recid = record["id"]
 
             if not isinstance(recid, str):
                 recid = str(recid)
             url = self.get_record_url(recid)
-            title_key_list = self.config["title"].split(",")
 
             results.append(
                 {
                     "url": url,
                     "recid": recid,
-                    "title": get_dict_value(record, title_key_list),
+                    "title": record["title"],
                     "authors": [],
                     "source": self.source,
                 }
@@ -120,6 +107,9 @@ class Indico(Source):
         return {"total_num_hits": total_num_hits, "results": results}
 
     def search_by_id(self, recid):
+        """
+        Makes the search using the ID of the record
+        """
         result = []
 
         try:
@@ -135,18 +125,16 @@ class Indico(Source):
         return {"result": result}
 
     def parse_record(self, record):
-        recid_key_list = self.config["recid"].split(",")
-        recid = get_dict_value(record, recid_key_list)
+        recid = record["id"]
         if not isinstance(recid, str):
             recid = str(recid)
 
         url = self.get_record_url(recid)
-        title_key_list = self.config["title"].split(",")
 
         return {
             "url": url,
             "recid": recid,
-            "title": get_dict_value(record, title_key_list),
+            "title": record["title"],
             "authors": [],
             "source": self.source,
         }
