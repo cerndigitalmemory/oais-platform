@@ -64,6 +64,8 @@ def process(self, archive_id, job_id):
         recid=archive.record.recid,
         source=archive.record.source,
         loglevel=2,
+        target=None,
+        localsource=None,
     )
 
     return bagit_result

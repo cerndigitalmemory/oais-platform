@@ -1,5 +1,6 @@
 from oais_platform.oais.sources.cds import CDS
 from oais_platform.oais.sources.invenio import Invenio
+from oais_platform.oais.sources.indico import Indico
 
 sources = {
     "cds": CDS("cds", "https://cds.cern.ch"),
@@ -7,6 +8,7 @@ sources = {
     "zenodo": Invenio("zenodo", "https://zenodo.org/api"),
     "inveniordm": Invenio("inveniordm", "https://inveniordm.web.cern.ch/api"),
     "cod": Invenio("cod", "https://opendata.cern.ch/api"),
+    "indico": Indico("indico", "https://indico.cern.ch"),
 }
 
 
