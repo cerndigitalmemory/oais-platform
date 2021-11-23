@@ -1,5 +1,3 @@
-from django import utils
-from django.db.models import base
 from bagit_create import main as bic
 from celery import states
 
@@ -7,11 +5,11 @@ from celery import states
 from celery.decorators import task
 from celery.utils.log import get_task_logger
 from oais_platform.oais.models import Archive, Job, Stages, Status
-from django.utils import timezone
 from oais_utils import oais_utils
 
 # import oais_utils
-import time, os, zipfile
+import time
+import os
 
 logger = get_task_logger(__name__)
 
@@ -72,8 +70,6 @@ def process(self, archive_id, job_id):
         recid=archive.record.recid,
         source=archive.record.source,
         loglevel=2,
-        target=None,
-        localsource=None,
     )
 
     return bagit_result
@@ -127,7 +123,7 @@ def validate(self, archive_id, path_to_sip, job_id):
         celery_task_id=self.request.id,
     )
 
-    # TODO: Run validation
+    # Runs validate_sip from oais_utils
     valid = oais_utils.validate.validate_sip(path_to_sip)
 
     # MOCK
