@@ -92,15 +92,15 @@ class Job(models.Model):
 
     def set_failed(self):
         self.status = Status.FAILED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()
 
     def set_rejected(self):
         self.status = Status.REJECTED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()
 
     def set_completed(self):
         self.status = Status.COMPLETED
-        self.finish_date = datetime.now()
+        self.finish_date = timezone.now()
         self.save()

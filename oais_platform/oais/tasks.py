@@ -1,13 +1,12 @@
-from django.db.models import base
 from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
 from celery.utils.log import get_task_logger
 from oais_platform.oais.models import Archive, Job, Stages, Status
-from django.utils import timezone
 
-#import oais_utils
-import time, os, zipfile
+from oais_utils.validate import validate_sip
+import time
+import os
 
 logger = get_task_logger(__name__)
 
@@ -22,8 +21,16 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
     if status == states.SUCCESS:
 
         if retval["status"] == 0:
-            # TODO set path from bic return? for validation
-            archive.path_to_sip = os.path.join(os.getcwd(),'tmp')
+            # TODO update bagit-create to support filename return
+            try:
+                filename = retval["filename"]
+            except:
+                job.set_failed()
+                archive.set_failed()
+                logger.error(
+                f"Error while harvesting archive {archive_id}: Update bagit-create version")
+            
+            archive.path_to_sip = os.path.join(os.getcwd(), filename)
 
             # Previous job
             job.set_completed()
@@ -37,7 +44,14 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
 
             # New Celery task will start
             archive.set_pending()
-            validate.delay(archive.id, archive.path_to_sip, registry_job.id)
+            valid = validate.delay(archive.id, archive.path_to_sip, registry_job.id)
+            if valid:
+                registry_job.set_completed()
+                archive.set_completed()
+            else:
+                job.set_failed()
+                archive.set_failed()
+
         else:
             # bagit_create returned an error
             errormsg = retval["errormsg"]
@@ -64,8 +78,6 @@ def process(self, archive_id, job_id):
         recid=archive.record.recid,
         source=archive.record.source,
         loglevel=2,
-        target=None,
-        localsource=None,
     )
 
     return bagit_result
@@ -102,6 +114,8 @@ def validate(self, archive_id, path_to_sip, job_id):
 
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(path_to_sip)
+    
+    # Mock return True if sip does not exist
     if not sip_exists:
         return False
         
@@ -115,11 +129,10 @@ def validate(self, archive_id, path_to_sip, job_id):
         celery_task_id = self.request.id
     )
 
-    # TODO: Run validation 
-    # valid = oais_utils.validate.validate_aip(path_to_bag)
+    # Runs validate_sip from oais_utils
+    valid = validate_sip(path_to_sip)
+
     
-    # MOCK
-    valid = True
     time.sleep(5)
 
     return valid
