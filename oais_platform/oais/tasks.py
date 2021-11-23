@@ -23,7 +23,7 @@ def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
         if retval["status"] == 0:
             # TODO update bagit-create to support filename return
             try:
-                filename = retval["filename"]
+                filename = retval["foldername"]
             except:
                 job.set_failed()
                 archive.set_failed()
