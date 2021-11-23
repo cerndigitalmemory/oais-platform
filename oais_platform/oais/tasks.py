@@ -115,7 +115,6 @@ def validate(self, archive_id, path_to_sip, job_id):
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(path_to_sip)
     
-    # Mock return True if sip does not exist
     if not sip_exists:
         return False
         
