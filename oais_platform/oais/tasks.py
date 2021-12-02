@@ -3,123 +3,121 @@ from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
 from celery.utils.log import get_task_logger
-from oais_platform.oais.models import Archive, Job, Stages, Status
+from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
 
-#import oais_utils
+from oais_utils.validate import validate_sip
 import time, os, zipfile
 
 logger = get_task_logger(__name__)
 
 
 def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
-    # archive_id is the first parameter passed to the task
-    archive_id = args[0]
-    archive = Archive.objects.get(pk=archive_id)
+    # id is the first parameter passed to the task
+    id = args[0]
+    archive = Archive.objects.get(pk=id)
 
-    job_id = args[1]
-    job = Job.objects.get(pk=job_id)
+    id = args[1]
+    step = Step.objects.get(pk=id)
+
+    step.set_task(self.request.id)
+
     if status == states.SUCCESS:
-
+        print(retval)
         if retval["status"] == 0:
-            # TODO set path from bic return? for validation
-            archive.path_to_sip = os.path.join(os.getcwd(),'tmp')
+            try:
+                filename = retval["foldername"]
+            except:
+                step.set_status(Status.FAILED)
+                logger.error(
+                    f"Error while harvesting archive {id}: Update bagit-create version"
+                )
 
             # Previous job
-            job.set_completed()
+            step.set_status(Status.COMPLETED)
+            step.set_finish_date()
+            step.set_output_data(os.path.join(os.getcwd(), filename))
 
-            # Next job
-            registry_job = Job.objects.create(
-                archive = archive,
-                stage = Stages.CHECKING_REGISTRY,
-                status = Status.PENDING
+            # Next step
+            next_step = Step.objects.create(
+                archive=step.archive,
+                name=Steps.VALIDATION,
+                input_step=step,
+                input_data=step.output_data,
+                status=Status.WAITING_APPROVAL,
             )
 
             # New Celery task will start
-            archive.set_pending()
-            validate.delay(archive.id, archive.path_to_sip, registry_job.id)
+            archive.set_step(step.id)
+            validate.delay(next_step.archive.id, next_step.input_data, next_step.id)
+
         else:
             # bagit_create returned an error
             errormsg = retval["errormsg"]
-            logger.error(
-                f"Error while harvesting archive {archive_id}: {errormsg}")
-            job.set_failed()
-            archive.set_failed()
+            logger.error(f"Error while harvesting archive {id}: {errormsg}")
+            step.set_status(Status.FAILED)
     else:
-        job.set_failed()
-        archive.set_failed()
+        step.set_status(Status.FAILED)
 
 
 @task(name="process", bind=True, ignore_result=True, after_return=process_after_return)
-def process(self, archive_id, job_id):
+def process(self, archive_id, step_id):
     logger.info(f"Starting harvest of archive {archive_id}")
 
     archive = Archive.objects.get(pk=archive_id)
-    archive.set_in_progress(self.request.id)
 
-    job = Job.objects.get(pk=job_id)
-    job.set_in_progress(self.request.id)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
 
     bagit_result = bic.process(
-        recid=archive.record.recid,
-        source=archive.record.source,
+        recid=archive.recid,
+        source=archive.source,
         loglevel=2,
-        target=None,
-        localsource=None,
     )
 
     return bagit_result
 
+
 def validate_after_return(self, status, retval, task_id, args, kwargs, einfo):
-    # archive_id is the first parameter passed to the task
+    # id is the first parameter passed to the task
     archive_id = args[0]
     archive = Archive.objects.get(pk=archive_id)
 
     # Could be failed registry_check/validation or successful validation
-    job = archive.get_latest_job()
+    step_id = args[2]
+    step = Step.objects.get(pk=step_id)
+
     if status == states.SUCCESS:
         if retval:
-            archive.set_completed()
-            job.set_completed()
+            step.set_status(Status.COMPLETED)
         else:
-            logger.error(
-                f"Error while validating sip {archive_id}")
-            job.set_failed()
-            archive.set_failed()
+            logger.error(f"Error while validating sip {id}")
+            step.set_status(Status.FAILED)
     else:
-        job.set_failed()
-        archive.set_failed()
+        step.set_status(Status.FAILED)
 
-@task(name="validate", bind=True, ignore_result=True, after_return=validate_after_return)
-def validate(self, archive_id, path_to_sip, job_id):
+
+@task(
+    name="validate", bind=True, ignore_result=True, after_return=validate_after_return
+)
+def validate(self, archive_id, path_to_sip, step_id):
     logger.info(f"Starting SIP validation {path_to_sip}")
 
-    registry_job = Job.objects.get(pk=job_id)
-    registry_job.set_in_progress(self.request.id)
-
-    archive = Archive.objects.get(pk=archive_id)
-    archive.set_in_progress(self.request.id)
+    current_step = Step.objects.get(pk=step_id)
+    current_step.set_status(Status.IN_PROGRESS)
 
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(path_to_sip)
     if not sip_exists:
         return False
-        
-    registry_job.set_completed()
 
     # Next job
-    validation_job = Job.objects.create(
-        archive = archive,
-        stage = Stages.VALIDATION,
-        status = Status.IN_PROGRESS,
-        celery_task_id = self.request.id
-    )
+    current_step.set_task(self.request.id)
 
-    # TODO: Run validation 
-    # valid = oais_utils.validate.validate_aip(path_to_bag)
-    
+    # Runs validate_sip from oais_utils
+    valid = validate_sip(path_to_sip)
+
     # MOCK
-    valid = True
     time.sleep(5)
 
     return valid

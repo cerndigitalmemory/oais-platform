@@ -7,11 +7,15 @@ from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Stages, Status, Record, Job
+from oais_platform.oais.models import Archive, Step, Status, Steps
 from oais_platform.oais.permissions import filter_archives_by_user_perms
-from oais_platform.oais.serializers import (ArchiveSerializer, GroupSerializer, JobSerializer,
-                                            LoginSerializer, RecordSerializer,
-                                            UserSerializer)
+from oais_platform.oais.serializers import (
+    ArchiveSerializer,
+    GroupSerializer,
+    StepSerializer,
+    LoginSerializer,
+    UserSerializer,
+)
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -48,25 +52,25 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-class RecordViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
+class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows records to be viewed or edited.
     """
 
-    queryset = Record.objects.all()
-    serializer_class = RecordSerializer
+    queryset = Archive.objects.all()
+    serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True, url_name="record-archives")
-    def archives(self, request, pk=None):
-        record = self.get_object()
-        archives = filter_archives_by_user_perms(record.archives.all(), request.user)
-        return self.make_paginated_response(archives, ArchiveSerializer)
+    @action(detail=True, url_name="archive-steps")
+    def archive_steps(self, request, pk=None):
+        archive = self.get_object()
+        steps = filter_archives_by_user_perms(archive.steps.all(), self.request.user)
+        return self.make_paginated_response(archive, ArchiveSerializer)
 
 
-class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Archive.objects.all().order_by("-creation_date")
-    serializer_class = ArchiveSerializer
+class StepViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Step.objects.all().order_by("-start_date")
+    serializer_class = StepSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
@@ -80,47 +84,35 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
         # Make sure the status of the archive is read and updated atomically,
         # otherwise multiple harvesting task might be scheduled.
         with transaction.atomic():
-            archive = self.get_object()
-            if archive.status != Status.WAITING_APPROVAL:
+            step = self.get_object()
+            if step.status != Status.WAITING_APPROVAL:
                 raise BadRequest("Archive is not waiting for approval")
             if approved:
-                archive.status = Status.PENDING
+                step.status = Status.IN_PROGRESS
             else:
-                archive.status = Status.REJECTED
-                job = archive.get_latest_job()
-                job.set_rejected()
-            archive.save()
+                step.status = Status.REJECTED
+                # job = step.get_latest_job()
+                # job.set_rejected()
+
+            step.save()
 
         if approved:
-            job = archive.get_latest_job()
-            if job.stage == Stages.HARVEST_REQUESTED:
-                job.set_completed()
+            current_step = step
+            if current_step.name == Steps.HARVEST:
+                current_step.set_status(Status.NOT_RUN)
+                print("Characteristics: ", step.archive.id, step.id)
+                process.delay(step.archive.id, step.id)
 
-                archive.set_pending()
-                harvest_job = Job.objects.create(
-                    archive = archive,
-                    stage = Stages.HARVESTING,
-                    status = Status.PENDING
-                )
+            elif current_step.name == Steps.VALIDATION:
+                current_step.set_status(Status.NOT_RUN)
+                validate.delay(step.archive.id, step.archive.path_to_sip, step.id)
 
-                process.delay(archive.id, harvest_job.id)
-            elif job.stage == Stages.VALIDATION_REQUESTED:
-                job.set_completed()
-
-                archive.set_pending()
-                registry_job = Job.objects.create(
-                    archive = archive,
-                    stage = Stages.CHECKING_REGISTRY,
-                    status = Status.PENDING
-                )
-
-                validate.delay(archive.id, archive.path_to_sip, registry_job.id)
-
-        serializer = self.get_serializer(archive)
+        serializer = self.get_serializer(current_step)
         return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="actions/approve")
     def approve(self, request, pk=None):
+        print("Request is: ", request)
         return self.approve_or_reject(
             request, "oais.can_approve_archive", approved=True
         )
@@ -131,14 +123,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet):
             request, "oais.can_reject_archive", approved=False
         )
 
+
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
-def get_jobs(request, id):
+def get_steps(request, id):
+    print("Request", request)
     # Getting jobs for the provided archive ID
     archive = Archive.objects.get(pk=id)
-    jobs = archive.jobs.all().order_by("start_date")
-    
-    serializer = JobSerializer(jobs, many=True)
+    steps = archive.steps.all().order_by("start_date")
+
+    serializer = StepSerializer(steps, many=True)
     return Response(serializer.data)
 
 
@@ -150,21 +144,18 @@ def harvest(request, recid, source):
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    record, _ = Record.objects.get_or_create(
-        recid=recid, source=source, defaults={"url": url}
+    archive, _ = Archive.objects.get_or_create(
+        recid=recid,
+        source=source,
+        defaults={"source_url": url},
     )
 
-    archive = Archive.objects.create(
-        record=record,
-        creator=request.user,
-        status=Status.WAITING_APPROVAL,
+    step = Step.objects.create(
+        archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
     )
 
-    job = Job.objects.create(
-        archive = archive,
-        stage = Stages.HARVEST_REQUESTED,
-        status = Status.WAITING_APPROVAL
-    )
+    print(step.id)
+    archive.set_step(step.id)
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
@@ -174,11 +165,11 @@ def harvest(request, recid, source):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def upload(request):
-    file = request.FILES.getlist('file')[0]
+    file = request.FILES.getlist("file")[0]
 
     # WORKAROUND FOR NOW : Get directory name from compressed filename
     # TODO getting source and recid from sip.json?
-    sip_dir = file.name.split('.')[0]
+    sip_dir = file.name.split(".")[0]
     sip_data = sip_dir.split("::")
     source = sip_data[1]
     recid = sip_data[2]
@@ -188,30 +179,22 @@ def upload(request):
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    record, _ = Record.objects.get_or_create(
-        recid=recid,
-        source=source,
-        defaults={"url": url}
+    archive, _ = Archive.objects.get_or_create(
+        recid=recid, source=source, defaults={"source_url": url}
     )
 
-    archive = Archive.objects.create(
-        record=record,
-        creator=request.user,
-        status= Status.IN_PROGRESS
+    step = Step.objects.create(
+        archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
     )
 
-    job = Job.objects.create(
-        archive = archive,
-        stage = Stages.UPLOADING,
-        status = Status.IN_PROGRESS
-    )
+    archive.set_step(step.id)
 
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
     try:
         # Save compressed SIP
-        compressed_path = os.path.join(base_path, 'compressed.zip') 
-        destination = open(compressed_path, 'wb+')
+        compressed_path = os.path.join(base_path, "compressed.zip")
+        destination = open(compressed_path, "wb+")
         for chunk in file.chunks():
             destination.write(chunk)
         destination.close()
@@ -224,23 +207,24 @@ def upload(request):
         os.remove(compressed_path)
 
         # Uploading completed
-        job.set_completed()
+        step.set_status(Status.COMPLETED)
+        step.set_finish_date()
+        archive.set_step(step.id)
 
         # Save path and change status of the archive
-        archive.status = Status.WAITING_APPROVAL
         archive.path_to_sip = os.path.join(base_path, sip_dir)
         archive.save()
 
-        next_job = Job.objects.create(
-            archive = archive,
-            stage = Stages.VALIDATION_REQUESTED,
-            status = Status.WAITING_APPROVAL
+        next_step = Step.objects.create(
+            archive=archive,
+            name=Steps.VALIDATION,
+            input_step=step.id,
+            status=Status.WAITING_APPROVAL,
         )
     except Exception as e:
-        job.set_failed()
-        archive.set_failed()
+        step.set_status(Status.FAILED)
 
-    return Response({"msg" : "SIP uploading started, see Archives page"})
+    return Response({"msg": "SIP uploading started, see Archives page"})
 
 
 @api_view()
@@ -277,6 +261,7 @@ def search_by_id(request, source, recid):
         raise BadRequest("Invalid source")
 
     return Response(result)
+
 
 @api_view()
 @permission_classes([permissions.IsAuthenticated])

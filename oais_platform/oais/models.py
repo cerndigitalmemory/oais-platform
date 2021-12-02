@@ -4,103 +4,82 @@ from django.utils import timezone
 from datetime import datetime
 
 # Create your models here.
+class Steps(models.IntegerChoices):
+    SIP_UPLOAD = 1
+    HARVEST = 2
+    VALIDATION = 3
+    CHECKSUM = 4
 
-
-class Record(models.Model):
-    url = models.CharField(max_length=100)
-    recid = models.CharField(max_length=50)
-    source = models.CharField(max_length=50)
-
-    class Meta:
-        unique_together = ["recid", "source"]
 
 class Status(models.IntegerChoices):
-    PENDING = 1
+    NOT_RUN = 1
     IN_PROGRESS = 2
     FAILED = 3
     COMPLETED = 4
     WAITING_APPROVAL = 5
     REJECTED = 6
 
-class Stages(models.IntegerChoices):
-    HARVEST_REQUESTED = 1
-    HARVESTING = 2
-    VALIDATION_REQUESTED = 3
-    CHECKING_REGISTRY = 4
-    VALIDATION = 5
-    UPLOADING = 6
 
 class Archive(models.Model):
-    record = models.ForeignKey(
-        Record, on_delete=models.PROTECT, related_name="archives"
-    )
-    creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="archives"
-    )
-    creation_date = models.DateTimeField(default=timezone.now)
-    celery_task_id = models.CharField(max_length=50, null=True, default=None)
-    status = models.IntegerField(
-        choices=Status.choices, default=Status.WAITING_APPROVAL)
-    path_to_sip = models.CharField(max_length=100, null=True, default=None)
+    """
+    Represents an archival process of a single addressable record in a upstream source
+    """
 
-    class Meta:
-        permissions = [
-            ("can_access_all_archives", "Can access all the archival requests"),
-            ("can_approve_archive", "Can approve an archival request"),
-            ("can_reject_archive", "Can reject an archival request"),
-        ]
+    id = models.AutoField(primary_key=True)
+    source_url = models.CharField(max_length=100)
+    recid = models.CharField(max_length=50)
+    source = models.CharField(max_length=50)
+    timestamp = models.DateTimeField(default=timezone.now)
+    current_status = models.CharField(max_length=50)
+    path_to_sip = models.CharField(max_length=100)
 
-    def set_in_progress(self, task_id):
-        self.celery_task_id = task_id
-        self.status = Status.IN_PROGRESS
+    # Put the id of the last_successful step
+    def set_step(self, step_status):
+        self.current_status = step_status
         self.save()
 
-    def set_completed(self):
-        self.status = Status.COMPLETED
-        self.save()
 
-    def set_failed(self):
-        self.status = Status.FAILED
-        self.save()
+class Step(models.Model):
+    """
+    Represents a single “processing” step in the archival process.
+    """
 
-    def set_pending(self):
-        self.status = Status.PENDING
-        self.save()
-
-    def get_latest_job(self):
-        jobs = self.jobs.all().order_by("-start_date")
-        return jobs[0]
-
-class Job(models.Model):
-    archive = models.ForeignKey(
-        Archive, on_delete=models.PROTECT, related_name="jobs")
-    celery_task_id = models.CharField(max_length=50, null=True, default=None)
+    # The archival process this step is in
+    id = models.AutoField(primary_key=True)
+    archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
+    name = models.IntegerField(choices=Steps.choices)
     start_date = models.DateTimeField(default=timezone.now)
     finish_date = models.DateTimeField(default=None, null=True)
-    stage = models.IntegerField(
-        choices=Stages.choices, default=Stages.HARVEST_REQUESTED)
     status = models.IntegerField(
-        choices=Status.choices, default=Status.WAITING_APPROVAL)
+        choices=Status.choices, default=Status.WAITING_APPROVAL
+    )
+    celery_task_id = models.CharField(max_length=50, null=True, default=None)
+    input_data = models.CharField(max_length=100, null=True, default=None)
+    input_step = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="step",
+        null=True,
+        blank=True,
+    )
+    output_data = models.CharField(max_length=100, null=True, default=None)
 
-    class Meta:
-        unique_together = ["archive", "stage","start_date"]
+    def set_status(self, status):
+        self.status = status
+        self.save()
 
-    def set_in_progress(self, task_id):
+    def set_task(self, task_id):
         self.celery_task_id = task_id
-        self.status = Status.IN_PROGRESS
         self.save()
 
-    def set_failed(self):
-        self.status = Status.FAILED
-        self.finish_date = datetime.now()
+    def set_input_step(self, input_step):
+        self.input_step = input_step
         self.save()
 
-    def set_rejected(self):
-        self.status = Status.REJECTED
-        self.finish_date = datetime.now()
+    def set_output_data(self, data):
+        self.output_data = data
         self.save()
 
-    def set_completed(self):
-        self.status = Status.COMPLETED
-        self.finish_date = datetime.now()
+    def set_finish_date(self):
+        self.finish_date = timezone.now()
         self.save()

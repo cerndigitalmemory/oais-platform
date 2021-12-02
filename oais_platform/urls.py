@@ -23,8 +23,8 @@ from oais_platform.oais import views
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
-router.register(r"records", views.RecordViewSet)
 router.register(r"archives", views.ArchiveViewSet)
+router.register(r"steps", views.StepViewSet)
 
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
@@ -52,8 +52,12 @@ urlpatterns = [
                 ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
-                path("search/<str:source>/<str:recid>/", views.search_by_id, name="search_by_id"),
-                path("archive/<int:id>/jobs/", views.get_jobs, name="archive_jobs")
+                path(
+                    "search/<str:source>/<str:recid>/",
+                    views.search_by_id,
+                    name="search_by_id",
+                ),
+                path("archive/<int:id>/", views.get_steps, name="get-steps"),
             ]
         ),
     )
@@ -63,5 +67,6 @@ urlpatterns = [
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
 
-# from django.conf.urls.static import static
-# urlpatterns += static("/", document_root="static")
+from django.conf.urls.static import static
+
+urlpatterns += static("/", document_root="static")

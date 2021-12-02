@@ -1,7 +1,7 @@
 from re import S
 from django.contrib.auth.models import Group, User
 from rest_framework.fields import IntegerField
-from oais_platform.oais.models import Archive, Record, Job
+from oais_platform.oais.models import Archive, Step
 from rest_framework import serializers
 
 
@@ -22,33 +22,43 @@ class GroupSerializer(serializers.ModelSerializer):
         fields = ["url", "name"]
 
 
-class RecordSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Record
-        fields = ["id", "url", "recid", "source"]
-
-class JobSerializer(serializers.ModelSerializer):
-    archive_id = serializers.IntegerField(source='archive.id')
+class StepSerializer(serializers.ModelSerializer):
+    archive = serializers.IntegerField(source="archive.id")
 
     class Meta:
-        model = Job
-        fields = ["id", "archive_id", "celery_task_id",
-                  "start_date", "finish_date", "status", "stage"]
+        model = Step
+        fields = [
+            "id",
+            "archive",
+            "name",
+            "start_date",
+            "finish_date",
+            "status",
+            "celery_task_id",
+            "input_data",
+            "input_step",
+            "output_data",
+        ]
+
 
 class ArchiveSerializer(serializers.ModelSerializer):
-    creator = UserSerializer()
-    record = RecordSerializer()
-    stage = serializers.SerializerMethodField()
+    # creator = UserSerializer()
 
     class Meta:
         model = Archive
-        fields = ["id", "record", "creator",
-                  "creation_date", "celery_task_id", "status", "stage"]
+        fields = [
+            "id",
+            "source_url",
+            "recid",
+            "source",
+            "timestamp",
+            "current_status",
+            "path_to_sip",
+        ]
 
-    # Getting stage from last job
-    def get_stage(self, instance):
-        last_job = instance.jobs.all().order_by('-start_date')[0]
-        return last_job.stage
+    def get_last_step(self, instance):
+        last_step = instance.steps.all().order_by("-start_date")[0]
+        return last_step
 
 
 class LoginSerializer(serializers.Serializer):
