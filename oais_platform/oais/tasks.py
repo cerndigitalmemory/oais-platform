@@ -142,6 +142,7 @@ def checksum_after_return(self, status, retval, task_id, args, kwargs, einfo):
     path_to_sip = args[1]
     step_id = args[0]
     step = Step.objects.get(pk=step_id)
+    logger.info("validate_after")
 
     print(step.id, retval)
     if status == states.SUCCESS:
@@ -172,6 +173,7 @@ def checksum(self, step_id, path_to_sip):
         return False
 
     sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
+
     with open(sip_json) as json_file:
         data = json.load(json_file)
         for file in data["contentFiles"]:
@@ -194,8 +196,9 @@ def checksum(self, step_id, path_to_sip):
     with open(tempfile, "w") as f:
         json.dump(data, f, indent=4)
 
-    # rename temporary file replacing old file
-    os.rename(tempfile, sip_json)
+    # rename temporary file to sip2 json
+    new_sip_json = os.path.join(path_to_sip, "data/meta/sip2.json")
+    os.rename(tempfile, new_sip_json)
 
     logger.info(f"Checksum completed!")
 
