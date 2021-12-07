@@ -29,9 +29,15 @@ class Archive(models.Model):
     source_url = models.CharField(max_length=100)
     recid = models.CharField(max_length=50)
     source = models.CharField(max_length=50)
+    creator = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, related_name="archives"
+    )
     timestamp = models.DateTimeField(default=timezone.now)
     current_status = models.CharField(max_length=50)
     path_to_sip = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["-id"]
 
     # Put the id of the last_successful step
     def set_step(self, step_status):
@@ -63,6 +69,13 @@ class Step(models.Model):
         blank=True,
     )
     output_data = models.CharField(max_length=100, null=True, default=None)
+
+    class Meta:
+        permissions = [
+            ("can_access_all_archives", "Can access all the archival requests"),
+            ("can_approve_archive", "Can approve an archival request"),
+            ("can_reject_archive", "Can reject an archival request"),
+        ]
 
     def set_status(self, status):
         self.status = status

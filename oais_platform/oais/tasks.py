@@ -102,7 +102,6 @@ def validate_after_return(self, status, retval, task_id, args, kwargs, einfo):
                 status=Status.WAITING_APPROVAL,
             )
 
-            # archive = Archive.objects.get(pk=archive_id)
             archive = step.archive
             archive.set_step(next_step.id)
 

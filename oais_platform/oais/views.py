@@ -148,6 +148,7 @@ def harvest(request, recid, source):
         recid=recid,
         source=source,
         defaults={"source_url": url},
+        creator=request.user,
     )
 
     step = Step.objects.create(
@@ -180,7 +181,10 @@ def upload(request):
         raise BadRequest("Invalid source")
 
     archive, _ = Archive.objects.get_or_create(
-        recid=recid, source=source, defaults={"source_url": url}
+        recid=recid,
+        source=source,
+        defaults={"source_url": url},
+        creator=request.user,
     )
 
     step = Step.objects.create(

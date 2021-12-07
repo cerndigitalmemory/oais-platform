@@ -42,7 +42,7 @@ class StepSerializer(serializers.ModelSerializer):
 
 
 class ArchiveSerializer(serializers.ModelSerializer):
-    # creator = UserSerializer()
+    creator = UserSerializer()
 
     class Meta:
         model = Archive
@@ -51,6 +51,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "source_url",
             "recid",
             "source",
+            "creator",
             "timestamp",
             "current_status",
             "path_to_sip",
