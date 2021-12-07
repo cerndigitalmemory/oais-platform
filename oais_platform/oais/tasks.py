@@ -1,4 +1,3 @@
-from django.db.models import base
 from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
@@ -127,6 +126,7 @@ def validate(self, archive_id, path_to_sip, step_id):
 
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(path_to_sip)
+
     if not sip_exists:
         return False
 
