@@ -9,6 +9,7 @@ class Steps(models.IntegerChoices):
     HARVEST = 2
     VALIDATION = 3
     CHECKSUM = 4
+    ARCHIVE = 5
 
 
 class Status(models.IntegerChoices):

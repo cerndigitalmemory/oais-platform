@@ -1,13 +1,15 @@
+from logging import log
 from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
 from celery.utils.log import get_task_logger
 from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
+from amclient import AMClient
 
 from oais_utils.validate import validate_sip
 
-import json, os, uuid
+import json, os, uuid, shutil, ntpath
 
 logger = get_task_logger(__name__)
 
@@ -104,7 +106,7 @@ def validate_after_return(self, status, retval, task_id, args, kwargs, einfo):
             archive = step.archive
             archive.set_step(next_step.id)
 
-            checksum(next_step.id, path_to_sip)
+            checksum.delay(next_step.id, path_to_sip)
         else:
             logger.error(f"Error while validating sip {id}")
             step.set_status(Status.FAILED)
@@ -141,15 +143,26 @@ def checksum_after_return(self, status, retval, task_id, args, kwargs, einfo):
     path_to_sip = args[1]
     step_id = args[0]
     step = Step.objects.get(pk=step_id)
-    logger.info("validate_after")
 
-    print(step.id, retval)
     if status == states.SUCCESS:
         if retval:
             step.set_status(Status.COMPLETED)
 
+            # Next step
+            next_step = Step.objects.create(
+                archive=step.archive,
+                name=Steps.ARCHIVE,
+                input_step=step,
+                input_data=step.output_data,
+                status=Status.WAITING_APPROVAL,
+            )
+
+            archive = step.archive
+            archive.set_step(next_step.id)
+
+            archivematica.delay(next_step.id, path_to_sip)
         else:
-            logger.error(f"Error while checksuming {path_to_sip}")
+            logger.error(f"Error while validating sip {id}")
             step.set_status(Status.FAILED)
     else:
         step.set_status(Status.FAILED)
@@ -200,5 +213,71 @@ def checksum(self, step_id, path_to_sip):
     os.rename(tempfile, new_sip_json)
 
     logger.info(f"Checksum completed!")
+    checksumed = True
+
+    return checksumed
+
+
+def archive_after_return(self, status, retval, task_id, args, kwargs, einfo):
+
+    path_to_sip = args[1]
+    step_id = args[0]
+    step = Step.objects.get(pk=step_id)
+
+    if status == states.SUCCESS:
+        if retval:
+            step.set_status(Status.COMPLETED)
+        else:
+            logger.error(f"Error while archiving {id}")
+            step.set_status(Status.FAILED)
+    else:
+        step.set_status(Status.FAILED)
+
+
+@task(
+    name="archivematica",
+    bind=True,
+    ignore_result=True,
+    after_return=archive_after_return,
+)
+def archivematica(self, step_id, path_to_sip):
+    logger.info(f"Starting archiving {path_to_sip}")
+
+    current_step = Step.objects.get(pk=step_id)
+    current_step.set_status(Status.IN_PROGRESS)
+
+    archive_id = current_step.archive
+
+    # Set task id
+    current_step.set_task(self.request.id)
+
+    # This is the absolute directory of the archivematica-sampledata folder in the system
+    # [NEEDS TO BE CHANGED]
+    a3m_abs_directory = "/home/kchelakis/a3m/archivematica/hack/submodules/archivematica-sampledata/oais-data"
+    # This is the directory Archivematica "sees" on the local system
+    a3m_rel_directory = "/home/archivematica/archivematica-sampledata/oais-data"
+
+    system_dst = os.path.join(
+        a3m_abs_directory,
+        ntpath.basename(path_to_sip),
+    )
+
+    archivematica_dst = os.path.join(
+        a3m_rel_directory,
+        ntpath.basename(path_to_sip),
+    )
+
+    shutil.copytree(path_to_sip, system_dst)
+
+    am = AMClient()
+    am.am_url = "http://127.0.0.1:62080"
+    am.am_user_name = "test"
+    am.am_api_key = "test"
+    am.transfer_source = "0f409b5d-7925-4c8d-b476-1932ab51402c"
+    am.transfer_directory = archivematica_dst
+    am.transfer_name = ntpath.basename(path_to_sip) + "::Archive " + str(archive_id.id)
+    am.processing_config = "automated"
+
+    package = am.create_package()
 
     return True
