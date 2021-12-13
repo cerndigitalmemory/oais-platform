@@ -56,9 +56,7 @@ class Step(models.Model):
     name = models.IntegerField(choices=Steps.choices)
     start_date = models.DateTimeField(default=timezone.now)
     finish_date = models.DateTimeField(default=None, null=True)
-    status = models.IntegerField(
-        choices=Status.choices, default=Status.WAITING_APPROVAL
-    )
+    status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     input_data = models.CharField(max_length=100, null=True, default=None)
     input_step = models.ForeignKey(
