@@ -253,7 +253,7 @@ def archivematica(self, step_id, path_to_sip):
 
     # This is the absolute directory of the archivematica-sampledata folder in the system
     # [NEEDS TO BE CHANGED]
-    a3m_abs_directory = "/home/kchelakis/a3m/archivematica/hack/submodules/archivematica-sampledata/oais-data"
+    a3m_abs_directory = "PUT THE ARCHIVEMATICA FOLDER ABSOLUTE PATH HERE"
     # This is the directory Archivematica "sees" on the local system
     a3m_rel_directory = "/home/archivematica/archivematica-sampledata/oais-data"
 
