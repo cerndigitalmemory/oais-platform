@@ -104,7 +104,7 @@ def validate_after_return(self, status, retval, task_id, args, kwargs, einfo):
             archive = step.archive
             archive.set_step(next_step.id)
 
-            checksum(next_step.id, path_to_sip)
+            checksum.delay(next_step.id, path_to_sip)
         else:
             logger.error(f"Error while validating sip {id}")
             step.set_status(Status.FAILED)
