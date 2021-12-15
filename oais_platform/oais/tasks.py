@@ -7,61 +7,115 @@ from django.utils import timezone
 
 from oais_utils.validate import validate_sip
 
-import json, os, uuid
+import json
+import os
+import uuid
 
 logger = get_task_logger(__name__)
 
+# Execution flow 
 
-def process_after_return(self, status, retval, task_id, args, kwargs, einfo):
-    # id is the first parameter passed to the task
+
+def finalize(self, status, retval, task_id, args, kwargs, einfo):
+    """
+    `Callback` for Celery tasks, handling result and updating
+    the Archive
+
+    status: Celery task status
+    retval: returned value from the execution of the celery task
+    task_id: Celery task ID
+    args: 
+    """
+
+    # ID of the Archive this Step is in
     id = args[0]
     archive = Archive.objects.get(pk=id)
 
+    # ID of the Step this task was spawned for
     id = args[1]
     step = Step.objects.get(pk=id)
 
+    # Should be removed?
     step.set_task(self.request.id)
 
+    # If the Celery task succeded
     if status == states.SUCCESS:
-        print(retval)
+        # This is for tasks failing without throwing an exception 
+        # (e.g BIC returning an error)
         if retval["status"] == 0:
-            try:
-                filename = retval["foldername"]
-            except:
-                step.set_status(Status.FAILED)
-                logger.error(
-                    f"Error while harvesting archive {id}: Update bagit-create version"
-                )
 
-            # Previous job
+            # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-            step.set_output_data(os.path.join(os.getcwd(), filename))
+            step.set_output_data(retval)
 
-            # Next step
-            next_step = Step.objects.create(
-                archive=step.archive,
-                name=Steps.VALIDATION,
-                input_step=step,
-                input_data=step.output_data,
-                status=Status.WAITING_APPROVAL,
-            )
+            # Update the next possible steps
+            archive.update_next_steps()
 
-            # New Celery task will start
-            archive.set_step(step.id)
-            validate.delay(next_step.archive.id, next_step.input_data, next_step.id)
+            # Run next step
+            run_next_step(archive.id, step.id)
 
         else:
-            # bagit_create returned an error
-            errormsg = retval["errormsg"]
-            logger.error(f"Error while harvesting archive {id}: {errormsg}")
             step.set_status(Status.FAILED)
     else:
         step.set_status(Status.FAILED)
 
 
-@task(name="process", bind=True, ignore_result=True, after_return=process_after_return)
+def run_next_step(archive_id, step_id):
+    """
+    Prepare a step for the given Archive
+    """
+
+    archive = Archive.objects.get(pk=archive_id)
+    step_name = archive.next_steps[0]
+
+    create_step(step_name, archive_id, step_id)
+
+
+def create_step(step_name, archive_id, input_step_id=""):
+    """
+    Given a step name, create a new Step for the given 
+    Archive and spawn Celery tasks for it
+    """
+
+    try:
+        input_step = Step.objects.get(pk=input_step_id)
+    except Exception: 
+        input_step = {
+            'id': '',
+            'output_data': ''
+        }
+
+    step = Step.objects.create(
+        archive=archive_id,
+        name=step_name,
+        input_step=input_step.id,
+        input_data=input_step.output_data,
+        # change to waiting/not run
+        status=Status.IN_PROGRESS,
+    )
+
+    archive = Step.objects.get(pk=archive_id)
+    archive.set_step(step.id)
+
+    # Consider switching this to "eval"?
+    if step_name == "harvest":
+        task = process.delay(step.archive.id, step.input_data, step.id)
+    elif step_name == "validate":
+        task = validate.delay(step.archive.id, step.input_data, step.id)
+    elif step_name == "checksum":
+        task = checksum.delay(next_step.id, path_to_sip)
+
+    step.celery_task_id = task.id
+
+
+# Steps implementations
+@task(name="process", bind=True, ignore_result=True, after_return=finalize)
 def process(self, archive_id, step_id):
+    """
+    Run BagIt-Create to harvest data from upstream, preparing a 
+    Submission Package (SIP)
+    """
     logger.info(f"Starting harvest of archive {archive_id}")
 
     archive = Archive.objects.get(pk=archive_id)
@@ -182,7 +236,7 @@ def checksum(self, step_id, path_to_sip):
                     splited = checksum.split(":")
                     checksum = splited[0] + ":" + "0"
                     checksum_list.append(checksum)
-            except:
+            except Exception:
                 if (
                     file["origin"]["filename"] == "bagitcreate.log"
                     or file["origin"]["filename"] == "sip.json"

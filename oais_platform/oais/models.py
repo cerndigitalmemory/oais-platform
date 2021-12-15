@@ -3,7 +3,9 @@ from django.db import models
 from django.utils import timezone
 from datetime import datetime
 
-# Create your models here.
+from . import pipeline
+
+
 class Steps(models.IntegerChoices):
     SIP_UPLOAD = 1
     HARVEST = 2
@@ -22,7 +24,8 @@ class Status(models.IntegerChoices):
 
 class Archive(models.Model):
     """
-    Represents an archival process of a single addressable record in a upstream source
+    An archival process of a single addressable record in a upstream
+    source
     """
 
     id = models.AutoField(primary_key=True)
@@ -33,30 +36,47 @@ class Archive(models.Model):
         User, on_delete=models.PROTECT, null=True, related_name="archives"
     )
     timestamp = models.DateTimeField(default=timezone.now)
-    current_status = models.CharField(max_length=50)
+    last_step = models.ForeignKey(
+        # Circular reference, use quoted string used to get a lazy reference 
+        "Step", on_delete=models.PROTECT, null=True, related_name="last_step"
+    )
     path_to_sip = models.CharField(max_length=100)
+    next_steps = models.CharField(max_length=50)
 
     class Meta:
         ordering = ["-id"]
 
-    # Put the id of the last_successful step
-    def set_step(self, step_status):
-        self.current_status = step_status
+    def set_step(self, step_id):
+        """
+        Set last_step to the given Step
+        """
+        self.last_step = step_id
+        self.save()
+
+    def update_next_steps(self):
+        """
+        Set next_fields according to the pipeline definition
+        """
+        last_step = Step.objects.get(pk=self.last_step)
+        self.next_steps = pipeline.get_next_steps(last_step.name)
         self.save()
 
 
 class Step(models.Model):
     """
-    Represents a single “processing” step in the archival process.
+    A single “processing” step in the archival process
     """
 
-    # The archival process this step is in
     id = models.AutoField(primary_key=True)
-    archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
+    # The archival process this step is in
+    archive = models.ForeignKey(Archive,
+                                on_delete=models.PROTECT,
+                                related_name="steps")
     name = models.IntegerField(choices=Steps.choices)
     start_date = models.DateTimeField(default=timezone.now)
     finish_date = models.DateTimeField(default=None, null=True)
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
+
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     input_data = models.CharField(max_length=100, null=True, default=None)
     input_step = models.ForeignKey(
