@@ -296,19 +296,22 @@ def archivematica(self, step_id, path_to_sip):
     # This is the directory Archivematica "sees" on the local system
     a3m_rel_directory = AM_REL_DIRECTORY
 
-    #
+    # Get the destination folder of the system
     system_dst = os.path.join(
         a3m_abs_directory,
         ntpath.basename(path_to_sip),
     )
 
+    # Get the destination folder of archivematica
     archivematica_dst = os.path.join(
         a3m_rel_directory,
         ntpath.basename(path_to_sip),
     )
 
+    # Copy the folders and the contents to the archivematica transfer source folder
     shutil.copytree(path_to_sip, system_dst)
 
+    # Get configuration from archivematica from settings
     am = AMClient()
     am.am_url = AM_URL
     am.am_user_name = AM_USERNAME
@@ -318,12 +321,19 @@ def archivematica(self, step_id, path_to_sip):
     am.transfer_name = ntpath.basename(path_to_sip) + "::Archive " + str(archive_id.id)
     am.processing_config = "automated"
 
+    # Create archivematica package
     package = am.create_package()
 
     try:
+        # After 2 seconds check if the folder has been transfered to archivematica
+        time.sleep(2)
+        am_initial_status = am.get_unit_status(package["id"])
+
+        # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(
-            every=5, period=IntervalSchedule.SECONDS
+            every=10, period=IntervalSchedule.SECONDS
         )
+        # Create a periodic task that checks the status of archivematica avery 10 seconds.
         PeriodicTask.objects.create(
             interval=schedule,
             name=f"Archivematica status for step: {current_step.id}",
@@ -332,11 +342,11 @@ def archivematica(self, step_id, path_to_sip):
             expires=timezone.now() + timedelta(minutes=600),
         )
 
-    except:
+    except Exception as e:
         logger.error(
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
         )
         current_step.set_status(Status.FAILED)
-        return {"status": 1}
+        return {"status": 1, "message": e}
 
-    return {"status": 0}
+    return {"status": 0, "message": am_initial_status["uuid"]}
