@@ -144,12 +144,10 @@ def archive_details(self, id):
 def create_next_step(request):
 
     next_step = request.data["next_step"]
-    archive_id = request.data["archive_id"]
-    print(type(next_step), archive_id, Steps.VALIDATION)
+    archive = request.data["archive"]
 
     if int(next_step) in Steps:
-        archive = Archive.objects.get(pk=int(archive_id))
-        create_step(next_step, archive)
+        create_step(next_step, archive["id"], archive["last_step"])
     else:
         raise Exception("Wrong Step input")
 
@@ -174,8 +172,6 @@ def harvest(request, recid, source):
     step = Step.objects.create(
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
     )
-
-    archive.set_step(step.id)
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
@@ -210,8 +206,6 @@ def upload(request):
         archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
     )
 
-    archive.set_step(step.id)
-
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
     try:
@@ -232,7 +226,7 @@ def upload(request):
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
-        archive.set_step(step.id)
+        # archive.set_step(step.id)
 
         # Save path and change status of the archive
         archive.path_to_sip = os.path.join(base_path, sip_dir)
