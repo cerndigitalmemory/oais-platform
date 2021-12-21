@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "oais_platform",
     "oais_platform.oais",
     "corsheaders",
+    "django_celery_beat",
 ]
 
 MIDDLEWARE = [
@@ -196,3 +197,20 @@ sentry_sdk.init(
     # something more human-readable.
     # release="myapp@1.0.0",
 )
+
+# ARCHIVEMATICA SETTINGS
+
+# add the URL archivematica is running, username and password
+AM_URL = "http://127.0.0.1:62080"
+AM_USERNAME = "test"
+AM_API_KEY = "test"
+
+# add the UUID of the transfer source
+AM_TRANSFER_SOURCE = "0f409b5d-7925-4c8d-b476-1932ab51402c"
+
+# This is the absolute directory of the source folder for archivematica
+AM_ABS_DIRECTORY = (
+    "/home/USER/archivematica/hack/submodules/archivematica-sampledata/FOLDER"
+)
+# This is the directory Archivematica "sees" on the local system
+AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/FOLDER"
