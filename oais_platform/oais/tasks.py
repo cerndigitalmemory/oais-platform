@@ -1,19 +1,29 @@
+from logging import log
 from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
+from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
 from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
-
+from amclient import AMClient
+from oais_platform.settings import (
+    AM_ABS_DIRECTORY,
+    AM_REL_DIRECTORY,
+    AM_API_KEY,
+    AM_REL_DIRECTORY,
+    AM_TRANSFER_SOURCE,
+    AM_URL,
+    AM_USERNAME,
+)
+from datetime import datetime, timedelta
 from oais_utils.validate import validate_sip
 
-import json
-import os
-import uuid
+import json, os, uuid, shutil, ntpath, time
 
 logger = get_task_logger(__name__)
 
-# Execution flow 
+# Execution flow
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -24,7 +34,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     status: Celery task status
     retval: returned value from the execution of the celery task
     task_id: Celery task ID
-    args: 
+    args:
     """
 
     # ID of the Archive this Step is in
@@ -40,7 +50,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
     # If the Celery task succeded
     if status == states.SUCCESS:
-        # This is for tasks failing without throwing an exception 
+        # This is for tasks failing without throwing an exception
         # (e.g BIC returning an error)
         if retval["status"] == 0:
 
@@ -74,17 +84,14 @@ def run_next_step(archive_id, step_id):
 
 def create_step(step_name, archive_id, input_step_id=""):
     """
-    Given a step name, create a new Step for the given 
+    Given a step name, create a new Step for the given
     Archive and spawn Celery tasks for it
     """
 
     try:
         input_step = Step.objects.get(pk=input_step_id)
-    except Exception: 
-        input_step = {
-            'id': '',
-            'output_data': ''
-        }
+    except Exception:
+        input_step = {"id": "", "output_data": ""}
 
     step = Step.objects.create(
         archive=archive_id,
@@ -113,7 +120,7 @@ def create_step(step_name, archive_id, input_step_id=""):
 @task(name="process", bind=True, ignore_result=True, after_return=finalize)
 def process(self, archive_id, step_id):
     """
-    Run BagIt-Create to harvest data from upstream, preparing a 
+    Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
     """
     logger.info(f"Starting harvest of archive {archive_id}")
@@ -195,15 +202,27 @@ def checksum_after_return(self, status, retval, task_id, args, kwargs, einfo):
     path_to_sip = args[1]
     step_id = args[0]
     step = Step.objects.get(pk=step_id)
-    logger.info("validate_after")
 
-    print(step.id, retval)
     if status == states.SUCCESS:
         if retval:
+            step.set_finish_date()
             step.set_status(Status.COMPLETED)
 
+            # Next step
+            next_step = Step.objects.create(
+                archive=step.archive,
+                name=Steps.ARCHIVE,
+                input_step=step,
+                input_data=step.output_data,
+                status=Status.WAITING_APPROVAL,
+            )
+
+            archive = step.archive
+            archive.set_step(next_step.id)
+
+            archivematica.delay(next_step.id, path_to_sip)
         else:
-            logger.error(f"Error while checksuming {path_to_sip}")
+            logger.error(f"Error while validating sip {id}")
             step.set_status(Status.FAILED)
     else:
         step.set_status(Status.FAILED)
@@ -254,5 +273,129 @@ def checksum(self, step_id, path_to_sip):
     os.rename(tempfile, new_sip_json)
 
     logger.info(f"Checksum completed!")
+    checksumed = True
 
-    return True
+    return checksumed
+
+
+@task(
+    name="check_am_status",
+    bind=True,
+    ignore_result=True,
+)
+def check_am_status(self, message, step_id):
+
+    step = Step.objects.get(pk=step_id)
+    task_name = f"Archivematica status for step: {step_id}"
+
+    try:
+        # Get the current configuration
+        am = AMClient()
+        am.am_url = AM_URL
+        am.am_user_name = AM_USERNAME
+        am.am_api_key = AM_API_KEY
+        am.transfer_source = AM_TRANSFER_SOURCE
+
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+
+        am_status = am.get_unit_status(message["id"])
+        status = am_status["status"]
+        logger.info(f"Status for {step_id} is: {status}")
+        if status == "COMPLETE":
+            step.set_finish_date()
+            step.set_status(Status.COMPLETED)
+
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+
+        elif status == "PROCESSING":
+            step.set_status(Status.IN_PROGRESS)
+
+        step.set_output_data(am_status)
+
+    except:
+        logger.warning(
+            f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
+        )
+        step.set_status(Status.FAILED)
+
+
+@task(
+    name="archivematica",
+    bind=True,
+    ignore_result=True,
+    # process_after_return=finalize
+)
+def archivematica(self, step_id, path_to_sip):
+    """
+    Gets the current step_id and the path to the sip folder and calls sends the sip to archivematica
+    """
+    logger.info(f"Starting archiving {path_to_sip}")
+
+    current_step = Step.objects.get(pk=step_id)
+    current_step.set_status(Status.IN_PROGRESS)
+
+    archive_id = current_step.archive
+
+    # Set task id
+    current_step.set_task(self.request.id)
+
+    # This is the absolute directory of the archivematica-sampledata folder in the system
+    a3m_abs_directory = AM_ABS_DIRECTORY
+    # This is the directory Archivematica "sees" on the local system
+    a3m_rel_directory = AM_REL_DIRECTORY
+
+    # Get the destination folder of the system
+    system_dst = os.path.join(
+        a3m_abs_directory,
+        ntpath.basename(path_to_sip),
+    )
+
+    # Get the destination folder of archivematica
+    archivematica_dst = os.path.join(
+        a3m_rel_directory,
+        ntpath.basename(path_to_sip),
+    )
+
+    # Copy the folders and the contents to the archivematica transfer source folder
+    shutil.copytree(path_to_sip, system_dst)
+
+    # Get configuration from archivematica from settings
+    am = AMClient()
+    am.am_url = AM_URL
+    am.am_user_name = AM_USERNAME
+    am.am_api_key = AM_API_KEY
+    am.transfer_source = AM_TRANSFER_SOURCE
+    am.transfer_directory = archivematica_dst
+    am.transfer_name = ntpath.basename(path_to_sip) + "::Archive " + str(archive_id.id)
+    am.processing_config = "automated"
+
+    # Create archivematica package
+    package = am.create_package()
+
+    try:
+        # After 2 seconds check if the folder has been transfered to archivematica
+        time.sleep(2)
+        am_initial_status = am.get_unit_status(package["id"])
+
+        # Create the scheduler (sets every 10 seconds)
+        schedule = IntervalSchedule.objects.create(
+            every=10, period=IntervalSchedule.SECONDS
+        )
+        # Create a periodic task that checks the status of archivematica avery 10 seconds.
+        PeriodicTask.objects.create(
+            interval=schedule,
+            name=f"Archivematica status for step: {current_step.id}",
+            task="check_am_status",
+            args=json.dumps([package, current_step.id]),
+            expires=timezone.now() + timedelta(minutes=600),
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+        )
+        current_step.set_status(Status.FAILED)
+        return {"status": 1, "message": e}
+
+    return {"status": 0, "message": am_initial_status["uuid"]}
