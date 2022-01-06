@@ -23,8 +23,8 @@ from oais_platform.oais import views
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
-router.register(r"records", views.RecordViewSet)
 router.register(r"archives", views.ArchiveViewSet)
+router.register(r"steps", views.StepViewSet)
 
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
@@ -57,7 +57,7 @@ urlpatterns = [
                     views.search_by_id,
                     name="search_by_id",
                 ),
-                path("archive/<int:id>/jobs/", views.get_jobs, name="archive_jobs"),
+                path("archive/<int:id>/", views.get_steps, name="get-steps"),
             ]
         ),
     )
