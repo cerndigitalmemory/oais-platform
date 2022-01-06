@@ -1,6 +1,8 @@
+from logging import log
 from bagit_create import main as bic
 from celery import states
 from celery.decorators import task
+from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from oais_platform.oais.models import Archive, Step, Status, Steps

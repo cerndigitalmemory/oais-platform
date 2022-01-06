@@ -109,6 +109,7 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["POST"], url_path="actions/approve")
     def approve(self, request, pk=None):
+        print("Request is: ", request)
         return self.approve_or_reject(
             request, "oais.can_approve_archive", approved=True
         )
@@ -173,6 +174,9 @@ def harvest(request, recid, source):
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
     )
 
+    print(step.id)
+    archive.set_step(step.id)
+
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
     )
@@ -205,6 +209,8 @@ def upload(request):
     step = Step.objects.create(
         archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
     )
+
+    archive.set_step(step.id)
 
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
