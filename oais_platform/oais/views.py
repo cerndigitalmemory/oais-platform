@@ -210,7 +210,7 @@ def upload(request):
         archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
     )
 
-    archive.set_step(step.id)
+    archive.set_step(step)
 
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
@@ -232,7 +232,6 @@ def upload(request):
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
-        # archive.set_step(step.id)
 
         # Save path and change status of the archive
         archive.path_to_sip = os.path.join(base_path, sip_dir)

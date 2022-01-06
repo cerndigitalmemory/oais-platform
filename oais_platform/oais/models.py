@@ -38,11 +38,14 @@ class Archive(models.Model):
     )
     timestamp = models.DateTimeField(default=timezone.now)
     last_step = models.ForeignKey(
-        # Circular reference, use quoted string used to get a lazy reference 
-        "Step", on_delete=models.PROTECT, null=True, related_name="last_step"
+        # Circular reference, use quoted string used to get a lazy reference
+        "Step",
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
-    next_steps = models.CharField(max_length=50)
+    next_steps = models.JSONField(max_length=50)
 
     class Meta:
         ordering = ["-id"]
@@ -58,7 +61,6 @@ class Archive(models.Model):
         """
         Set next_fields according to the pipeline definition
         """
-        print(current_step)
         if current_step:
             self.next_steps = pipeline.get_next_steps(current_step)
         else:
@@ -73,9 +75,7 @@ class Step(models.Model):
 
     id = models.AutoField(primary_key=True)
     # The archival process this step is in
-    archive = models.ForeignKey(Archive,
-                                on_delete=models.PROTECT,
-                                related_name="steps")
+    archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
     name = models.IntegerField(choices=Steps.choices)
     start_date = models.DateTimeField(default=timezone.now)
     finish_date = models.DateTimeField(default=None, null=True)
