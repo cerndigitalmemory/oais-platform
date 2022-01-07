@@ -23,7 +23,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from .tasks import process, validate
+from .tasks import process, validate, create_step
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -91,8 +91,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                 step.status = Status.IN_PROGRESS
             else:
                 step.status = Status.REJECTED
-                # job = step.get_latest_job()
-                # job.set_rejected()
 
             step.save()
 
@@ -100,7 +98,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
             current_step = step
             if current_step.name == Steps.HARVEST:
                 current_step.set_status(Status.NOT_RUN)
-                print("Characteristics: ", step.archive.id, step.id)
                 process.delay(step.archive.id, step.id)
 
             elif current_step.name == Steps.VALIDATION:
@@ -127,13 +124,35 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_steps(request, id):
-    print("Request", request)
     # Getting jobs for the provided archive ID
     archive = Archive.objects.get(pk=id)
     steps = archive.steps.all().order_by("start_date")
 
     serializer = StepSerializer(steps, many=True)
     return Response(serializer.data)
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def archive_details(self, id):
+    archive = Archive.objects.get(pk=id)
+    serializer = ArchiveSerializer(archive, many=False)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_next_step(request):
+
+    next_step = request.data["next_step"]
+    archive = request.data["archive"]
+
+    if int(next_step) in Steps:
+        create_step(next_step, archive["id"], archive["last_step"])
+    else:
+        raise Exception("Wrong Step input")
+
+    return Response()
 
 
 @api_view(["POST"])
@@ -191,7 +210,7 @@ def upload(request):
         archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
     )
 
-    archive.set_step(step.id)
+    archive.set_step(step)
 
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
@@ -213,7 +232,6 @@ def upload(request):
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
-        archive.set_step(step.id)
 
         # Save path and change status of the archive
         archive.path_to_sip = os.path.join(base_path, sip_dir)

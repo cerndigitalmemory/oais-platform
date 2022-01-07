@@ -58,6 +58,16 @@ urlpatterns = [
                     name="search_by_id",
                 ),
                 path("archive/<int:id>/", views.get_steps, name="get-steps"),
+                path(
+                    "archive-details/<int:id>",
+                    views.archive_details,
+                    name="archive_details",
+                ),
+                path(
+                    "archive/next-step",
+                    views.create_next_step,
+                    name="next-step",
+                ),
             ]
         ),
     )
