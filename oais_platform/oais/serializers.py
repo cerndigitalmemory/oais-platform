@@ -53,8 +53,9 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "source",
             "creator",
             "timestamp",
-            "current_status",
+            "last_step",
             "path_to_sip",
+            "next_steps",
         ]
 
     def get_last_step(self, instance):
