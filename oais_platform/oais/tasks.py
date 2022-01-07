@@ -4,8 +4,11 @@ from celery import states
 from celery.decorators import task
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
+from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
+
+
 from amclient import AMClient
 from oais_platform.settings import (
     AM_ABS_DIRECTORY,
@@ -17,9 +20,14 @@ from oais_platform.settings import (
     AM_USERNAME,
 )
 from datetime import datetime, timedelta
+
+
 from oais_utils.validate import validate_sip
 
-import json, os, uuid, shutil, ntpath, time
+import json, ast
+import os, ntpath
+import uuid, time
+import shutil
 
 logger = get_task_logger(__name__)
 
@@ -54,16 +62,16 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
         # (e.g BIC returning an error)
         if retval["status"] == 0:
 
+            # Set last_step to the successful step
+            archive.set_step(step)
+
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
             step.set_output_data(retval)
 
             # Update the next possible steps
-            archive.update_next_steps()
-
-            # Run next step
-            run_next_step(archive.id, step.id)
+            archive.update_next_steps(step.name)
 
         else:
             step.set_status(Status.FAILED)
@@ -82,7 +90,7 @@ def run_next_step(archive_id, step_id):
     create_step(step_name, archive_id, step_id)
 
 
-def create_step(step_name, archive_id, input_step_id=""):
+def create_step(step_name, archive_id, input_step_id=None):
     """
     Given a step name, create a new Step for the given
     Archive and spawn Celery tasks for it
@@ -90,30 +98,33 @@ def create_step(step_name, archive_id, input_step_id=""):
 
     try:
         input_step = Step.objects.get(pk=input_step_id)
+        input_data = input_step.output_data
     except Exception:
-        input_step = {"id": "", "output_data": ""}
+        input_step = None
+        input_data = None
+
+    archive = Archive.objects.get(pk=archive_id)
 
     step = Step.objects.create(
-        archive=archive_id,
+        archive=archive,
         name=step_name,
-        input_step=input_step.id,
-        input_data=input_step.output_data,
+        input_step=input_step,
+        input_data=input_data,
         # change to waiting/not run
         status=Status.IN_PROGRESS,
     )
 
     archive = Step.objects.get(pk=archive_id)
-    archive.set_step(step.id)
 
     # Consider switching this to "eval"?
-    if step_name == "harvest":
-        task = process.delay(step.archive.id, step.input_data, step.id)
-    elif step_name == "validate":
-        task = validate.delay(step.archive.id, step.input_data, step.id)
-    elif step_name == "checksum":
-        task = checksum.delay(next_step.id, path_to_sip)
-
-    step.celery_task_id = task.id
+    if step_name == Steps.HARVEST:
+        task = process.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.VALIDATION:
+        task = validate.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.CHECKSUM:
+        task = checksum.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.ARCHIVE:
+        task = archivematica.delay(step.archive.id, step.id, step.input_data)
 
 
 # Steps implementations
@@ -139,44 +150,11 @@ def process(self, archive_id, step_id):
     return bagit_result
 
 
-def validate_after_return(self, status, retval, task_id, args, kwargs, einfo):
-    # id is the first parameter passed to the task
-    archive_id = args[0]
-    archive = Archive.objects.get(pk=archive_id)
+@task(name="validate", bind=True, ignore_result=True, after_return=finalize)
+def validate(self, archive_id, step_id, input_data):
+    res = ast.literal_eval(input_data)
 
-    path_to_sip = args[1]
-    # Could be failed registry_check/validation or successful validation
-    step_id = args[2]
-    step = Step.objects.get(pk=step_id)
-
-    if status == states.SUCCESS:
-        if retval:
-            step.set_status(Status.COMPLETED)
-
-            # Next step
-            next_step = Step.objects.create(
-                archive=step.archive,
-                name=Steps.CHECKSUM,
-                input_step=step,
-                input_data=step.output_data,
-                status=Status.WAITING_APPROVAL,
-            )
-
-            archive = step.archive
-            archive.set_step(next_step.id)
-
-            checksum.delay(next_step.id, path_to_sip)
-        else:
-            logger.error(f"Error while validating sip {id}")
-            step.set_status(Status.FAILED)
-    else:
-        step.set_status(Status.FAILED)
-
-
-@task(
-    name="validate", bind=True, ignore_result=True, after_return=validate_after_return
-)
-def validate(self, archive_id, path_to_sip, step_id):
+    path_to_sip = res["foldername"]
     logger.info(f"Starting SIP validation {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
@@ -189,49 +167,19 @@ def validate(self, archive_id, path_to_sip, step_id):
     sip_exists = os.path.exists(path_to_sip)
 
     if not sip_exists:
-        return False
+        return {"status": 1}
 
     # Runs validate_sip from oais_utils
     valid = validate_sip(path_to_sip)
 
-    return valid
+    return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
-def checksum_after_return(self, status, retval, task_id, args, kwargs, einfo):
+@task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
+def checksum(self, archive_id, step_id, input_data):
+    res = ast.literal_eval(input_data)
 
-    path_to_sip = args[1]
-    step_id = args[0]
-    step = Step.objects.get(pk=step_id)
-
-    if status == states.SUCCESS:
-        if retval:
-            step.set_finish_date()
-            step.set_status(Status.COMPLETED)
-
-            # Next step
-            next_step = Step.objects.create(
-                archive=step.archive,
-                name=Steps.ARCHIVE,
-                input_step=step,
-                input_data=step.output_data,
-                status=Status.WAITING_APPROVAL,
-            )
-
-            archive = step.archive
-            archive.set_step(next_step.id)
-
-            archivematica.delay(next_step.id, path_to_sip)
-        else:
-            logger.error(f"Error while validating sip {id}")
-            step.set_status(Status.FAILED)
-    else:
-        step.set_status(Status.FAILED)
-
-
-@task(
-    name="checksum", bind=True, ignore_result=True, after_return=checksum_after_return
-)
-def checksum(self, step_id, path_to_sip):
+    path_to_sip = res["foldername"]
     logger.info(f"Starting checksum validation {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
@@ -242,7 +190,7 @@ def checksum(self, step_id, path_to_sip):
 
     sip_exists = os.path.exists(path_to_sip)
     if not sip_exists:
-        return False
+        return {"status": 1}
 
     sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
 
@@ -262,7 +210,7 @@ def checksum(self, step_id, path_to_sip):
                 ):
                     pass
                 else:
-                    return False
+                    return {"status": 1}
 
     tempfile = os.path.join(os.path.dirname(path_to_sip), str(uuid.uuid4()))
     with open(tempfile, "w") as f:
@@ -273,51 +221,8 @@ def checksum(self, step_id, path_to_sip):
     os.rename(tempfile, new_sip_json)
 
     logger.info(f"Checksum completed!")
-    checksumed = True
 
-    return checksumed
-
-
-@task(
-    name="check_am_status",
-    bind=True,
-    ignore_result=True,
-)
-def check_am_status(self, message, step_id):
-
-    step = Step.objects.get(pk=step_id)
-    task_name = f"Archivematica status for step: {step_id}"
-
-    try:
-        # Get the current configuration
-        am = AMClient()
-        am.am_url = AM_URL
-        am.am_user_name = AM_USERNAME
-        am.am_api_key = AM_API_KEY
-        am.transfer_source = AM_TRANSFER_SOURCE
-
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-
-        am_status = am.get_unit_status(message["id"])
-        status = am_status["status"]
-        logger.info(f"Status for {step_id} is: {status}")
-        if status == "COMPLETE":
-            step.set_finish_date()
-            step.set_status(Status.COMPLETED)
-
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-
-        elif status == "PROCESSING":
-            step.set_status(Status.IN_PROGRESS)
-
-        step.set_output_data(am_status)
-
-    except:
-        logger.warning(
-            f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
-        )
-        step.set_status(Status.FAILED)
+    return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
 @task(
@@ -326,10 +231,12 @@ def check_am_status(self, message, step_id):
     ignore_result=True,
     # process_after_return=finalize
 )
-def archivematica(self, step_id, path_to_sip):
+def archivematica(self, archive_id, step_id, input_data):
     """
     Gets the current step_id and the path to the sip folder and calls sends the sip to archivematica
     """
+    res = ast.literal_eval(input_data)
+    path_to_sip = res["foldername"]
     logger.info(f"Starting archiving {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
