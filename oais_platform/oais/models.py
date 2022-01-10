@@ -45,7 +45,7 @@ class Archive(models.Model):
         related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
-    next_steps = models.JSONField(max_length=50)
+    next_steps = models.JSONField(max_length=50, default=list)
 
     class Meta:
         ordering = ["-id"]

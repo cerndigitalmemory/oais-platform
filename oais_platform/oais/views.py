@@ -166,16 +166,13 @@ def harvest(request, recid, source):
     archive, _ = Archive.objects.get_or_create(
         recid=recid,
         source=source,
-        defaults={"source_url": url},
+        source_url=url,
         creator=request.user,
     )
 
     step = Step.objects.create(
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
     )
-
-    print(step.id)
-    archive.set_step(step.id)
 
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
