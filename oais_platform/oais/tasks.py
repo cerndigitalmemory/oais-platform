@@ -1,7 +1,6 @@
 from logging import log
 from bagit_create import main as bic
-from celery import states
-from celery.decorators import task
+from celery import states, shared_task
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
@@ -128,7 +127,7 @@ def create_step(step_name, archive_id, input_step_id=None):
 
 
 # Steps implementations
-@task(name="process", bind=True, ignore_result=True, after_return=finalize)
+@shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
 def process(self, archive_id, step_id):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
@@ -150,7 +149,7 @@ def process(self, archive_id, step_id):
     return bagit_result
 
 
-@task(name="validate", bind=True, ignore_result=True, after_return=finalize)
+@shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
 def validate(self, archive_id, step_id, input_data):
     res = ast.literal_eval(input_data)
 
@@ -175,7 +174,7 @@ def validate(self, archive_id, step_id, input_data):
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
-@task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
+@shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
 def checksum(self, archive_id, step_id, input_data):
     res = ast.literal_eval(input_data)
 
@@ -225,7 +224,7 @@ def checksum(self, archive_id, step_id, input_data):
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
-@task(
+@shared_task(
     name="archivematica",
     bind=True,
     ignore_result=True,
