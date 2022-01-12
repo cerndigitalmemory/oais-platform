@@ -1,5 +1,6 @@
 FROM python:3.7-alpine
 
+# Ensure that the python output is sent straight to terminal
 ENV PYTHONUNBUFFERED 1
 
 # Django configuration
@@ -33,13 +34,24 @@ RUN apk add --update \
   tcl-dev \
   tiff-dev \
   tk-dev \
-  zlib-dev
+  zlib-dev \
+  # to allow pip install dependencies from git repositories
+  git 
 
 RUN apk add libffi-dev
 COPY ./requirements.txt /requirements.txt
+
+# Postgreslq client
 RUN apk add --update --no-cache postgresql-client jpeg-dev 
-RUN apk add --update --no-cache --virtual .tmp-build-deps gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev
+# Build dependencies
+RUN apk add --update --no-cache --virtual .tmp-build-deps \
+  gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev \
+  # gssapi header to compile pykerberos
+  krb5-dev
+
+# Install python packages
 RUN pip install -r /requirements.txt
+# Clean up temporary build dependencies
 RUN apk del .tmp-build-deps
 
 RUN mkdir /oais_platform

@@ -15,11 +15,26 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Point to the postgres service name in this compose file
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASS=overwritethisinprod!
+    depends_on:
+      - db
+
     env_file:
       - ./.env.dev
 
+  db:
+    image: postgres:10-alpine
+    environment:
+      - POSTGRES_DB=oais_platform
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=overwritethisinprod!
+
   redis:
     image: redis:alpine
+  
   celery:
     restart: always
     build:
