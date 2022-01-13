@@ -1,9 +1,9 @@
 from logging import log
+import logging
 from bagit_create import main as bic
 from celery import states, shared_task
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
-from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
 
@@ -264,7 +264,10 @@ def archivematica(self, archive_id, step_id, input_data):
     )
 
     # Copy the folders and the contents to the archivematica transfer source folder
-    shutil.copytree(path_to_sip, system_dst)
+    try:
+        shutil.copytree(path_to_sip, system_dst)
+    except FileExistsError:
+        logging.warning("File exists.")
 
     # Get configuration from archivematica from settings
     am = AMClient()
@@ -277,6 +280,9 @@ def archivematica(self, archive_id, step_id, input_data):
     am.processing_config = "automated"
 
     # Create archivematica package
+    logging.info(
+        f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
+    )
     package = am.create_package()
 
     try:
@@ -305,3 +311,45 @@ def archivematica(self, archive_id, step_id, input_data):
         return {"status": 1, "message": e}
 
     return {"status": 0, "message": am_initial_status["uuid"]}
+
+
+@shared_task(
+    name="check_am_status",
+    bind=True,
+    ignore_result=True,
+)
+def check_am_status(self, message, step_id):
+
+    step = Step.objects.get(pk=step_id)
+    task_name = f"Archivematica status for step: {step_id}"
+
+    try:
+        # Get the current configuration
+        am = AMClient()
+        am.am_url = AM_URL
+        am.am_user_name = AM_USERNAME
+        am.am_api_key = AM_API_KEY
+        am.transfer_source = AM_TRANSFER_SOURCE
+
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+
+        am_status = am.get_unit_status(message["id"])
+        status = am_status["status"]
+        logger.info(f"Status for {step_id} is: {status}")
+        if status == "COMPLETE":
+            step.set_finish_date()
+            step.set_status(Status.COMPLETED)
+
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+
+        elif status == "PROCESSING":
+            step.set_status(Status.IN_PROGRESS)
+
+        step.set_output_data(am_status)
+
+    except:
+        logger.warning(
+            f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
+        )
+        step.set_status(Status.FAILED)
