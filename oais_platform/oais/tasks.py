@@ -67,7 +67,8 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-            step.set_output_data(retval)
+            if not step.name == 5:
+                step.set_output_data(retval)
 
             # Update the next possible steps
             archive.update_next_steps(step.name)
@@ -228,7 +229,6 @@ def checksum(self, archive_id, step_id, input_data):
     name="archivematica",
     bind=True,
     ignore_result=True,
-    # process_after_return=finalize
 )
 def archivematica(self, archive_id, step_id, input_data):
     """
@@ -283,23 +283,24 @@ def archivematica(self, archive_id, step_id, input_data):
     logging.info(
         f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
     )
-    package = am.create_package()
 
     try:
         # After 2 seconds check if the folder has been transfered to archivematica
-        time.sleep(2)
-        am_initial_status = am.get_unit_status(package["id"])
+        package = am.create_package()
+
+        step = Step.objects.get(pk=step_id)
+        step.set_status(Status.NOT_RUN)
 
         # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(
-            every=10, period=IntervalSchedule.SECONDS
+            every=5, period=IntervalSchedule.SECONDS
         )
         # Create a periodic task that checks the status of archivematica avery 10 seconds.
         PeriodicTask.objects.create(
             interval=schedule,
             name=f"Archivematica status for step: {current_step.id}",
             task="check_am_status",
-            args=json.dumps([package, current_step.id]),
+            args=json.dumps([package, current_step.id, archive_id.id]),
             expires=timezone.now() + timedelta(minutes=600),
         )
 
@@ -310,7 +311,7 @@ def archivematica(self, archive_id, step_id, input_data):
         current_step.set_status(Status.FAILED)
         return {"status": 1, "message": e}
 
-    return {"status": 0, "message": am_initial_status["uuid"]}
+    return {"status": 0, "message": "Uploaded to Archivematica"}
 
 
 @shared_task(
@@ -318,27 +319,49 @@ def archivematica(self, archive_id, step_id, input_data):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id):
+def check_am_status(self, message, step_id, archive_id):
 
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
 
-    try:
-        # Get the current configuration
-        am = AMClient()
-        am.am_url = AM_URL
-        am.am_user_name = AM_USERNAME
-        am.am_api_key = AM_API_KEY
-        am.transfer_source = AM_TRANSFER_SOURCE
+    # Get the current configuration
+    am = AMClient()
+    am.am_url = AM_URL
+    am.am_user_name = AM_USERNAME
+    am.am_api_key = AM_API_KEY
+    am.transfer_source = AM_TRANSFER_SOURCE
 
+    try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
 
-        am_status = am.get_unit_status(message["id"])
+        try:
+            am_status = am.get_unit_status(message["id"])
+        except:
+            if step.status == Status.NOT_RUN:
+                pass
+
         status = am_status["status"]
+        microservice = am_status["microservice"]
         logger.info(f"Status for {step_id} is: {status}")
         if status == "COMPLETE":
             step.set_finish_date()
             step.set_status(Status.COMPLETED)
+
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+
+            finalize(
+                self=self,
+                status=states.SUCCESS,
+                retval={"status": 0},
+                task_id=None,
+                args=[archive_id, step_id],
+                kwargs=None,
+                einfo=None,
+            )
+
+        elif status == "FAILED" and microservice == "Move to the failed directory":
+            step.set_status(Status.FAILED)
 
             periodic_task = PeriodicTask.objects.get(name=task_name)
             periodic_task.delete()
@@ -348,8 +371,9 @@ def check_am_status(self, message, step_id):
 
         step.set_output_data(am_status)
 
-    except:
+    except Exception as e:
         logger.warning(
             f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
         )
+        logger.warning(e)
         step.set_status(Status.FAILED)
