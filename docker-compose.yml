@@ -3,6 +3,7 @@ version: '3'
 services:
 
   db:
+    container_name: oais_psql
     image: postgres:12-alpine
     environment:
       - POSTGRES_DB=oais_platform
@@ -11,12 +12,10 @@ services:
       - PGDATA=/data/postgres
     volumes:
        - postgres:/data/postgres
-    ports:
-      - "5432:5432"
     restart: unless-stopped
   
   pgadmin:
-    container_name: pgadmin_container
+    container_name: oais_pgadmin
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
@@ -30,7 +29,8 @@ services:
     restart: unless-stopped
 
   # Django app
-  oais_platform:
+  django:
+    container_name: oais_django
     # Current path contains the Dockerfile for the Django app
     build:
       context: .
@@ -38,7 +38,9 @@ services:
       - "8000:8000"
     volumes:
       - .:/oais_platform
-    command: >
+    command: 
+      # Comment
+      >
       sh -c "./wait-for-psql.sh db &&
              python3 manage.py migrate &&
              python3 manage.py runserver 0.0.0.0:8000"
@@ -55,9 +57,11 @@ services:
 
   # Redis
   redis:
+    container_name: oais_redis
     image: redis:alpine
     
   celery:
+    container_name: oais_celery
     restart: always
     build:
       context: .
@@ -69,7 +73,7 @@ services:
     depends_on:
       - db
       - redis
-      - oais_platform
+      - django
     environment:
       # Point to the redis service
       - CELERY_BROKER_URL=redis://redis:6379/0
