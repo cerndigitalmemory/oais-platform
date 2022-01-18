@@ -66,6 +66,8 @@ class Archive(models.Model):
         else:
             self.next_steps = pipeline.get_next_steps(self.last_step.name)
         self.save()
+        
+        return self.next_steps
 
 
 class Step(models.Model):

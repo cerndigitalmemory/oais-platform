@@ -45,12 +45,12 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     """
 
     # ID of the Archive this Step is in
-    id = args[0]
-    archive = Archive.objects.get(pk=id)
+    archive_id = args[0]
+    archive = Archive.objects.get(pk=archive_id)
 
     # ID of the Step this task was spawned for
-    id = args[1]
-    step = Step.objects.get(pk=id)
+    step_id = args[1]
+    step = Step.objects.get(pk=step_id)
 
     # Should be removed?
     step.set_task(self.request.id)
@@ -70,8 +70,10 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             step.set_output_data(retval)
 
             # Update the next possible steps
-            archive.update_next_steps(step.name)
+            next_steps = archive.update_next_steps(step.name)
 
+            if len(next_steps) == 1:
+                create_step(next_steps[0], archive_id, step_id)
         else:
             step.set_status(Status.FAILED)
     else:
