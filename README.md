@@ -25,6 +25,10 @@ A docker-compose setup is provided in this repository, bringing up the following
 | oais_psql    | Postgresql | Database                        |                           |
 | oais_pgadmin | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
 
+Run `docker-compose up` to bring up the full stack. The django app will auto reload on file modifications.
+
+To also serve the frontend application, copy a build of [oais-web](https://gitlab.cern.ch/digitalmemory/oais-web) in the "static" folder and uncomment the last lines of `oais_platform/urls.py`.
+
 See [troubleshooting](docs/troubleshooting.md) for more instructions on how to see logs and run commands in the single containers.
 
 ### Django

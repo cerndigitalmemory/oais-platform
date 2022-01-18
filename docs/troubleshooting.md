@@ -32,3 +32,5 @@ Containers overview:
   `docker exec it <CONTAINER_NAME> sh`
 - Browse database using PGAdmin
   Open [localhost:5050](http://localhost:5050) and create a new connection, with address `db` and the password provided in the docker-compose.yml (by default `overwritethisinprod!`).
+- Rebuild images (e.g. when changing any of the Dockerfiles)
+  `docker-compose build`
