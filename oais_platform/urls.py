@@ -14,6 +14,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import include, path
+from django.contrib import admin
 
 from rest_framework import routers
 from rest_framework.authtoken import views as authtoken_views
@@ -29,6 +30,7 @@ router.register(r"steps", views.StepViewSet)
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
+    path("admin/", admin.site.urls),
     path(
         # Set base path
         r"api/",
@@ -47,9 +49,7 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path(
-                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
-                ),
+                path("harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -70,7 +70,7 @@ urlpatterns = [
                 ),
             ]
         ),
-    )
+    ),
 ]
 
 # Uncomment the following lines to serve the contents of the "static" folder in
