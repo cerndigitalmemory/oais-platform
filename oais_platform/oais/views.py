@@ -23,6 +23,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
+import json, time
+
 from .tasks import process, validate, create_step
 
 
@@ -280,6 +282,132 @@ def search_by_id(request, source, recid):
         raise BadRequest("Invalid source")
 
     return Response(result)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def search_query(request):
+    """
+    Gets the API request from the ReactSearchkit component and returns
+    the results based on the elasticsearch response
+    """
+    # Starts time calculation of the operation
+    start_time = time.time()
+
+    """
+    Creates a list of dictionaries for the BucketAggregation component
+
+    More info:
+    https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
+    """
+    sources = ["indico", "cds", "inveniordm", "zenodo", "cod", "cds-test", "local"]
+    buckets = list()
+    for source in sources:
+        buckets.append({"key": source, "doc_count": 0})
+
+    """
+    Gets the API request data based and parses it according to
+    the elasticsearch API request
+
+    {"query":{
+        "query_string":{
+            "query":"example_query"
+            }
+        },
+        "size":10,
+        "from":0,
+        "aggs":{
+            "tags_agg":{
+                "terms":{
+                    "field":"tags"
+    }}}}}
+    """
+    body = request.data
+    if "query" not in body:
+        raise BadRequest("Missing parameter query")
+    query = body["query"]
+
+    if "query_string" not in query:
+        raise BadRequest("Missing parameter query_string")
+    query_string = query["query_string"]
+
+    if "query" not in query_string:
+        raise BadRequest("Missing parameter search_query")
+    search_query = query_string["query"]
+
+    try:
+        # Make the search at the database
+        results = Archive.objects.filter(recid__contains=search_query)
+
+        serializer = ArchiveSerializer(results, many=True)
+    except:
+        raise BadRequest("Error while performing search")
+
+    try:
+        """
+        Create response similar to Elasticsearch response:
+
+        {
+            "took": TIME ELAPSED,
+            "timed_out" : false,
+            "hits" : {
+                "total":{
+                    "value" : NUMBER OF RESULTS
+                    "relation" : "eq"
+                },
+                "max_score" : ELASTIC SEARCH MAX SCORE GIVEN,
+                "hits" : [ARCHIVE LIST OF RESULTS]
+            }
+            "aggregations":{
+                "first_agg": {
+                    "doc_count_error_upper_bound":0,
+                    "sum_other_doc_count":0,
+                    "buckets": [BUCKET LIST]
+                }
+
+            }
+        }
+        """
+        response = dict()
+        hits = dict()
+        aggDetails = dict()
+
+        response["took"] = time.time() - start_time
+        response["timeout"] = False
+        hits["total"] = {"value": len(results), "relation": "eq"}
+        hits["max_score"] = 5
+        result_list = []
+        for i in range(len(results)):
+            hitsDetails = dict()
+            hitsDetails["_index"] = "random"
+            hitsDetails["_type"] = "doc"
+            hitsDetails["_id"] = "CustomID"
+            hitsDetails["_score"] = 5
+            result = serializer.data[i]
+            hitsDetails["_source"] = result
+            if result["source"] in sources:
+                current_src = result["source"]
+                for source in buckets:
+                    if source["key"] == current_src:
+                        source["doc_count"] = source["doc_count"] + 1
+
+            result_list.append(hitsDetails)
+
+        # Here we need to parse filters based on request
+        aggDetails["source_agg"] = {
+            "doc_count_error_upper_bound": 0,
+            "sum_other_doc_count": 0,
+            "buckets": buckets,
+        }
+
+        hits["hits"] = result_list
+        response["aggregations"] = aggDetails
+        response["hits"] = hits
+
+    except:
+        raise BadRequest("Error while creating response")
+
+    return Response(response)
 
 
 @api_view()
