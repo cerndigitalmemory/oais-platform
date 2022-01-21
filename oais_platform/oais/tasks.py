@@ -1,18 +1,9 @@
 from logging import log
-<<<<<<< HEAD
 import logging
 from bagit_create import main as bic
 from celery import states, shared_task
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 from celery.utils.log import get_task_logger
-=======
-from bagit_create import main as bic
-from celery import states
-from celery.decorators import task
-from django_celery_beat.models import PeriodicTask, IntervalSchedule
-from celery.utils.log import get_task_logger
-from django_celery_beat.models import PeriodicTask, IntervalSchedule
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 from oais_platform.oais.models import Archive, Step, Status, Steps
 from django.utils import timezone
 
@@ -40,7 +31,6 @@ import shutil
 logger = get_task_logger(__name__)
 
 # Execution flow
-<<<<<<< HEAD
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -61,28 +51,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     # ID of the Step this task was spawned for
     step_id = args[1]
     step = Step.objects.get(pk=step_id)
-=======
-
-
-def finalize(self, status, retval, task_id, args, kwargs, einfo):
-    """
-    `Callback` for Celery tasks, handling result and updating
-    the Archive
-
-    status: Celery task status
-    retval: returned value from the execution of the celery task
-    task_id: Celery task ID
-    args:
-    """
-
-    # ID of the Archive this Step is in
-    id = args[0]
-    archive = Archive.objects.get(pk=id)
-
-    # ID of the Step this task was spawned for
-    id = args[1]
-    step = Step.objects.get(pk=id)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 
     # Should be removed?
     step.set_task(self.request.id)
@@ -99,18 +67,11 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-<<<<<<< HEAD
             if not step.name == 5:
                 step.set_output_data(retval)
 
             # Update the next possible steps
             next_steps = archive.update_next_steps(step.name)
-=======
-            step.set_output_data(retval)
-
-            # Update the next possible steps
-            archive.update_next_steps(step.name)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 
             if len(next_steps) == 1:
                 create_step(next_steps[0], archive_id, step_id)
@@ -127,7 +88,6 @@ def run_next_step(archive_id, step_id):
 
     archive = Archive.objects.get(pk=archive_id)
     step_name = archive.next_steps[0]
-<<<<<<< HEAD
 
     create_step(step_name, archive_id, step_id)
 
@@ -147,27 +107,6 @@ def create_step(step_name, archive_id, input_step_id=None):
 
     archive = Archive.objects.get(pk=archive_id)
 
-=======
-
-    create_step(step_name, archive_id, step_id)
-
-
-def create_step(step_name, archive_id, input_step_id=None):
-    """
-    Given a step name, create a new Step for the given
-    Archive and spawn Celery tasks for it
-    """
-
-    try:
-        input_step = Step.objects.get(pk=input_step_id)
-        input_data = input_step.output_data
-    except Exception:
-        input_step = None
-        input_data = None
-
-    archive = Archive.objects.get(pk=archive_id)
-
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
     step = Step.objects.create(
         archive=archive,
         name=step_name,
@@ -191,11 +130,7 @@ def create_step(step_name, archive_id, input_step_id=None):
 
 
 # Steps implementations
-<<<<<<< HEAD
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
-=======
-@task(name="process", bind=True, ignore_result=True, after_return=finalize)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 def process(self, archive_id, step_id):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
@@ -217,11 +152,7 @@ def process(self, archive_id, step_id):
     return bagit_result
 
 
-<<<<<<< HEAD
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
-=======
-@task(name="validate", bind=True, ignore_result=True, after_return=finalize)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 def validate(self, archive_id, step_id, input_data):
     res = ast.literal_eval(input_data)
 
@@ -246,11 +177,7 @@ def validate(self, archive_id, step_id, input_data):
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
-<<<<<<< HEAD
 @shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
-=======
-@task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 def checksum(self, archive_id, step_id, input_data):
     res = ast.literal_eval(input_data)
 
@@ -300,18 +227,10 @@ def checksum(self, archive_id, step_id, input_data):
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
 
-<<<<<<< HEAD
 @shared_task(
     name="archivematica",
     bind=True,
     ignore_result=True,
-=======
-@task(
-    name="archivematica",
-    bind=True,
-    ignore_result=True,
-    # process_after_return=finalize
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 )
 def archivematica(self, archive_id, step_id, input_data):
     """
@@ -347,14 +266,10 @@ def archivematica(self, archive_id, step_id, input_data):
     )
 
     # Copy the folders and the contents to the archivematica transfer source folder
-<<<<<<< HEAD
     try:
         shutil.copytree(path_to_sip, system_dst)
     except FileExistsError:
         logging.warning("File exists.")
-=======
-    shutil.copytree(path_to_sip, system_dst)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 
     # Get configuration from archivematica from settings
     am = AMClient()
@@ -367,7 +282,6 @@ def archivematica(self, archive_id, step_id, input_data):
     am.processing_config = "automated"
 
     # Create archivematica package
-<<<<<<< HEAD
     logging.info(
         f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
     )
@@ -382,25 +296,12 @@ def archivematica(self, archive_id, step_id, input_data):
         # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(
             every=5, period=IntervalSchedule.SECONDS
-=======
-    package = am.create_package()
-
-    try:
-        # After 2 seconds check if the folder has been transfered to archivematica
-        time.sleep(2)
-        am_initial_status = am.get_unit_status(package["id"])
-
-        # Create the scheduler (sets every 10 seconds)
-        schedule = IntervalSchedule.objects.create(
-            every=10, period=IntervalSchedule.SECONDS
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
         )
         # Create a periodic task that checks the status of archivematica avery 10 seconds.
         PeriodicTask.objects.create(
             interval=schedule,
             name=f"Archivematica status for step: {current_step.id}",
             task="check_am_status",
-<<<<<<< HEAD
             args=json.dumps([package, current_step.id, archive_id.id]),
             expires=timezone.now() + timedelta(minutes=600),
         )
@@ -478,17 +379,3 @@ def check_am_status(self, message, step_id, archive_id):
         )
         logger.warning(e)
         step.set_status(Status.FAILED)
-=======
-            args=json.dumps([package, current_step.id]),
-            expires=timezone.now() + timedelta(minutes=600),
-        )
-
-    except Exception as e:
-        logger.error(
-            f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
-        )
-        current_step.set_status(Status.FAILED)
-        return {"status": 1, "message": e}
-
-    return {"status": 0, "message": am_initial_status["uuid"]}
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
