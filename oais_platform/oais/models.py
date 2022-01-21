@@ -84,7 +84,11 @@ class Step(models.Model):
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
 
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
+<<<<<<< HEAD
     input_data = models.TextField(max_length=512, null=True, default=None)
+=======
+    input_data = models.CharField(max_length=100, null=True, default=None)
+>>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
     input_step = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -92,7 +96,11 @@ class Step(models.Model):
         null=True,
         blank=True,
     )
+<<<<<<< HEAD
     output_data = models.TextField(max_length=512, null=True, default=None)
+=======
+    output_data = models.CharField(max_length=100, null=True, default=None)
+>>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 
     class Meta:
         permissions = [

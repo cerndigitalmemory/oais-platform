@@ -57,6 +57,10 @@ urlpatterns = [
                     views.search_by_id,
                     name="search_by_id",
                 ),
+<<<<<<< HEAD
+=======
+                path("search-query/", views.search_query, name="search_query"),
+>>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
                 path("archive/<int:id>/", views.get_steps, name="get-steps"),
                 path(
                     "archive-details/<int:id>",
