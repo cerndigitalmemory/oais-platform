@@ -57,6 +57,7 @@ urlpatterns = [
                     views.search_by_id,
                     name="search_by_id",
                 ),
+                path("search-query/", views.search_query, name="search_query"),
                 path("archive/<int:id>/", views.get_steps, name="get-steps"),
                 path(
                     "archive-details/<int:id>",
