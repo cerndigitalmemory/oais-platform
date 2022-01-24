@@ -49,7 +49,9 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path("harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"),
+                path(
+                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
+                ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -57,10 +59,7 @@ urlpatterns = [
                     views.search_by_id,
                     name="search_by_id",
                 ),
-<<<<<<< HEAD
-=======
                 path("search-query/", views.search_query, name="search_query"),
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
                 path("archive/<int:id>/", views.get_steps, name="get-steps"),
                 path(
                     "archive-details/<int:id>",

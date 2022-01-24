@@ -23,11 +23,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-<<<<<<< HEAD
-=======
 import json, time
 
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 from .tasks import process, validate, create_step
 
 
@@ -287,8 +284,6 @@ def search_by_id(request, source, recid):
     return Response(result)
 
 
-<<<<<<< HEAD
-=======
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def search_query(request):
@@ -415,7 +410,6 @@ def search_query(request):
     return Response(response)
 
 
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def me(request):
