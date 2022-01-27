@@ -1,9 +1,10 @@
+import configparser
 import json
+import os
+
 import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
-
-import configparser, os
 
 
 class ConfigFileUnavailable(Exception):
@@ -51,7 +52,7 @@ class Indico(Source):
             req = requests.get(
                 self.baseURL + "/search/api/search?q=" + query + "&type=event"
             )
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
         data = json.loads(req.text)
         total_num_hits = int(data["total"])
@@ -60,18 +61,9 @@ class Indico(Source):
 
         try:
             req = requests.get(
-                self.baseURL
-                + "/export/event/search/"
-                + query
-                + ".json?"
-                + "&limit="
-                + str(size)
-                + "&page="
-                + str(page)
-                + "&offset="
-                + str((int(page) - 1) * (int(size)))
+                f"{self.baseURL}/export/event/search/{query}.json?&limit={str(size)}&page={str(page)}&offset={str((int(page) - 1) * (int(size)))}"
             )
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
@@ -98,7 +90,7 @@ class Indico(Source):
 
         try:
             req = requests.get(self.get_record_by_id(recid))
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform searching", recid)
 
         if req.ok:

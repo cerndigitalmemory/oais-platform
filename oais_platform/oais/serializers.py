@@ -1,8 +1,9 @@
 from re import S
+
 from django.contrib.auth.models import Group, User
-from rest_framework.fields import IntegerField
 from oais_platform.oais.models import Archive, Step
 from rest_framework import serializers
+from rest_framework.fields import IntegerField
 
 
 class UserSerializer(serializers.ModelSerializer):

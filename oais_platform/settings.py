@@ -12,6 +12,12 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 from os import environ
 from pathlib import Path
 
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Import local settings
+import oais_platform.local_settings
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -177,11 +183,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ORIGIN_ALLOW_ALL = True
 
-# Import local settings
-from oais_platform.local_settings import *
-
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
 
 # Sentry
 sentry_sdk.init(

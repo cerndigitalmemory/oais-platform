@@ -1,7 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
-from datetime import datetime
 
 from . import pipeline
 
@@ -66,7 +65,7 @@ class Archive(models.Model):
         else:
             self.next_steps = pipeline.get_next_steps(self.last_step.name)
         self.save()
-        
+
         return self.next_steps
 
 

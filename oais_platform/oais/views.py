@@ -1,5 +1,8 @@
 import logging
-import os, zipfile, time
+import os
+import time
+import zipfile
+
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
@@ -7,13 +10,13 @@ from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Step, Status, Steps
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.permissions import filter_archives_by_user_perms
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     GroupSerializer,
-    StepSerializer,
     LoginSerializer,
+    StepSerializer,
     UserSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
@@ -23,7 +26,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from .tasks import process, validate, create_step
+from .tasks import create_step, process, validate
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -240,7 +243,7 @@ def upload(request):
             input_step=step.id,
             status=Status.WAITING_APPROVAL,
         )
-    except Exception as e:
+    except Exception:
         step.set_status(Status.FAILED)
 
     return Response({"msg": "SIP uploading started, see Archives page"})
@@ -338,7 +341,7 @@ def search_query(request):
         results = Archive.objects.filter(recid__contains=search_query)
 
         serializer = ArchiveSerializer(results, many=True)
-    except:
+    except Exception:
         raise BadRequest("Error while performing search")
 
     try:
@@ -402,7 +405,7 @@ def search_query(request):
         response["aggregations"] = aggDetails
         response["hits"] = hits
 
-    except:
+    except Exception:
         raise BadRequest("Error while creating response")
 
     return Response(response)

@@ -1,12 +1,11 @@
 import io
+import re
 from xml.sax import SAXParseException
 
 import pymarc
 import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
-
-import re
 
 
 class CDS(Source):
@@ -30,7 +29,7 @@ class CDS(Source):
                     "jrec": int(size) * (int(page) - 1) + 1,
                 },
             )
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
@@ -59,7 +58,7 @@ class CDS(Source):
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
             req = requests.get(self.get_record_url(recid), params={"of": "xm"})
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:

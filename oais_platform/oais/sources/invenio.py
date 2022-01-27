@@ -1,9 +1,10 @@
+import configparser
 import json
+import os
+
 import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
-
-import configparser, os
 
 
 def get_dict_value(dct, keys):
@@ -46,15 +47,9 @@ class Invenio(Source):
     def search(self, query, page=1, size=20):
         try:
             req = requests.get(
-                self.baseURL
-                + "/records?q="
-                + query
-                + "&size="
-                + str(size)
-                + "&page="
-                + str(page)
+                f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
             )
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
@@ -106,7 +101,7 @@ class Invenio(Source):
 
         try:
             req = requests.get(self.get_record_url(recid))
-        except:
+        except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:

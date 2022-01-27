@@ -1,32 +1,30 @@
-from logging import log
+import ast
+import json
 import logging
-from bagit_create import main as bic
-from celery import states, shared_task
-from django_celery_beat.models import PeriodicTask, IntervalSchedule
-from celery.utils.log import get_task_logger
-from oais_platform.oais.models import Archive, Step, Status, Steps
-from django.utils import timezone
-
+import ntpath
+import os
+import shutil
+import time
+import uuid
+from datetime import datetime, timedelta
+from logging import log
 
 from amclient import AMClient
+from bagit_create import main as bic
+from celery import shared_task, states
+from celery.utils.log import get_task_logger
+from django.utils import timezone
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.settings import (
     AM_ABS_DIRECTORY,
-    AM_REL_DIRECTORY,
     AM_API_KEY,
     AM_REL_DIRECTORY,
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
 )
-from datetime import datetime, timedelta
-
-
 from oais_utils.validate import validate_sip
-
-import json, ast
-import os, ntpath
-import uuid, time
-import shutil
 
 logger = get_task_logger(__name__)
 

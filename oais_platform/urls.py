@@ -13,11 +13,9 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.urls import include, path
 from django.contrib import admin
-
+from django.urls import include, path
 from rest_framework import routers
-from rest_framework.authtoken import views as authtoken_views
 
 from oais_platform.oais import views
 
@@ -49,7 +47,9 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path("harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"),
+                path(
+                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
+                ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
