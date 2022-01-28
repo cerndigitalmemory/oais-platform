@@ -213,6 +213,6 @@ AM_API_KEY = "test"
 AM_TRANSFER_SOURCE = "0f409b5d-7925-4c8d-b476-1932ab51402c"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/home/kchelakis/a3m/archivematica/hack/submodules/archivematica-sampledata/oais-data"
+AM_ABS_DIRECTORY = "/home/username/a3m/archivematica/hack/submodules/archivematica-sampledata/oais-data"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
