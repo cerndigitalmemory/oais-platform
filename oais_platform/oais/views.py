@@ -410,6 +410,21 @@ def search_query(request):
     return Response(response)
 
 
+@api_view(["POST"])
+def save_manifest(request, id): 
+    archive = Archive.objects.get(pk=id)
+    
+    try:
+        body = request.data
+        if "manifest" not in body:
+            raise BadRequest("Missing manifest")
+        manifest = body["manifest"]
+        print(manifest)
+        archive.set_archive_manifest(manifest)
+        return Response()
+    except:
+        raise BadRequest("Missing username or password")
+
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def me(request):

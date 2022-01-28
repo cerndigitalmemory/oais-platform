@@ -71,6 +71,11 @@ urlpatterns = [
                     views.create_next_step,
                     name="next-step",
                 ),
+                path(
+                    "save-manifest/<int:id>",
+                    views.save_manifest,
+                    name="save_manifest",
+                ),
             ]
         ),
     ),

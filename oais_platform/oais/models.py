@@ -12,6 +12,7 @@ class Steps(models.IntegerChoices):
     VALIDATION = 3
     CHECKSUM = 4
     ARCHIVE = 5
+    EDIT_MANIFESTS = 6
 
 
 class Status(models.IntegerChoices):
@@ -46,6 +47,7 @@ class Archive(models.Model):
     )
     path_to_sip = models.CharField(max_length=100)
     next_steps = models.JSONField(max_length=50, default=list)
+    manifest = models.JSONField(default=None, null=True)
 
     class Meta:
         ordering = ["-id"]
@@ -69,6 +71,13 @@ class Archive(models.Model):
         
         return self.next_steps
 
+    def set_archive_manifest(self, manifest_json):
+        """
+        Set manifest to the given sip json file
+        """
+        self.manifest = manifest_json
+        self.save()
+
 
 class Step(models.Model):
     """
@@ -84,11 +93,7 @@ class Step(models.Model):
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
 
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
-<<<<<<< HEAD
     input_data = models.TextField(max_length=512, null=True, default=None)
-=======
-    input_data = models.CharField(max_length=100, null=True, default=None)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
     input_step = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -96,11 +101,7 @@ class Step(models.Model):
         null=True,
         blank=True,
     )
-<<<<<<< HEAD
     output_data = models.TextField(max_length=512, null=True, default=None)
-=======
-    output_data = models.CharField(max_length=100, null=True, default=None)
->>>>>>> 423c9bcebb156cbb8679af914fa317dd09a26fa8
 
     class Meta:
         permissions = [
