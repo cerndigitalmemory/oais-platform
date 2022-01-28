@@ -68,6 +68,21 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             if not step.name == 5:
                 step.set_output_data(retval)
 
+            # If harvest or upload is completed then add the audit of the sip.json to the archive.manifest field
+            if step.name == 2 or step.name == 1:
+                sip_folder_name = retval["foldername"]
+                sip_manifest_path = "data/meta/sip.json"
+                sip_location = os.path.join(sip_folder_name, sip_manifest_path)
+                try:
+                    with open(sip_location) as json_file:
+                        sip_json = json.load(json_file)
+                        ##TODO: Decide which part of the sip.json will go here
+                        json_audit = sip_json["audit"]
+                        archive.set_archive_manifest(json_audit)
+                        logging.info(f"Sip.json audit saved at manifest field")
+                except:
+                    logging.info(f"Sip.json was not found inside {sip_location}")
+
             # Update the next possible steps
             next_steps = archive.update_next_steps(step.name)
 

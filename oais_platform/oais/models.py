@@ -45,6 +45,7 @@ class Archive(models.Model):
     )
     path_to_sip = models.CharField(max_length=100)
     next_steps = models.JSONField(max_length=50, default=list)
+    manifest = models.JSONField(default=None, null=True)
 
     class Meta:
         ordering = ["-id"]
@@ -67,6 +68,14 @@ class Archive(models.Model):
         self.save()
 
         return self.next_steps
+    
+    def set_archive_manifest(self, manifest_json):
+        """
+        Set manifest to the given sip json file
+        """
+        self.manifest = manifest_json
+        self.save()
+
 
 
 class Step(models.Model):

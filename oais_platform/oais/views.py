@@ -2,6 +2,7 @@ import logging
 import os
 import time
 import zipfile
+import json
 
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
@@ -416,6 +417,22 @@ def search_query(request):
 def me(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def save_manifest(request, id): 
+    archive = Archive.objects.get(pk=id)
+    
+    try:
+        body = request.data
+        if "manifest" not in body:
+            raise BadRequest("Missing manifest")
+        manifest = body["manifest"]
+        archive.set_archive_manifest(manifest)
+        return Response()
+    except:
+        raise BadRequest("An error occured while saving the manifests.")
+
 
 
 @api_view(["POST"])
