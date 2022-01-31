@@ -74,6 +74,7 @@ urlpatterns = [
                     views.save_manifest,
                     name="save_manifest",
                 ),
+                path("settings/", views.get_settings, name="get_settings"),
             ]
         ),
     ),

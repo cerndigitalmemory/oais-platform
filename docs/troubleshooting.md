@@ -4,15 +4,13 @@ Here's a quick overview on how to troubleshoot the OAIS platform.
 
 Containers overview:
 
-| Container name | Software   | Role                            | Exposed endpoint                       |
-|:------------ |:---------- | ------------------------------- | ------------------------------ |
-| oais_django  | Django     | Backend API                     | [:8000](http://localhost:8000) |
-| oais_celery  | Celery     | Task queue and scheduler (Beat) |                                |
-| oais_redis   | Redis      | Broker                          |                                |
-| oais_psql    | Postgresql | Database                        |                           |
-| oais_pgadmin | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
-
-
+| Container name | Software   | Role                            | Exposed endpoint               |
+| :------------- | :--------- | ------------------------------- | ------------------------------ |
+| oais_django    | Django     | Backend API                     | [:8000](http://localhost:8000) |
+| oais_celery    | Celery     | Task queue and scheduler (Beat) |                                |
+| oais_redis     | Redis      | Broker                          |                                |
+| oais_psql      | Postgresql | Database                        |                                |
+| oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
 
 - Bring up the containers (start everything), showing aggregated logs
   `docker compose up`
@@ -25,7 +23,7 @@ Containers overview:
 - Remove containers
   `docker-compose down`
 - Clean up volumes (e.g. to reset the database)
-  `docker volumes prune -y`
+  `docker volume prune -y`
 - Run command in container
   `docker exec it <CONTAINER_NAME> <COMMAND>`
 - Open shell in container

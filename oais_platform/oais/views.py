@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import subprocess
 import time
 import zipfile
 
@@ -27,6 +28,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
+from ..settings import AM_ABS_DIRECTORY, AM_REL_DIRECTORY, AM_URL
 from .tasks import create_step, process, validate
 
 
@@ -123,6 +125,25 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         return self.approve_or_reject(
             request, "oais.can_reject_archive", approved=False
         )
+
+
+@api_view(["GET"])
+def get_settings(request):
+    try:
+        githash = (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .decode("ascii")
+            .strip()
+        )
+    except Exception:
+        githash = "n/a"
+    data = {
+        "am_url": AM_URL,
+        "AM_ABS_DIRECTORY": AM_ABS_DIRECTORY,
+        "AM_REL_DIRECTORY": AM_REL_DIRECTORY,
+        "git_hash": githash,
+    }
+    return Response(data)
 
 
 @api_view()
