@@ -25,9 +25,9 @@ Containers overview:
 - Clean up volumes (e.g. to reset the database)
   `docker volume prune -y`
 - Run command in container
-  `docker exec it <CONTAINER_NAME> <COMMAND>`
+  `docker exec -it <CONTAINER_NAME> <COMMAND>`
 - Open shell in container
-  `docker exec it <CONTAINER_NAME> sh`
+  `docker exec -it <CONTAINER_NAME> sh`
 - Browse database using PGAdmin
   Open [localhost:5050](http://localhost:5050) and create a new connection, with address `db` and the password provided in the docker-compose.yml (by default `overwritethisinprod!`).
 - Rebuild images (e.g. when changing any of the Dockerfiles)
