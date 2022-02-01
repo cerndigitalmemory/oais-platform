@@ -11,6 +11,7 @@ class Steps(models.IntegerChoices):
     VALIDATION = 3
     CHECKSUM = 4
     ARCHIVE = 5
+    EDIT_MANIFEST = 6
 
 
 class Status(models.IntegerChoices):
@@ -68,14 +69,13 @@ class Archive(models.Model):
         self.save()
 
         return self.next_steps
-    
+
     def set_archive_manifest(self, manifest_json):
         """
         Set manifest to the given sip json file
         """
         self.manifest = manifest_json
         self.save()
-
 
 
 class Step(models.Model):
