@@ -83,6 +83,8 @@ INSTALLED_APPS = [
     "oais_platform.oais",
     "corsheaders",
     "django_celery_beat",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
 ]
 
 MIDDLEWARE = [
@@ -175,9 +177,19 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# SPECTACULAR
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "OAIS Platform API",
+    "DESCRIPTION": "CERN Digital Memory platform API documentation",
+    "VERSION": "0.1",
+    # OTHER SETTINGS
+}
 
 # CORS
 

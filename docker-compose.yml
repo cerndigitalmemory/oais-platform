@@ -1,7 +1,6 @@
-version: '3'
+version: "3"
 
 services:
-
   db:
     container_name: oais_psql
     image: postgres:12-alpine
@@ -11,18 +10,18 @@ services:
       - POSTGRES_PASSWORD=overwritethisinprod!
       - PGDATA=/data/postgres
     volumes:
-       - postgres:/data/postgres
+      - postgres:/data/postgres
     restart: unless-stopped
-  
+
   pgadmin:
     container_name: oais_pgadmin
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     volumes:
-       - pgadmin:/var/lib/pgadmin
+      - pgadmin:/var/lib/pgadmin
     ports:
       - "5050:80"
 
@@ -38,11 +37,15 @@ services:
       - "8000:8000"
     volumes:
       - .:/oais_platform
-    command: 
-      # Comment
+    command:
+      # Wait for the database to be online
+      # Run Django migrations (create tables on the db from the models)
+      # Create OpenAPI specification with `rdf-spectacular` and output it in schema.yml
+      # Bring up the web server on port 8000
       >
       sh -c "./wait-for-psql.sh db &&
              python3 manage.py migrate &&
+             python3 manage.py spectacular --file schema.yml &&
              python3 manage.py runserver 0.0.0.0:8000"
     environment:
       # Point to the postgres service
@@ -59,7 +62,7 @@ services:
   redis:
     container_name: oais_redis
     image: redis:alpine
-    
+
   celery:
     container_name: oais_celery
     restart: always
@@ -84,7 +87,6 @@ services:
       - DB_USER=postgres
       - DB_PASS=overwritethisinprod!
 
-  
 volumes:
-    postgres:
-    pgadmin:
+  postgres:
+  pgadmin:

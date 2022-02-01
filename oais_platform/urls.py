@@ -25,6 +25,12 @@ router.register(r"groups", views.GroupViewSet)
 router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
 
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
@@ -34,6 +40,17 @@ urlpatterns = [
         r"api/",
         include(
             [
+                path("schema/", SpectacularAPIView.as_view(), name="schema"),
+                path(
+                    "schema/swagger-ui/",
+                    SpectacularSwaggerView.as_view(url_name="schema"),
+                    name="swagger-ui",
+                ),
+                path(
+                    "schema/redoc/",
+                    SpectacularRedocView.as_view(url_name="schema"),
+                    name="redoc",
+                ),
                 # Auth endpoint used by the browsable API of DRF
                 path(
                     "api-auth/",
@@ -84,5 +101,6 @@ urlpatterns = [
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
 
-# from django.conf.urls.static import static
-# urlpatterns += static("/", document_root="static")
+from django.conf.urls.static import static
+
+urlpatterns += static("/", document_root="public")

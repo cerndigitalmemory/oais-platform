@@ -12,3 +12,5 @@ oais-utils==0.0.4
 django-celery-beat==2.2.1
 amclient==1.2.0
 celery>=5.1, <5.2
+drf-spectacular==0.21.1
+drf-spectacular-sidecar==2022.1.31
