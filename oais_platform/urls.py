@@ -100,7 +100,3 @@ urlpatterns = [
 # Uncomment the following lines to serve the contents of the "static" folder in
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
-
-from django.conf.urls.static import static
-
-urlpatterns += static("/", document_root="public")
