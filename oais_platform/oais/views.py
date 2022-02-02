@@ -28,7 +28,13 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from ..settings import AM_ABS_DIRECTORY, AM_REL_DIRECTORY, AM_URL
+from ..settings import (
+    AM_ABS_DIRECTORY,
+    AM_REL_DIRECTORY,
+    AM_URL,
+    CELERY_BROKER_URL,
+    CELERY_RESULT_BACKEND,
+)
 from .tasks import create_step, process, validate
 
 
@@ -142,6 +148,8 @@ def get_settings(request):
         "AM_ABS_DIRECTORY": AM_ABS_DIRECTORY,
         "AM_REL_DIRECTORY": AM_REL_DIRECTORY,
         "git_hash": githash,
+        "CELERY_BROKER_URL": CELERY_BROKER_URL,
+        "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
     }
     return Response(data)
 
