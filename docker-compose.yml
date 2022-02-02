@@ -1,6 +1,16 @@
 version: "3"
 
 services:
+  nginx:
+    container_name: oais_nginx
+    build:
+      context: nginx/
+    ports:
+      - 80:80
+    volumes:
+      - ./oais-web:/oais_web
+    depends_on:
+      - django
   db:
     container_name: oais_psql
     image: postgres:12-alpine
@@ -69,7 +79,7 @@ services:
     restart: always
     build:
       context: .
-    command: celery -A oais_platform.celery worker -l DEBUG
+    command: celery -A oais_platform.celery worker -l INFO
     volumes:
       - .:/oais_platform
     env_file:
