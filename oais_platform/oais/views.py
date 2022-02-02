@@ -12,7 +12,7 @@ from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import filter_archives_by_user_perms
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -20,6 +20,7 @@ from oais_platform.oais.serializers import (
     LoginSerializer,
     StepSerializer,
     UserSerializer,
+    CollectionSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
@@ -131,6 +132,22 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         return self.approve_or_reject(
             request, "oais.can_reject_archive", approved=False
         )
+
+
+class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
+    """
+    API endpoint that allows collections to be viewed or edited.
+    """
+
+    queryset = Collection.objects.all()
+    serializer_class = CollectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True, url_name="collection-archives")
+    def collection_archives(self, request, pk=None):
+        collection = self.get_object()
+        archives = collection.archives.all()
+        return self.make_paginated_response(collection, CollectionSerializer)
 
 
 @api_view(["GET"])

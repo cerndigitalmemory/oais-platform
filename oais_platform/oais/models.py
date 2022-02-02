@@ -11,6 +11,7 @@ class Steps(models.IntegerChoices):
     VALIDATION = 3
     CHECKSUM = 4
     ARCHIVE = 5
+    EDIT_MANIFEST = 6
 
 
 class Status(models.IntegerChoices):
@@ -68,14 +69,13 @@ class Archive(models.Model):
         self.save()
 
         return self.next_steps
-    
+
     def set_archive_manifest(self, manifest_json):
         """
         Set manifest to the given sip json file
         """
         self.manifest = manifest_json
         self.save()
-
 
 
 class Step(models.Model):
@@ -127,4 +127,43 @@ class Step(models.Model):
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
+        self.save()
+
+
+class Collection(models.Model):
+    """
+    A collection of multiple archives
+    """
+
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=50, null=True, default="Untitled")
+    description = models.TextField(max_length=1024, null=True, default=None)
+    creator = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, related_name="collections"
+    )
+    timestamp = models.DateTimeField(default=timezone.now)
+    last_modification_date = models.DateTimeField(default=timezone.now)
+    archives = models.ManyToManyField(Archive)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def set_title(self, title):
+        self.title = title
+        self.save()
+
+    def set_description(self, description):
+        self.description = description
+        self.save()
+
+    def set_modification_timestamp(self):
+        self.last_modification_date = timezone.now()
+        self.save()
+
+    def add_archive(self, archive):
+        self.archives.add(archive)
+        self.save()
+
+    def remove_archive(self, archive):
+        self.archives.exclude(archive)
         self.save()

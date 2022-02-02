@@ -24,6 +24,7 @@ router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
 router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
+router.register(r"collections", views.CollectionViewSet)
 
 from drf_spectacular.views import (
     SpectacularAPIView,
