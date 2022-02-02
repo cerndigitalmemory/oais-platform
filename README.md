@@ -6,32 +6,56 @@ Main goals of the platforms are:
 
 - Trigger resource harvesting and produce BagIt packages, using the [bagit-create](https://gitlab.cern.ch/digitalmemory/bagit-create) tool;
 - Trigger the preservations and sorrounding workflows;
-	- Evaluation of a3m, an alternative Archivemeativa version (gRPC service);
-	- Interface with a distributed deployment of Archivematica;
-	- Send SIPs to Archiver.eu platforms and evaluate their interfaces, performance and behaviour on ingestions and processing metadata;
+  - Evaluation of a3m, an alternative Archivemeativa version (gRPC service);
+  - Interface with a distributed deployment of Archivematica;
+  - Send SIPs to Archiver.eu platforms and evaluate their interfaces, performance and behaviour on ingestions and processing metadata;
 - Send prepared AIPs to the new CERN Tape Archive (CTA);
-- Maintain a *registry* of the successfully harvested and ingested resources, processing and exposing metadata;
+- Maintain a _registry_ of the successfully harvested and ingested resources, processing and exposing metadata;
 - Expose resources on an access system (powered by Invenio?), exploiting the metadata and revisions features of the CERN AIP specification.
 
 ## Run
 
 A docker-compose setup is provided in this repository, bringing up the following services:
 
-| Container name | Software   | Role                            | Exposed endpoint                       |
-|:------------ |:---------- | ------------------------------- | ------------------------------ |
-| oais_django  | Django     | Backend API                     | [:8000](http://localhost:8000) |
-| oais_celery  | Celery     | Task queue and scheduler (Beat) |                                |
-| oais_redis   | Redis      | Broker                          |                                |
-| oais_psql    | Postgresql | Database                        |                           |
-| oais_pgadmin | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
+| Container name | Software   | Role                            | Exposed endpoint               |
+| :------------- | :--------- | ------------------------------- | ------------------------------ |
+| oais_django    | Django     | Backend API                     | [:8000](http://localhost:8000) |
+| oais_celery    | Celery     | Task queue and scheduler (Beat) |                                |
+| oais_redis     | Redis      | Broker                          |                                |
+| oais_psql      | Postgresql | Database                        |                                |
+| oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
+| oais_nginx     | Nginx      | Reverse Proxy                   | [:80](http://localhost:80)     |
 
-Run `docker-compose up` to bring up the full stack. The django app will auto reload on file modifications.
+To quickly setup a development instance, featuring hot-reloading on the backend:
 
-To also serve the frontend application, copy a build of [oais-web](https://gitlab.cern.ch/digitalmemory/oais-web) in the "static" folder and uncomment the last lines of `oais_platform/urls.py`.
+```bash
+# Start by cloning oais-platform
+git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-platform.git
+# Inside it, clone oais-web
+git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git oais-platform/oais-web
+# Build the web application
+cd oais-platform/oais-web
+npm install
+npm run build
+# Go back to the oais-platform folder and launch the docker compose setup
+cd ..
+docker-compose up
+```
+
+If you also want the React application to hot-reload on file modifications, instead of running `npm run build`, keep a shell open and run `npm run serve`.
+
+The following endpoints are then available, on `localhost`:
+
+- `/` - Oais-web React application
+- `/api` - Base OAIS Platform API endpoint
+- `/api/schema` - OpenAPI 3 specification of the API
+- `http://localhost/api/schema/swagger-ui/` - Swagger UI documentation for the API
 
 See [troubleshooting](docs/troubleshooting.md) for more instructions on how to see logs and run commands in the single containers.
 
 ### Django
+
+To run these commands inside a Docker container, prefix them with `docker exec -it oais_django`.
 
 ```bash
 # python manage.py showmigrations
