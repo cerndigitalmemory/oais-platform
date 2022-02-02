@@ -447,14 +447,28 @@ def save_manifest(request, id):
     """
     archive = Archive.objects.get(pk=id)
 
+    step = Step.objects.create(
+        archive=archive,
+        name=Steps.EDIT_MANIFEST,
+        input_step=archive.last_step,
+        # change to waiting/not run
+        status=Status.IN_PROGRESS,
+        input_data=archive.manifest,
+    )
+
     try:
         body = request.data
         if "manifest" not in body:
             raise BadRequest("Missing manifest")
         manifest = body["manifest"]
         archive.set_archive_manifest(manifest)
+        step.set_output_data(manifest)
+        step.set_status(Status.COMPLETED)
+        step.set_finish_date()
         return Response()
     except Exception:
+        step.set_status(Status.FAILED)
+        step.set_finish_date()
         raise BadRequest("An error occured while saving the manifests.")
 
 
