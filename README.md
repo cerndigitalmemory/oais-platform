@@ -35,7 +35,7 @@ git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-platform.git
 git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git oais-platform/oais-web
 # Build the web application
 cd oais-platform/oais-web
-npm install
+npm install --force
 npm run build
 # Go back to the oais-platform folder and launch the docker compose setup
 cd ..
@@ -49,7 +49,7 @@ The following endpoints are then available, on `localhost`:
 - `/` - Oais-web React application
 - `/api` - Base OAIS Platform API endpoint
 - `/api/schema` - OpenAPI 3 specification of the API
-- `http://localhost/api/schema/swagger-ui/` - Swagger UI documentation for the API
+- `/api/schema/swagger-ui/` - Swagger UI documentation for the API
 
 See [troubleshooting](docs/troubleshooting.md) for more instructions on how to see logs and run commands in the single containers.
 
