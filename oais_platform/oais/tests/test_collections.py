@@ -99,7 +99,7 @@ class CollectionTests(APITestCase):
             {
                 "title": "test",
                 "description": "test description",
-                "archives": [self.serializer1.data["id"]],
+                "archives": [self.archive1.id],
             },
             format="json",
         )
@@ -113,3 +113,95 @@ class CollectionTests(APITestCase):
         self.assertEqual(len(archives), 1)
         self.assertEqual(archives[0]["id"], 1)
         self.assertEqual(archives[0]["source"], "test_archive")
+
+    def check_archive_add(self):
+        """
+        Creates a collection and adds an archive to it, then checks if the archive is there
+        """
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("create_collection")
+
+        check_url = reverse("get-collections")
+
+        # Creates a collection
+        response = self.client.post(
+            url,
+            {
+                "title": "test",
+                "description": "test description",
+                "archives": None,
+            },
+            format="json",
+        )
+
+        results = self.client.get(check_url, format="json")
+
+        data = results.data["results"]
+        archives = data[0]["archives"]
+        # Archives before add
+        self.assertEqual(results.data["count"], 1)
+        self.assertEqual(len(archives), 0)
+
+        response_collection_id = response.data["id"]
+        add_archive = reverse("add-to-collection", args=[response_collection_id])
+
+        add_archive_response = self.client.post(
+            add_archive, {"archives": [self.archive1.id]}, format="json"
+        )
+
+        results2 = self.client.get(check_url, format="json")
+
+        data = results2.data["results"]
+        archives = data[0]["archives"]
+
+        self.assertEqual(results2.status_code, status.HTTP_200_OK)
+        self.assertEqual(results2.data["count"], 1)
+        self.assertEqual(len(archives), 1)
+
+    def check_archive_remove(self):
+        """
+        Creates a collection with an archive and then removes it, then checks if the archive is removed but the collection is there
+        """
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("create_collection")
+        check_url = reverse("get-collections")
+
+        # Creates a collection with an archive
+        response = self.client.post(
+            url,
+            {
+                "title": "test",
+                "description": "test description",
+                "archives": [self.archive1.id],
+            },
+            format="json",
+        )
+
+        # Get all the collections
+        results = self.client.get(check_url, format="json")
+        data = results.data["results"]
+        archives = data[0]["archives"]
+        # Check if there is one archive in the beginning
+        self.assertEqual(results.status_code, status.HTTP_200_OK)
+        self.assertEqual(results.data["count"], 1)
+        self.assertEqual(len(archives), 1)
+
+        # Remove the archive from the collection
+        response_collection_id = response.data["id"]
+        rm_archive = reverse("remove-from-collection", args=[response_collection_id])
+
+        rm_archive_response = self.client.post(
+            rm_archive, {"archives": [self.archive1.id]}, format="json"
+        )
+
+        results2 = self.client.get(check_url, format="json")
+
+        data = results2.data["results"]
+        archives = data[0]["archives"]
+
+        # Check if collection is there and there is no archive
+        self.assertEqual(results2.status_code, status.HTTP_200_OK)
+        self.assertEqual(results2.data["count"], 1)
+        self.assertEqual(len(archives), 0)

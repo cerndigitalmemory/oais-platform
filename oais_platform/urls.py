@@ -109,6 +109,16 @@ urlpatterns = [
                     name="collections-delete",
                 ),
                 path(
+                    "collections/<int:id>/actions/add/",
+                    views.CollectionViewSet.as_view({"post": "add"}),
+                    name="add-to-collection",
+                ),
+                path(
+                    "collections/<int:id>/actions/remove/",
+                    views.CollectionViewSet.as_view({"post": "remove"}),
+                    name="remove-from-collection",
+                ),
+                path(
                     "collections/",
                     views.CollectionViewSet.as_view({"get": "get_queryset"}),
                     name="get-collections",

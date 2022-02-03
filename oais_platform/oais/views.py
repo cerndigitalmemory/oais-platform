@@ -154,8 +154,8 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     def add_or_remove(self, request, permission, add):
         user = request.user
-        if not user.has_perm(permission):
-            raise PermissionDenied()
+        # if not user.has_perm(permission):
+        #     raise PermissionDenied()
 
         if request.data["archives"] == None:
             raise Exception("No archives selected")
@@ -166,11 +166,11 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             collection = self.get_object()
 
         if add:
-            for archive in range(len(archives)):
+            for archive in archives:
                 collection.add_archive(archive)
 
         else:
-            for archive in range(len(archives)):
+            for archive in archives:
                 collection.remove_archive(archive)
 
         collection.set_modification_timestamp()

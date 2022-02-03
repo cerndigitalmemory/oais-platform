@@ -165,5 +165,5 @@ class Collection(models.Model):
         self.save()
 
     def remove_archive(self, archive):
-        self.archives.exclude(archive)
+        self.archives.remove(archive)
         self.save()
