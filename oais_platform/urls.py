@@ -93,6 +93,26 @@ urlpatterns = [
                     name="save_manifest",
                 ),
                 path("settings/", views.get_settings, name="get_settings"),
+                path(
+                    "collection/<int:id>",
+                    views.collection_details,
+                    name="collection_details",
+                ),
+                path(
+                    "create-collection/",
+                    views.create_collection,
+                    name="create_collection",
+                ),
+                path(
+                    "collections/<int:id>/actions/delete/",
+                    views.CollectionViewSet.as_view({"post": "delete"}),
+                    name="collections-delete",
+                ),
+                path(
+                    "collections/",
+                    views.CollectionViewSet.as_view({"get": "get_queryset"}),
+                    name="get-collections",
+                ),
             ]
         ),
     ),

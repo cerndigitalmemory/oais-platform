@@ -143,11 +143,69 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = CollectionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        return Collection.objects.all()
+
     @action(detail=True, url_name="collection-archives")
     def collection_archives(self, request, pk=None):
         collection = self.get_object()
         archives = collection.archives.all()
         return self.make_paginated_response(collection, CollectionSerializer)
+
+    def add_or_remove(self, request, permission, add):
+        user = request.user
+        if not user.has_perm(permission):
+            raise PermissionDenied()
+
+        if request.data["archives"] == None:
+            raise Exception("No archives selected")
+        else:
+            archives = request.data["archives"]
+
+        with transaction.atomic():
+            collection = self.get_object()
+
+        if add:
+            for archive in range(len(archives)):
+                collection.add_archive(archive)
+
+        else:
+            for archive in range(len(archives)):
+                collection.remove_archive(archive)
+
+        collection.set_modification_timestamp()
+        collection.save()
+        serializer = self.get_serializer(collection)
+        return Response(serializer.data)
+
+    def delete_collection(self, request, permission):
+        user = request.user
+        # if not user.has_perm(permission):
+        #     raise PermissionDenied()
+
+        with transaction.atomic():
+            collection = self.get_object()
+
+        collection.delete()
+
+        return Response()
+
+    @action(detail=True, methods=["POST"], url_path="actions/add")
+    def add(self, request, pk=None):
+        return self.add_or_remove(request, "oais.can_approve_archive", add=True)
+
+    @action(detail=True, methods=["POST"], url_path="actions/remove")
+    def remove(self, request, pk=None):
+        return self.add_or_remove(request, "oais.can_reject_archive", add=False)
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="actions/delete",
+        url_name="collections-delete",
+    )
+    def delete(self, request, pk=None):
+        return self.delete_collection(request, "oais.can_reject_archive")
 
 
 @api_view(["GET"])
@@ -187,6 +245,33 @@ def get_steps(request, id):
 def archive_details(self, id):
     archive = Archive.objects.get(pk=id)
     serializer = ArchiveSerializer(archive, many=False)
+    return Response(serializer.data)
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def collection_details(self, id):
+    collection = Collection.objects.get(pk=id)
+    serializer = CollectionSerializer(collection, many=False)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_collection(request):
+    title = request.data["title"]
+    description = request.data["description"]
+    archives = request.data["archives"]
+
+    collection = Collection.objects.create(
+        title=title,
+        description=description,
+        creator=request.user,
+    )
+    if archives:
+        collection.archives.set(archives)
+
+    serializer = CollectionSerializer(collection, many=False)
     return Response(serializer.data)
 
 
