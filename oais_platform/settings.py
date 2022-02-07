@@ -129,6 +129,9 @@ DATABASES = {
         "NAME": environ.get("DB_NAME"),
         "USER": environ.get("DB_USER"),
         "PASSWORD": environ.get("DB_PASS"),
+        "TEST": {
+            "NAME": "mytestdatabase",
+        },
     }
 }
 
