@@ -1,6 +1,6 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Record
+from oais_platform.oais.models import Archive, Step
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -12,8 +12,9 @@ class ArchiveTests(APITestCase):
         self.creator = User.objects.create_user("creator", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
 
-        self.record = Record.objects.create(recid="1", source="test", url="")
-        self.archive = Archive.objects.create(record=self.record, creator=self.creator)
+        self.archive = Archive.objects.create(
+            recid="1", source="test", source_url="", creator=self.creator
+        )
 
     def test_archive_list_creator(self):
         self.client.force_authenticate(user=self.creator)
@@ -94,6 +95,18 @@ class ArchiveTests(APITestCase):
 
         url = reverse("archive-detail", args=[self.archive.id])
         response = self.client.get(url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.archive.id)
+
+    def test_get_archive_details(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("archive_details", args=[self.archive.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.archive.id)

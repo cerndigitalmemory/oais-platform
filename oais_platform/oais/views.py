@@ -13,7 +13,10 @@ from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.permissions import filter_archives_by_user_perms
+from oais_platform.oais.permissions import (
+    filter_archives_by_user_perms,
+    filter_steps_by_user_perms,
+)
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     GroupSerializer,
@@ -73,6 +76,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        return filter_archives_by_user_perms(super().get_queryset(), self.request.user)
+
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
         archive = self.get_object()
@@ -86,7 +92,7 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return filter_archives_by_user_perms(super().get_queryset(), self.request.user)
+        return filter_steps_by_user_perms(super().get_queryset(), self.request.user)
 
     def approve_or_reject(self, request, permission, approved):
         user = request.user
@@ -107,21 +113,15 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
             step.save()
 
         if approved:
-            current_step = step
-            if current_step.name == Steps.HARVEST:
-                current_step.set_status(Status.NOT_RUN)
+            if step.name == Steps.HARVEST:
+                step.set_status(Status.NOT_RUN)
                 process.delay(step.archive.id, step.id)
 
-            elif current_step.name == Steps.VALIDATION:
-                current_step.set_status(Status.NOT_RUN)
-                validate.delay(step.archive.id, step.archive.path_to_sip, step.id)
-
-        serializer = self.get_serializer(current_step)
+        serializer = self.get_serializer(step)
         return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="actions/approve")
     def approve(self, request, pk=None):
-        print("Request is: ", request)
         return self.approve_or_reject(
             request, "oais.can_approve_archive", approved=True
         )
@@ -181,11 +181,12 @@ def create_next_step(request):
     archive = request.data["archive"]
 
     if int(next_step) in Steps:
-        create_step(next_step, archive["id"], archive["last_step"])
+        next_step = create_step(next_step, archive["id"], archive["last_step"])
     else:
         raise Exception("Wrong Step input")
 
-    return Response()
+    serializer = StepSerializer(next_step, many=False)
+    return Response(serializer.data)
 
 
 @api_view(["POST"])
