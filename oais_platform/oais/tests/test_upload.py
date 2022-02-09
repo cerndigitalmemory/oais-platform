@@ -1,3 +1,4 @@
+from cmath import log
 from unittest import mock
 from unittest.mock import patch
 
@@ -48,7 +49,6 @@ class UploadTests(APITestCase):
         )
         response = self.client.post(url, {"file": file})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        print(response.data)
         self.assertEqual(response.data["detail"], "Invalid source")
         f1.close()
 
@@ -56,38 +56,33 @@ class UploadTests(APITestCase):
         # Prepare the mock folders and expected result from file
         with tempfile.TemporaryDirectory() as tmpdir1:
             with tempfile.TemporaryDirectory() as tmpdir2:
-                # Creates two temp directories and two files
-                f1 = tempfile.NamedTemporaryFile("w+t", dir=tmpdir1)
-                f1.seek(0)
 
                 # Run Bagit Create with the following parameters:
                 # Save the results to tmpdir2
-                result = bic.process(
-                    recid=None,
-                    source="local",
-                    loglevel=0,
+                res = bic.process(
+                    recid="2728246",
+                    source="cds",
                     target=tmpdir2,
-                    source_path=tmpdir1,
-                    author="python-test",
+                    loglevel=0,
                 )
 
-                res = ast.literal_eval(result)
+                print(res)
 
                 foldername = res["foldername"]
 
-                path_to_sip = os.path.join(os.path(tmpdir2), res["foldername"])
+                path_to_sip = os.path.join(os.path.abspath(tmpdir2), foldername)
 
                 zipfile.ZipFile(f"{path_to_sip}.zip", mode="w").write(path_to_sip)
 
-                file = TemporaryUploadedFile(
-                    name=f"{foldername}.zip",
-                    content_type="text/plain",
-                    size=0,
-                    charset="utf8",
+                path_to_zip = path_to_sip + ".zip"
+
+                with open(path_to_zip, mode="rb") as myzip:
+
+                    url = reverse("upload")
+
+                    response = self.client.post(url, {"file": myzip})
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    response.data["msg"], "SIP uploading started, see Archives page"
                 )
-
-                url = reverse("upload")
-
-                response = self.client.post(url, {"file": file})
-
-                f1.close()

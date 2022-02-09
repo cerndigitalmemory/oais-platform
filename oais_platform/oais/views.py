@@ -216,8 +216,6 @@ def harvest(request, recid, source):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def upload(request):
-    for key, value in request.FILES:
-        print(key, value)
     file = request.FILES.getlist("file")[0]
 
     # WORKAROUND FOR NOW : Get directory name from compressed filename
