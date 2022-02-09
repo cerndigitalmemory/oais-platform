@@ -1,6 +1,6 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Step
+from oais_platform.oais.models import Archive, Step, Steps, Status
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -110,3 +110,25 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.archive.id)
+
+    def test_get_steps(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("get-steps", args=[self.archive.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+        self.step1 = Step.objects.create(archive=self.archive, name=0)
+        self.step2 = Step.objects.create(archive=self.archive, name=0)
+
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)

@@ -216,14 +216,19 @@ def harvest(request, recid, source):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def upload(request):
+    for key, value in request.FILES:
+        print(key, value)
     file = request.FILES.getlist("file")[0]
 
     # WORKAROUND FOR NOW : Get directory name from compressed filename
     # TODO getting source and recid from sip.json?
-    sip_dir = file.name.split(".")[0]
-    sip_data = sip_dir.split("::")
-    source = sip_data[1]
-    recid = sip_data[2]
+    try:
+        sip_dir = file.name.split(".")[0]
+        sip_data = sip_dir.split("::")
+        source = sip_data[1]
+        recid = sip_data[2]
+    except:
+        raise BadRequest("Wrong file format")
 
     try:
         url = get_source(source).get_record_url(recid)
