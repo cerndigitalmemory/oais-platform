@@ -53,36 +53,33 @@ class UploadTests(APITestCase):
         f1.close()
 
     def test_upload_sip(self):
-        # Prepare the mock folders and expected result from file
-        with tempfile.TemporaryDirectory() as tmpdir1:
-            with tempfile.TemporaryDirectory() as tmpdir2:
+        # Prepare a temp folder to save the results
+        with tempfile.TemporaryDirectory() as tmpdir2:
 
-                # Run Bagit Create with the following parameters:
-                # Save the results to tmpdir2
-                res = bic.process(
-                    recid="2728246",
-                    source="cds",
-                    target=tmpdir2,
-                    loglevel=0,
-                )
+            # Run Bagit Create with the following parameters:
+            # Save the results to tmpdir2
+            res = bic.process(
+                recid="2728246",
+                source="cds",
+                target=tmpdir2,
+                loglevel=0,
+            )
 
-                print(res)
+            foldername = res["foldername"]
 
-                foldername = res["foldername"]
+            path_to_sip = os.path.join(os.path.abspath(tmpdir2), foldername)
 
-                path_to_sip = os.path.join(os.path.abspath(tmpdir2), foldername)
+            zipfile.ZipFile(f"{path_to_sip}.zip", mode="w").write(path_to_sip)
 
-                zipfile.ZipFile(f"{path_to_sip}.zip", mode="w").write(path_to_sip)
+            path_to_zip = path_to_sip + ".zip"
 
-                path_to_zip = path_to_sip + ".zip"
+            with open(path_to_zip, mode="rb") as myzip:
 
-                with open(path_to_zip, mode="rb") as myzip:
+                url = reverse("upload")
 
-                    url = reverse("upload")
+                response = self.client.post(url, {"file": myzip})
 
-                    response = self.client.post(url, {"file": myzip})
-
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(
-                    response.data["msg"], "SIP uploading started, see Archives page"
-                )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                response.data["msg"], "SIP uploading started, see Archives page"
+            )
