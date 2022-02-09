@@ -24,6 +24,7 @@ router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
 router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
+router.register(r"collections", views.CollectionViewSet)
 
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -92,6 +93,36 @@ urlpatterns = [
                     name="save_manifest",
                 ),
                 path("settings/", views.get_settings, name="get_settings"),
+                path(
+                    "collection/<int:id>",
+                    views.collection_details,
+                    name="collection_details",
+                ),
+                path(
+                    "create-collection/",
+                    views.create_collection,
+                    name="create_collection",
+                ),
+                path(
+                    "collections/<int:id>/actions/delete/",
+                    views.CollectionViewSet.as_view({"post": "delete"}),
+                    name="collections-delete",
+                ),
+                path(
+                    "collections/<int:id>/actions/add/",
+                    views.CollectionViewSet.as_view({"post": "add"}),
+                    name="add-to-collection",
+                ),
+                path(
+                    "collections/<int:id>/actions/remove/",
+                    views.CollectionViewSet.as_view({"post": "remove"}),
+                    name="remove-from-collection",
+                ),
+                path(
+                    "collections/",
+                    views.CollectionViewSet.as_view({"get": "get_queryset"}),
+                    name="get-collections",
+                ),
             ]
         ),
     ),

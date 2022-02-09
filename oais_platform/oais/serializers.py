@@ -1,7 +1,7 @@
 from re import S
 
 from django.contrib.auth.models import Group, User
-from oais_platform.oais.models import Archive, Step
+from oais_platform.oais.models import Archive, Collection, Step
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
 
@@ -63,6 +63,23 @@ class ArchiveSerializer(serializers.ModelSerializer):
     def get_last_step(self, instance):
         last_step = instance.steps.all().order_by("-start_date")[0]
         return last_step
+
+
+class CollectionSerializer(serializers.ModelSerializer):
+    archives = ArchiveSerializer(many=True)
+    creator = UserSerializer()
+
+    class Meta:
+        model = Collection
+        fields = [
+            "id",
+            "title",
+            "description",
+            "creator",
+            "timestamp",
+            "last_modification_date",
+            "archives",
+        ]
 
 
 class LoginSerializer(serializers.Serializer):
