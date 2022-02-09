@@ -86,6 +86,8 @@ class UploadTests(APITestCase):
                     charset="utf8",
                 )
 
+                url = reverse("upload")
+
                 response = self.client.post(url, {"file": file})
 
                 f1.close()
