@@ -12,18 +12,18 @@ from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
     filter_steps_by_user_perms,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
+    CollectionSerializer,
     GroupSerializer,
     LoginSerializer,
     StepSerializer,
     UserSerializer,
-    CollectionSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
