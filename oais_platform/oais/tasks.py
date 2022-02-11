@@ -129,8 +129,6 @@ def create_step(step_name, archive_id, input_step_id=None):
         status=Status.IN_PROGRESS,
     )
 
-    archive = Step.objects.get(pk=archive_id)
-
     # Consider switching this to "eval"?
     if step_name == Steps.HARVEST:
         task = process.delay(step.archive.id, step.id, step.input_data)
@@ -141,10 +139,12 @@ def create_step(step_name, archive_id, input_step_id=None):
     elif step_name == Steps.ARCHIVE:
         task = archivematica.delay(step.archive.id, step.id, step.input_data)
 
+    return step
+
 
 # Steps implementations
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
-def process(self, archive_id, step_id):
+def process(self, archive_id, step_id, input_data=None):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
