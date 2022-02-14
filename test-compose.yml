@@ -1,0 +1,103 @@
+version: "3"
+
+services:
+  nginx:
+    container_name: oais_nginx
+    build:
+      context: nginx/
+    ports:
+      - 80:80
+    volumes:
+      - ./oais-web:/oais_web
+    depends_on:
+      - django
+  db:
+    container_name: oais_psql
+    image: postgres:12-alpine
+    environment:
+      - POSTGRES_DB=oais_platform
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=overwritethisinprod!
+      - PGDATA=/data/postgres
+    volumes:
+      - postgres:/data/postgres
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: oais_pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+
+  # Django app
+  django:
+    container_name: oais_django
+    # Current path contains the Dockerfile for the Django app
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/oais_platform
+    command:
+      # Wait for the database to be online
+      # Run Django migrations (create tables on the db from the models)
+      # Create OpenAPI specification with `rdf-spectacular` and output it in schema.yml
+      # Bring up the web server on port 8000
+      >
+      sh -c "./wait-for-psql.sh db &&
+             python3 manage.py makemigrations &&
+             python3 manage.py migrate &&
+             python3 manage.py test"
+    environment:
+      # Point to the postgres service
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASS=overwritethisinprod!
+      - DB_NAME=oais_platform
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+    env_file:
+      - ./.env.dev
+
+  # Redis
+  redis:
+    container_name: oais_redis
+    image: redis:alpine
+
+  celery:
+    container_name: oais_celery
+    restart: always
+    build:
+      context: .
+    command: celery -A oais_platform.celery worker -l INFO
+    volumes:
+      - .:/oais_platform
+    env_file:
+      - ./.env.dev
+    depends_on:
+      - db
+      - redis
+      - django
+    environment:
+      # Point to the redis service
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgres://postgres:postgres@db:5433/web_dev
+      - DB_HOST=db
+      - DB_NAME=oais_platform
+      - DB_USER=postgres
+      - DB_PASS=overwritethisinprod!
+
+volumes:
+  postgres:
+  pgadmin:
