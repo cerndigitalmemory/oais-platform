@@ -2,16 +2,19 @@ stages:
   - test
   - deploy
 
-test:
+django-tests:
   stage: test
-  parallel:
-    matrix:
-      - IMAGE: ["python:3.6", "python:3.7"]
-  image: $IMAGE
+  image: docker/compose:1.27.4
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375/
   script:
-    - pip install -r requirements.txt
-    - python manage.py test
-
+    - docker-compose -f test-compose.yml up --exit-code-from django
+  tags:
+    - docker-privileged
+    
 trigger-deploy:
   stage: deploy
   trigger: digitalmemory/openshift-deploy
