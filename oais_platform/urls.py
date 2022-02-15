@@ -104,17 +104,17 @@ urlpatterns = [
                     name="create_collection",
                 ),
                 path(
-                    "collections/<int:id>/actions/delete/",
+                    "collections/<int:pk>/actions/delete/",
                     views.CollectionViewSet.as_view({"post": "delete"}),
                     name="collections-delete",
                 ),
                 path(
-                    "collections/<int:id>/actions/add/",
+                    "collections/<int:pk>/actions/add/",
                     views.CollectionViewSet.as_view({"post": "add"}),
                     name="add-to-collection",
                 ),
                 path(
-                    "collections/<int:id>/actions/remove/",
+                    "collections/<int:pk>/actions/remove/",
                     views.CollectionViewSet.as_view({"post": "remove"}),
                     name="remove-from-collection",
                 ),
@@ -122,6 +122,26 @@ urlpatterns = [
                     "collections/",
                     views.CollectionViewSet.as_view({"get": "get_queryset"}),
                     name="get-collections",
+                ),
+                path(
+                    "archive/<int:pk>/get-collections/",
+                    views.ArchiveViewSet.as_view({"get": "archive_collections"}),
+                    name="get-collections",
+                ),
+                path(
+                    "archive/<int:pk>/search/",
+                    views.ArchiveViewSet.as_view({"get": "archive_search"}),
+                    name="search",
+                ),
+                path(
+                    "users/<int:pk>/archives-staged/",
+                    views.UserViewSet.as_view({"get": "archives_staged"}),
+                    name="archives-staged",
+                ),
+                path(
+                    "get-detailed/",
+                    views.get_detailed_archives,
+                    name="get_detailed_archives",
                 ),
             ]
         ),
@@ -131,3 +151,7 @@ urlpatterns = [
 # Uncomment the following lines to serve the contents of the "static" folder in
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
+
+from django.conf.urls.static import static
+
+urlpatterns += static("/", document_root="public")

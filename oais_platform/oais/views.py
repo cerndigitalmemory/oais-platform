@@ -1,3 +1,4 @@
+import collections
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
     filter_steps_by_user_perms,
+    filter_collections_by_user_perms,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -54,8 +56,25 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     @action(detail=True, url_name="user-archives")
     def archives(self, request, pk=None):
+        """
+        Gets all the archives for a specific user
+        """
         user = self.get_object()
         archives = filter_archives_by_user_perms(user.archives.all(), request.user)
+        return self.make_paginated_response(archives, ArchiveSerializer)
+
+    @action(detail=True, url_name="user-archives-staged")
+    def archives_staged(self, request, pk=None):
+        """
+        Gets all the archives for a specific user that are staged
+        """
+        user = self.get_object()
+        archives = filter_archives_by_user_perms(
+            user.archives.filter(
+                last_step__isnull=True, archive_collections__isnull=True
+            ),
+            request.user,
+        )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -86,6 +105,39 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         steps = filter_archives_by_user_perms(archive.steps.all(), self.request.user)
         return self.make_paginated_response(archive, ArchiveSerializer)
+
+    @action(detail=True, url_name="get-collections")
+    def archive_collections(self, request, pk=None):
+        """
+        Gets in which collections an archive is
+        """
+        archive = self.get_object()
+        collections = filter_collections_by_user_perms(
+            archive.get_collections(), self.request.user
+        )
+        return self.make_paginated_response(collections, CollectionSerializer)
+
+    @action(detail=True, url_name="search")
+    def archive_search(self, request, pk=None):
+        """
+        Searches if there are other archives of the same source and recid
+        """
+        archive = self.get_object()
+        try:
+            archives = Archive.objects.filter(
+                recid__contains=archive.recid, source__contains=archive.source
+            )
+            serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    archives,
+                    self.request.user,
+                ),
+                many=True,
+            )
+            return Response(serializer.data)
+        except Archive.DoesNotExist:
+            archives = None
+            return Response()
 
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
@@ -168,11 +220,17 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if add:
             for archive in archives:
-                collection.add_archive(archive)
+                if type(archive) == int:
+                    collection.add_archive(archive)
+                else:
+                    collection.add_archive(archive["id"])
 
         else:
             for archive in archives:
-                collection.remove_archive(archive)
+                if type(archive) == int:
+                    collection.remove_archive(archive)
+                else:
+                    collection.remove_archive(archive["id"])
 
         collection.set_modification_timestamp()
         collection.save()
@@ -300,7 +358,8 @@ def harvest(request, recid, source):
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    archive, _ = Archive.objects.get_or_create(
+    # Always create a new archive instance
+    archive = Archive.objects.create(
         recid=recid,
         source=source,
         source_url=url,
@@ -336,7 +395,8 @@ def upload(request):
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    archive, _ = Archive.objects.get_or_create(
+    # Always create a new Archive instance
+    archive = Archive.objects.create(
         recid=recid,
         source=source,
         defaults={"source_url": url},
@@ -553,6 +613,40 @@ def search_query(request):
 def me(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def get_detailed_archives(request):
+    """
+    Given a list of Archives, returns more information like collection and duplicates
+    """
+    archives = request.data["archives"]
+    for archive in archives:
+        id = archive["id"]
+        current_archive = Archive.objects.get(pk=id)
+        serialized_archive_collections = filter_collections_by_user_perms(
+            current_archive.get_collections(), request.user
+        )
+        serialized_collections = CollectionSerializer(
+            serialized_archive_collections, many=True
+        )
+        archive["collections"] = serialized_collections.data
+        try:
+            duplicates = Archive.objects.filter(
+                recid__contains=archive["recid"], source__contains=archive["source"]
+            ).exclude(id__contains=archive["id"])
+            archive_serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    duplicates,
+                    request.user,
+                ),
+                many=True,
+            )
+            archive["duplicates"] = archive_serializer.data
+        except Archive.DoesNotExist:
+            archive["duplicates"] = None
+
+    return Response(archives)
 
 
 @api_view(["POST"])

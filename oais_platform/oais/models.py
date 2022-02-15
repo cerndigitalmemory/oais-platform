@@ -77,6 +77,9 @@ class Archive(models.Model):
         self.manifest = manifest_json
         self.save()
 
+    def get_collections(self):
+        return self.archive_collections.all()
+
 
 class Step(models.Model):
     """
@@ -143,7 +146,9 @@ class Collection(models.Model):
     )
     timestamp = models.DateTimeField(default=timezone.now)
     last_modification_date = models.DateTimeField(default=timezone.now)
-    archives = models.ManyToManyField(Archive)
+    archives = models.ManyToManyField(
+        Archive, blank=True, related_name="archive_collections"
+    )
 
     class Meta:
         ordering = ["-id"]
