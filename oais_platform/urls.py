@@ -68,6 +68,11 @@ urlpatterns = [
                 path(
                     "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
                 ),
+                path(
+                    "create-archive/<str:recid>/<str:source>/",
+                    views.create_archive,
+                    name="create_archive",
+                ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -97,6 +102,11 @@ urlpatterns = [
                     "collection/<int:id>",
                     views.collection_details,
                     name="collection_details",
+                ),
+                path(
+                    "record-check/",
+                    views.check_archived_records,
+                    name="check_archived_records",
                 ),
                 path(
                     "create-collection/",
@@ -129,16 +139,19 @@ urlpatterns = [
                     name="get-collections",
                 ),
                 path(
+                    # Returns a list of similar archives (with the same recid + source)
                     "archive/<int:pk>/search/",
                     views.ArchiveViewSet.as_view({"get": "archive_search"}),
                     name="search",
                 ),
                 path(
+                    # Returns all the archives that are in the staged phase (not in a collection, no step intitiallized)
                     "users/<int:pk>/archives-staged/",
                     views.UserViewSet.as_view({"get": "archives_staged"}),
                     name="archives-staged",
                 ),
                 path(
+                    # Gives a list of archives and returns for each archive a list with all the collections and the duplicates this archive has
                     "get-detailed/",
                     views.get_detailed_archives,
                     name="get_detailed_archives",

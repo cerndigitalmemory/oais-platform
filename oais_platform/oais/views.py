@@ -336,6 +336,33 @@ def create_collection(request):
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
+def check_archived_records(request):
+    """
+    Gets a list of records and searches the database for similar archives (same recid + source)
+    Then returns the list of records with an archive list field which containes the similar archives
+    """
+    records = request.data["recordList"]
+    for record in records:
+        try:
+            archives = Archive.objects.filter(
+                recid__contains=record["recid"], source__contains=record["source"]
+            )
+            serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    archives,
+                    request.user,
+                ),
+                many=True,
+            )
+            record["archives"] = serializer.data
+        except Archive.DoesNotExist:
+            record["archives"] = None
+
+    return Response(records)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def create_next_step(request):
 
     next_step = request.data["next_step"]
@@ -353,6 +380,9 @@ def create_next_step(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def harvest(request, recid, source):
+    """
+    Gets a source and the recid, creates an archive object and assigns a harvest step on it
+    """
     try:
         url = get_source(source).get_record_url(recid)
     except InvalidSource:
@@ -368,6 +398,30 @@ def harvest(request, recid, source):
 
     step = Step.objects.create(
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
+    )
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_archive(request, recid, source):
+    """
+    Gets a source and the recid and creates an archive object
+    """
+    try:
+        url = get_source(source).get_record_url(recid)
+    except InvalidSource:
+        raise BadRequest("Invalid source")
+
+    # Always create a new archive instance
+    archive = Archive.objects.create(
+        recid=recid,
+        source=source,
+        source_url=url,
+        creator=request.user,
     )
 
     return redirect(
