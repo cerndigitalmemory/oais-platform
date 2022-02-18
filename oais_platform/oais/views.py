@@ -66,13 +66,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=True, url_name="user-archives-staged")
     def archives_staged(self, request, pk=None):
         """
-        Gets all the archives for a specific user that are staged
+        Gets all the archives for a specific user that are staged (no steps assigned)
         """
         user = self.get_object()
         archives = filter_archives_by_user_perms(
-            user.archives.filter(
-                last_step__isnull=True, archive_collections__isnull=True
-            ),
+            user.archives.filter(last_step__isnull=True, steps__isnull=True),
             request.user,
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
@@ -379,22 +377,15 @@ def create_next_step(request):
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
-def harvest(request, recid, source):
+def harvest(request, id):
     """
     Gets a source and the recid, creates an archive object and assigns a harvest step on it
     """
+    archive = Archive.objects.get(pk=id)
     try:
-        url = get_source(source).get_record_url(recid)
+        url = get_source(archive.source).get_record_url(archive.recid)
     except InvalidSource:
         raise BadRequest("Invalid source")
-
-    # Always create a new archive instance
-    archive = Archive.objects.create(
-        recid=recid,
-        source=source,
-        source_url=url,
-        creator=request.user,
-    )
 
     step = Step.objects.create(
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
@@ -672,7 +663,7 @@ def me(request):
 @api_view(["POST"])
 def get_detailed_archives(request):
     """
-    Given a list of Archives, returns more information like collection and duplicates
+    Given a list of Archives, returns more information like steps, collection and duplicates
     """
     archives = request.data["archives"]
     for archive in archives:
@@ -685,6 +676,11 @@ def get_detailed_archives(request):
             serialized_archive_collections, many=True
         )
         archive["collections"] = serialized_collections.data
+
+        steps = current_archive.steps.all().order_by("start_date")
+        steps_serializer = StepSerializer(steps, many=True)
+        archive["steps"] = steps_serializer.data
+
         try:
             duplicates = Archive.objects.filter(
                 recid__contains=archive["recid"], source__contains=archive["source"]

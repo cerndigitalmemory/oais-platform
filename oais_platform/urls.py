@@ -65,9 +65,7 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
-                path(
-                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
-                ),
+                path("harvest/<int:id>/", views.harvest, name="harvest"),
                 path(
                     "create-archive/<str:recid>/<str:source>/",
                     views.create_archive,
