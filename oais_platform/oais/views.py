@@ -195,7 +195,10 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Collection.objects.all()
+
+        return filter_collections_by_user_perms(
+            super().get_queryset(), self.request.user
+        )
 
     @action(detail=True, url_name="collection-archives")
     def collection_archives(self, request, pk=None):
