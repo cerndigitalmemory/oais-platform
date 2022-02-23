@@ -8,12 +8,13 @@ django-tests:
   services:
     - docker:dind
   variables:
-    DOCKER_HOST: tcp://localhost:2375/
-    DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375/
   script:
     - docker-compose -f test-compose.yml up --exit-code-from django
-    
+  tags:
+    - docker-privileged
+
 trigger-deploy:
   stage: deploy
   trigger: digitalmemory/openshift-deploy
