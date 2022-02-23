@@ -23,7 +23,7 @@ def filter_steps_by_user_perms(queryset, user):
 
 
 def filter_collections_by_user_perms(queryset, user):
-    """Filters a queryset of archives based on the user's permissions.
+    """Filters a queryset of collections based on the user's permissions.
 
     In particular, if the user does not have the "oais.can_access_all_archives"
     permission, then the queryset will be filtered to only include archives

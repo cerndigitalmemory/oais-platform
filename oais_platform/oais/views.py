@@ -63,7 +63,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archives = filter_archives_by_user_perms(user.archives.all(), request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
 
-    @action(detail=True, url_name="user-archives-staged")
+    @action(detail=True, url_name="user-archives_staged")
     def archives_staged(self, request, pk=None):
         """
         Gets all the archives for a specific user that are staged (no steps assigned)
@@ -104,7 +104,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         steps = filter_archives_by_user_perms(archive.steps.all(), self.request.user)
         return self.make_paginated_response(archive, ArchiveSerializer)
 
-    @action(detail=True, url_name="get-collections")
+    @action(detail=True, url_name="get_collections")
     def archive_collections(self, request, pk=None):
         """
         Gets in which collections an archive is
@@ -221,10 +221,7 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if add:
             for archive in archives:
-                if type(archive) == int:
-                    collection.add_archive(archive)
-                else:
-                    collection.add_archive(archive["id"])
+                collection.add_archive(archive)
 
         else:
             for archive in archives:
@@ -262,7 +259,7 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         detail=True,
         methods=["POST"],
         url_path="actions/delete",
-        url_name="collections-delete",
+        url_name="collections_delete",
     )
     def delete(self, request, pk=None):
         return self.delete_collection(request, "oais.can_reject_archive")
@@ -311,6 +308,7 @@ def archive_details(self, id):
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def collection_details(self, id):
+
     collection = Collection.objects.get(pk=id)
     serializer = CollectionSerializer(collection, many=False)
     return Response(serializer.data)
@@ -343,6 +341,10 @@ def check_archived_records(request):
     Then returns the list of records with an archive list field which containes the similar archives
     """
     records = request.data["recordList"]
+
+    if records == None:
+        return Response(None)
+
     for record in records:
         try:
             archives = Archive.objects.filter(
@@ -385,10 +387,6 @@ def harvest(request, id):
     Gets a source and the recid, creates an archive object and assigns a harvest step on it
     """
     archive = Archive.objects.get(pk=id)
-    try:
-        url = get_source(archive.source).get_record_url(archive.recid)
-    except InvalidSource:
-        raise BadRequest("Invalid source")
 
     step = Step.objects.create(
         archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
@@ -447,7 +445,7 @@ def upload(request):
     archive = Archive.objects.create(
         recid=recid,
         source=source,
-        defaults={"source_url": url},
+        source_url=url,
         creator=request.user,
     )
 

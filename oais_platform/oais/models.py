@@ -138,6 +138,10 @@ class Collection(models.Model):
     A collection of multiple archives
     """
 
+    permissions = [
+        ("can_access_all_archives"),
+    ]
+
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=50, null=True, default="Untitled")
     description = models.TextField(max_length=1024, null=True, default=None)

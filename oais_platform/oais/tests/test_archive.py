@@ -114,7 +114,7 @@ class ArchiveTests(APITestCase):
     def test_get_steps(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("get-steps", args=[self.archive.id])
+        url = reverse("get_steps", args=[self.archive.id])
         response = self.client.get(
             url,
             format="json",

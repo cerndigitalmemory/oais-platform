@@ -79,7 +79,7 @@ urlpatterns = [
                     name="search_by_id",
                 ),
                 path("search-query/", views.search_query, name="search_query"),
-                path("archive/<int:id>/", views.get_steps, name="get-steps"),
+                path("archive/<int:id>/", views.get_steps, name="get_steps"),
                 path(
                     "archive-details/<int:id>",
                     views.archive_details,
@@ -88,7 +88,7 @@ urlpatterns = [
                 path(
                     "archive/next-step",
                     views.create_next_step,
-                    name="next-step",
+                    name="next_step",
                 ),
                 path(
                     "save-manifest/<int:id>",
@@ -114,27 +114,27 @@ urlpatterns = [
                 path(
                     "collections/<int:pk>/actions/delete/",
                     views.CollectionViewSet.as_view({"post": "delete"}),
-                    name="collections-delete",
+                    name="collections_delete",
                 ),
                 path(
                     "collections/<int:pk>/actions/add/",
                     views.CollectionViewSet.as_view({"post": "add"}),
-                    name="add-to-collection",
+                    name="add_to_collection",
                 ),
                 path(
                     "collections/<int:pk>/actions/remove/",
                     views.CollectionViewSet.as_view({"post": "remove"}),
-                    name="remove-from-collection",
+                    name="remove_from_collection",
                 ),
                 path(
                     "collections/",
                     views.CollectionViewSet.as_view({"get": "get_queryset"}),
-                    name="get-collections",
+                    name="get_collections",
                 ),
                 path(
                     "archive/<int:pk>/get-collections/",
                     views.ArchiveViewSet.as_view({"get": "archive_collections"}),
-                    name="get-collections",
+                    name="get_collections",
                 ),
                 path(
                     # Returns a list of similar archives (with the same recid + source)
@@ -146,7 +146,7 @@ urlpatterns = [
                     # Returns all the archives that are in the staged phase (not in a collection, no step intitiallized)
                     "users/<int:pk>/archives-staged/",
                     views.UserViewSet.as_view({"get": "archives_staged"}),
-                    name="archives-staged",
+                    name="archives_staged",
                 ),
                 path(
                     # Gives a list of archives and returns for each archive a list with all the collections and the duplicates this archive has
@@ -162,7 +162,3 @@ urlpatterns = [
 # Uncomment the following lines to serve the contents of the "static" folder in
 #  the root of the repository as static.
 # (This can be used during development to serve a build of `oais-web`)
-
-from django.conf.urls.static import static
-
-urlpatterns += static("/", document_root="public")
