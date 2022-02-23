@@ -2,18 +2,15 @@ stages:
   - test
   - deploy
 
-django-tests:
+test:
   stage: test
-  image: docker/compose:1.27.4
-  services:
-    - docker:dind
-  variables:
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_HOST: tcp://docker:2375/
+  parallel:
+    matrix:
+      - IMAGE: ["python:3.6", "python:3.7"]
+  image: $IMAGE
   script:
-    - docker-compose -f test-compose.yml up --exit-code-from django
-  tags:
-    - docker-privileged
+    - pip install -r requirements.txt
+    - python manage.py test
 
 trigger-deploy:
   stage: deploy
