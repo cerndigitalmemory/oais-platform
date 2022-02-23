@@ -70,7 +70,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         user = self.get_object()
         archives = filter_archives_by_user_perms(
-            user.archives.filter(last_step__isnull=True, steps__isnull=True),
+            user.archives.filter(
+                last_step__isnull=True,
+                steps__isnull=True,
+                archive_collections__isnull=True,
+            ),
             request.user,
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
