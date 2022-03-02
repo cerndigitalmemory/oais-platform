@@ -11,7 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "permissions"]
+        fields = ["id", "username", "permissions", "first_name", "last_name"]
 
     def get_permissions(self, obj):
         return obj.get_all_permissions()
