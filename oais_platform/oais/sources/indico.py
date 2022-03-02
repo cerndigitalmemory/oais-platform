@@ -44,40 +44,51 @@ class Indico(Source):
         Returns a list of results and a tentatively total numer of results
         """
 
-        # Try to get an idea of the total number of results
-        # Pagination is unreliable on Indico API.
-        # See related ticket: https://github.com/indico/indico/issues/5106
+        # Get the integer of size and page to make calculations
+        size = int(size)
+        page = int(page)
 
-        try:
-            req = requests.get(
-                self.baseURL + "/search/api/search?q=" + query + "&type=event"
-            )
-        except Exception:
-            raise ServiceUnavailable("Cannot perform search")
-        data = json.loads(req.text)
-        total_num_hits = int(data["total"])
+        """
+        Indico search api always returns 10 results per call so in order to 
+        display 10,20 or 50 results we need to make 1, 2 or 5 api calls
+        """
+        number_of_api_calls = int(size) // 10
 
-        # Perform the search
-
-        try:
-            req = requests.get(
-                f"{self.baseURL}/export/event/search/{query}.json?&limit={str(size)}&page={str(page)}&offset={str((int(page) - 1) * (int(size)))}"
-            )
-        except Exception:
-            raise ServiceUnavailable("Cannot perform search")
-
-        if not req.ok:
-            raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
-
-        # Parse JSON response
-        data = json.loads(req.text)
-        # Gets the results from the parsed JSON
-        records = data["results"]
+        """
+        In order for pagination to work we need to skip the number of pages for which
+        we did the extra api calls on the step above.
+        """
+        actual_page = page + (number_of_api_calls - 1) * (page - 1)
         results = []
 
-        # for each record get the recid, the url, the title and the source
-        for record in records:
-            results.append(self.parse_record(record))
+        # Makes the api calls to get the results
+        for api_page in range(number_of_api_calls):
+            try:
+                req = requests.get(
+                    self.baseURL
+                    + "/search/api/search?q="
+                    + query
+                    + "&type=event"
+                    + f"&page={api_page + actual_page}"
+                )
+            except Exception:
+                raise ServiceUnavailable("Cannot perform search")
+            data = json.loads(req.text)
+            total_num_hits = int(data["total"])
+
+            if not req.ok:
+                raise ServiceUnavailable(
+                    f"Search failed with error code {req.status_code}"
+                )
+
+            # Parse JSON response
+
+            # Gets the results from the parsed JSON
+            records = data["results"]
+
+            # for each record get the recid, the url, the title and the source
+            for record in records:
+                results.append(self.parse_record(record))
 
         return {"total_num_hits": total_num_hits, "results": results}
 
@@ -104,7 +115,7 @@ class Indico(Source):
         """
         Parses each record returned from the API and returns the necessairy values
         """
-        recid = record["id"]
+        recid = record["event_id"]
         if not isinstance(recid, str):
             recid = str(recid)
 
@@ -114,6 +125,6 @@ class Indico(Source):
             "url": url,
             "recid": recid,
             "title": record["title"],
-            "authors": [],
+            "authors": record["persons"],
             "source": self.source,
         }
