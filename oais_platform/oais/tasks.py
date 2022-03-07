@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from logging import log
+from distutils.dir_util import copy_tree, mkpath
 
 from amclient import AMClient
 from bagit_create import main as bic
@@ -280,9 +281,13 @@ def archivematica(self, archive_id, step_id, input_data):
 
     # Copy the folders and the contents to the archivematica transfer source folder
     try:
-        shutil.copytree(path_to_sip, system_dst)
+        mkpath(path_to_sip, mode=0o777)
+        copy_tree(path_to_sip, system_dst, update=1)
     except FileExistsError:
-        logging.warning("File exists.")
+        print("File exists.")
+    except Exception as e:
+        step = Step.objects.get(pk=step_id)
+        step.set_status(Status.FAILED)
 
     # Get configuration from archivematica from settings
     am = AMClient()
