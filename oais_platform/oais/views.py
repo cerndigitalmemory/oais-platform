@@ -533,7 +533,7 @@ def search_by_id(request, source, recid):
 
 
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+# @permission_classes([permissions.IsAuthenticated])
 def search_query(request):
     """
     Gets the API request from the ReactSearchkit component and returns
@@ -702,6 +702,43 @@ def get_detailed_archives(request):
             archive["duplicates"] = None
 
     return Response(archives)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def get_steps_status(request):
+    """
+    Gets all the steps for a specific user and status
+    """
+    try:
+        status = request.data["status"]
+    except KeyError:
+        status = None
+
+    try:
+        name = request.data["name"]
+    except KeyError:
+        name = None
+
+    user = request.user
+
+    if status and name:
+        steps = Step.objects.filter(
+            status=status, name=name, archive__creator=user
+        ).order_by("-start_date")
+    elif status:
+        steps = Step.objects.filter(status=status, archive__creator=user).order_by(
+            "-start_date"
+        )
+    elif name:
+        steps = Step.objects.filter(name=name, archive__creator=user).order_by(
+            "-start_date"
+        )
+    else:
+        steps = Step.objects.all().order_by("-start_date")
+    filtered_steps = filter_steps_by_user_perms(steps, request.user)
+    serializer = StepSerializer(filtered_steps, many=True)
+    return Response(serializer.data)
 
 
 @api_view(["POST"])

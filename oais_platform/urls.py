@@ -154,6 +154,11 @@ urlpatterns = [
                     views.get_detailed_archives,
                     name="get_detailed_archives",
                 ),
+                path(
+                    "get-steps-status/",
+                    views.get_steps_status,
+                    name="get_steps_status",
+                ),
             ]
         ),
     ),
