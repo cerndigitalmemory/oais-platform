@@ -6,6 +6,8 @@ import subprocess
 import time
 import zipfile
 
+from urllib.parse import unquote, urlparse
+from pathlib import Path, PurePosixPath
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
@@ -771,6 +773,39 @@ def save_manifest(request, id):
         step.set_status(Status.FAILED)
         step.set_finish_date()
         raise BadRequest("An error occured while saving the manifests.")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def parse_url(request):
+
+    url = request.data["url"]
+
+    # To be replaced by utils
+    o = urlparse(url)
+    if o.hostname == "cds.cern.ch":
+        source = "cds"
+    elif o.hostname == "opendata.cern.ch":
+        source = "cod"
+    elif o.hostname == "zenodo.org":
+        source = "zenodo"
+    else:
+        raise BadRequest(
+            "Unable to parse the given URL. Try manually passing the source and the record ID."
+        )
+
+    path_parts = PurePosixPath(unquote(urlparse(url).path)).parts
+
+    # Ensures the path is in the form /record/<RECORD_ID>
+    if path_parts[0] == "/" and path_parts[1] == "record":
+        # The ID is the second part of the path
+        recid = path_parts[2]
+    else:
+        raise BadRequest(
+            "Unable to parse the given URL. Try manually passing the source and the record ID."
+        )
+
+    return Response({"recid": recid, "source": source})
 
 
 @api_view(["POST"])

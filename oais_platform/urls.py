@@ -159,6 +159,11 @@ urlpatterns = [
                     views.get_steps_status,
                     name="get_steps_status",
                 ),
+                path(
+                    "parse-url/",
+                    views.parse_url,
+                    name="parse_url",
+                ),
             ]
         ),
     ),
