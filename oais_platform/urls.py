@@ -65,8 +65,11 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
+                path("harvest/<int:id>/", views.harvest, name="harvest"),
                 path(
-                    "harvest/<str:recid>/<str:source>/", views.harvest, name="harvest"
+                    "create-archive/<str:recid>/<str:source>/",
+                    views.create_archive,
+                    name="create_archive",
                 ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
@@ -76,7 +79,7 @@ urlpatterns = [
                     name="search_by_id",
                 ),
                 path("search-query/", views.search_query, name="search_query"),
-                path("archive/<int:id>/", views.get_steps, name="get-steps"),
+                path("archive/<int:id>/", views.get_steps, name="get_steps"),
                 path(
                     "archive-details/<int:id>",
                     views.archive_details,
@@ -85,7 +88,7 @@ urlpatterns = [
                 path(
                     "archive/next-step",
                     views.create_next_step,
-                    name="next-step",
+                    name="next_step",
                 ),
                 path(
                     "save-manifest/<int:id>",
@@ -99,29 +102,67 @@ urlpatterns = [
                     name="collection_details",
                 ),
                 path(
+                    "record-check/",
+                    views.check_archived_records,
+                    name="check_archived_records",
+                ),
+                path(
                     "create-collection/",
                     views.create_collection,
                     name="create_collection",
                 ),
                 path(
-                    "collections/<int:id>/actions/delete/",
+                    "collections/<int:pk>/actions/delete/",
                     views.CollectionViewSet.as_view({"post": "delete"}),
-                    name="collections-delete",
+                    name="collections_delete",
                 ),
                 path(
-                    "collections/<int:id>/actions/add/",
+                    "collections/<int:pk>/actions/add/",
                     views.CollectionViewSet.as_view({"post": "add"}),
-                    name="add-to-collection",
+                    name="add_to_collection",
                 ),
                 path(
-                    "collections/<int:id>/actions/remove/",
+                    "collections/<int:pk>/actions/remove/",
                     views.CollectionViewSet.as_view({"post": "remove"}),
-                    name="remove-from-collection",
+                    name="remove_from_collection",
                 ),
                 path(
                     "collections/",
                     views.CollectionViewSet.as_view({"get": "get_queryset"}),
-                    name="get-collections",
+                    name="get_collections",
+                ),
+                path(
+                    "archive/<int:pk>/get-collections/",
+                    views.ArchiveViewSet.as_view({"get": "archive_collections"}),
+                    name="get_collections",
+                ),
+                path(
+                    # Returns a list of similar archives (with the same recid + source)
+                    "archive/<int:pk>/search/",
+                    views.ArchiveViewSet.as_view({"get": "archive_search"}),
+                    name="search",
+                ),
+                path(
+                    # Returns all the archives that are in the staged phase (not in a collection, no step intitiallized)
+                    "users/<int:pk>/archives-staged/",
+                    views.UserViewSet.as_view({"get": "archives_staged"}),
+                    name="archives_staged",
+                ),
+                path(
+                    # Gives a list of archives and returns for each archive a list with all the collections and the duplicates this archive has
+                    "get-detailed/",
+                    views.get_detailed_archives,
+                    name="get_detailed_archives",
+                ),
+                path(
+                    "get-steps-status/",
+                    views.get_steps_status,
+                    name="get_steps_status",
+                ),
+                path(
+                    "parse-url/",
+                    views.parse_url,
+                    name="parse_url",
                 ),
             ]
         ),

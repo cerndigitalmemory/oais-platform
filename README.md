@@ -60,7 +60,7 @@ To run these commands inside a Docker container, prefix them with `docker exec -
 ```bash
 # python manage.py showmigrations
 # Prepare migrations
-python manage.py makemigrations
+python manage.py makemigrations oais
 # Apply migrations
 python manage.py migrate
 # Create administrator user
@@ -73,6 +73,14 @@ python manage.py runserver
 
 ```bash
 python manage.py test
+```
+
+With docker-compose:
+
+```bash
+docker-compose down
+docker volume prune -y
+docker-compose -f test-compose.yml up --exit-code-from django
 ```
 
 ## Configuration
