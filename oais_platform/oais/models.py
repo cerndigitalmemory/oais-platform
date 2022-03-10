@@ -77,6 +77,9 @@ class Archive(models.Model):
         self.manifest = manifest_json
         self.save()
 
+    def get_collections(self):
+        return self.archive_collections.all()
+
 
 class Step(models.Model):
     """
@@ -135,6 +138,10 @@ class Collection(models.Model):
     A collection of multiple archives
     """
 
+    permissions = [
+        ("can_access_all_archives"),
+    ]
+
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=50, null=True, default="Untitled")
     description = models.TextField(max_length=1024, null=True, default=None)
@@ -143,7 +150,9 @@ class Collection(models.Model):
     )
     timestamp = models.DateTimeField(default=timezone.now)
     last_modification_date = models.DateTimeField(default=timezone.now)
-    archives = models.ManyToManyField(Archive)
+    archives = models.ManyToManyField(
+        Archive, blank=True, related_name="archive_collections"
+    )
 
     class Meta:
         ordering = ["-id"]

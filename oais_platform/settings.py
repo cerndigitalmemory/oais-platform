@@ -220,14 +220,14 @@ sentry_sdk.init(
 # ARCHIVEMATICA SETTINGS
 
 # add the URL archivematica is running, username and password
-AM_URL = "http://127.0.0.1:62080"
+AM_URL = "http://127.0.0.1:2080"
 AM_USERNAME = "test"
 AM_API_KEY = "test"
 
 # add the UUID of the transfer source
-AM_TRANSFER_SOURCE = "0f409b5d-7925-4c8d-b476-1932ab51402c"
+AM_TRANSFER_SOURCE = "6acde1a5-6f5a-4d66-8e3f-79f193baf62e"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/home/username/a3m/archivematica/hack/submodules/archivematica-sampledata/oais-data"
+AM_ABS_DIRECTORY = "/mnt/am_folder/oais-data"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"

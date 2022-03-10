@@ -15,8 +15,9 @@ class HarvestTests(APITestCase):
         self.user = User.objects.create_user("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
-    def test_harvest_wrong_source(self):
-        url = reverse("harvest", args=["1", "wrong"])
+    def test_wrong_source(self):
+
+        url = reverse("create_archive", args=["1", "wrong"])
         response = self.client.post(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -26,10 +27,11 @@ class HarvestTests(APITestCase):
 
     @patch("oais_platform.oais.views.get_source")
     def test_harvest(self, get_source):
+
         source = TestSource()
         get_source.return_value = source
 
-        url = reverse("harvest", args=["1", "test"])
+        url = reverse("create_archive", args=["1", "test"])
         response = self.client.post(url, format="json", follow=True)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -39,9 +41,16 @@ class HarvestTests(APITestCase):
             self.assertEqual(args, mock.call("test"))
 
         self.assertEqual(Archive.objects.count(), 1)
-        self.assertEqual(Step.objects.count(), 1)
+        self.assertEqual(Step.objects.count(), 0)
 
         archive = Archive.objects.all()[0]
+
+        url = reverse("harvest", args=[archive.id])
+        response = self.client.post(url, format="json", follow=True)
+
+        self.assertEqual(Archive.objects.count(), 1)
+        self.assertEqual(Step.objects.count(), 1)
+
         step = Step.objects.all()[0]
 
         self.assertEqual(step.archive, archive)
@@ -54,8 +63,11 @@ class HarvestTests(APITestCase):
 
     def test_harvest_not_authenticated(self):
         self.client.force_authenticate(user=None)
+        self.archive1 = Archive.objects.create(
+            recid="1", source="test", source_url="", creator=self.user
+        )
 
-        url = reverse("harvest", args=["1", "test"])
+        url = reverse("harvest", args=[self.archive1.id])
         response = self.client.post(url, format="json", follow=True)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

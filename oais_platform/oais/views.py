@@ -1,3 +1,4 @@
+import collections
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
     filter_steps_by_user_perms,
+    filter_collections_by_user_perms,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -24,6 +26,7 @@ from oais_platform.oais.serializers import (
     LoginSerializer,
     StepSerializer,
     UserSerializer,
+    CollectionSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
@@ -53,8 +56,27 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     @action(detail=True, url_name="user-archives")
     def archives(self, request, pk=None):
+        """
+        Gets all the archives for a specific user
+        """
         user = self.get_object()
         archives = filter_archives_by_user_perms(user.archives.all(), request.user)
+        return self.make_paginated_response(archives, ArchiveSerializer)
+
+    @action(detail=True, url_name="user-archives_staged")
+    def archives_staged(self, request, pk=None):
+        """
+        Gets all the archives for a specific user that are staged (no steps assigned)
+        """
+        user = self.get_object()
+        archives = filter_archives_by_user_perms(
+            user.archives.filter(
+                last_step__isnull=True,
+                steps__isnull=True,
+                archive_collections__isnull=True,
+            ),
+            request.user,
+        )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
 
@@ -85,6 +107,39 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         steps = filter_archives_by_user_perms(archive.steps.all(), self.request.user)
         return self.make_paginated_response(archive, ArchiveSerializer)
+
+    @action(detail=True, url_name="get_collections")
+    def archive_collections(self, request, pk=None):
+        """
+        Gets in which collections an archive is
+        """
+        archive = self.get_object()
+        collections = filter_collections_by_user_perms(
+            archive.get_collections(), self.request.user
+        )
+        return self.make_paginated_response(collections, CollectionSerializer)
+
+    @action(detail=True, url_name="search")
+    def archive_search(self, request, pk=None):
+        """
+        Searches if there are other archives of the same source and recid
+        """
+        archive = self.get_object()
+        try:
+            archives = Archive.objects.filter(
+                recid__contains=archive.recid, source__contains=archive.source
+            )
+            serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    archives,
+                    self.request.user,
+                ),
+                many=True,
+            )
+            return Response(serializer.data)
+        except Archive.DoesNotExist:
+            archives = None
+            return Response()
 
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
@@ -144,7 +199,10 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Collection.objects.all()
+
+        return filter_collections_by_user_perms(
+            super().get_queryset(), self.request.user
+        )
 
     @action(detail=True, url_name="collection-archives")
     def collection_archives(self, request, pk=None):
@@ -171,7 +229,10 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         else:
             for archive in archives:
-                collection.remove_archive(archive)
+                if type(archive) == int:
+                    collection.remove_archive(archive)
+                else:
+                    collection.remove_archive(archive["id"])
 
         collection.set_modification_timestamp()
         collection.save()
@@ -202,7 +263,7 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         detail=True,
         methods=["POST"],
         url_path="actions/delete",
-        url_name="collections-delete",
+        url_name="collections_delete",
     )
     def delete(self, request, pk=None):
         return self.delete_collection(request, "oais.can_reject_archive")
@@ -251,6 +312,7 @@ def archive_details(self, id):
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def collection_details(self, id):
+
     collection = Collection.objects.get(pk=id)
     serializer = CollectionSerializer(collection, many=False)
     return Response(serializer.data)
@@ -277,6 +339,37 @@ def create_collection(request):
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
+def check_archived_records(request):
+    """
+    Gets a list of records and searches the database for similar archives (same recid + source)
+    Then returns the list of records with an archive list field which containes the similar archives
+    """
+    records = request.data["recordList"]
+
+    if records == None:
+        return Response(None)
+
+    for record in records:
+        try:
+            archives = Archive.objects.filter(
+                recid__contains=record["recid"], source__contains=record["source"]
+            )
+            serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    archives,
+                    request.user,
+                ),
+                many=True,
+            )
+            record["archives"] = serializer.data
+        except Archive.DoesNotExist:
+            record["archives"] = None
+
+    return Response(records)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def create_next_step(request):
 
     next_step = request.data["next_step"]
@@ -293,21 +386,38 @@ def create_next_step(request):
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
-def harvest(request, recid, source):
+def harvest(request, id):
+    """
+    Gets a source and the recid, creates an archive object and assigns a harvest step on it
+    """
+    archive = Archive.objects.get(pk=id)
+
+    step = Step.objects.create(
+        archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
+    )
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_archive(request, recid, source):
+    """
+    Gets a source and the recid and creates an archive object
+    """
     try:
         url = get_source(source).get_record_url(recid)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    archive, _ = Archive.objects.get_or_create(
+    # Always create a new archive instance
+    archive = Archive.objects.create(
         recid=recid,
         source=source,
         source_url=url,
         creator=request.user,
-    )
-
-    step = Step.objects.create(
-        archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
     )
 
     return redirect(
@@ -335,10 +445,11 @@ def upload(request):
     except InvalidSource:
         raise BadRequest("Invalid source")
 
-    archive, _ = Archive.objects.get_or_create(
+    # Always create a new Archive instance
+    archive = Archive.objects.create(
         recid=recid,
         source=source,
-        defaults={"source_url": url},
+        source_url=url,
         creator=request.user,
     )
 
@@ -422,7 +533,7 @@ def search_by_id(request, source, recid):
 
 
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+# @permission_classes([permissions.IsAuthenticated])
 def search_query(request):
     """
     Gets the API request from the ReactSearchkit component and returns
@@ -551,6 +662,82 @@ def search_query(request):
 @permission_classes([permissions.IsAuthenticated])
 def me(request):
     serializer = UserSerializer(request.user)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def get_detailed_archives(request):
+    """
+    Given a list of Archives, returns more information like steps, collection and duplicates
+    """
+    archives = request.data["archives"]
+    for archive in archives:
+        id = archive["id"]
+        current_archive = Archive.objects.get(pk=id)
+        serialized_archive_collections = filter_collections_by_user_perms(
+            current_archive.get_collections(), request.user
+        )
+        serialized_collections = CollectionSerializer(
+            serialized_archive_collections, many=True
+        )
+        archive["collections"] = serialized_collections.data
+
+        steps = current_archive.steps.all().order_by("start_date")
+        steps_serializer = StepSerializer(steps, many=True)
+        archive["steps"] = steps_serializer.data
+
+        try:
+            duplicates = Archive.objects.filter(
+                recid__contains=archive["recid"], source__contains=archive["source"]
+            ).exclude(id__contains=archive["id"])
+            archive_serializer = ArchiveSerializer(
+                filter_archives_by_user_perms(
+                    duplicates,
+                    request.user,
+                ),
+                many=True,
+            )
+            archive["duplicates"] = archive_serializer.data
+        except Archive.DoesNotExist:
+            archive["duplicates"] = None
+
+    return Response(archives)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def get_steps_status(request):
+    """
+    Gets all the steps for a specific user and status
+    """
+    try:
+        status = request.data["status"]
+    except KeyError:
+        status = None
+
+    try:
+        name = request.data["name"]
+    except KeyError:
+        name = None
+
+    user = request.user
+
+    if status and name:
+        steps = Step.objects.filter(
+            status=status, name=name, archive__creator=user
+        ).order_by("-start_date")
+    elif status:
+        steps = Step.objects.filter(status=status, archive__creator=user).order_by(
+            "-start_date"
+        )
+    elif name:
+        steps = Step.objects.filter(name=name, archive__creator=user).order_by(
+            "-start_date"
+        )
+    else:
+        steps = Step.objects.all().order_by("-start_date")
+    filtered_steps = filter_steps_by_user_perms(steps, request.user)
+    serializer = StepSerializer(filtered_steps, many=True)
     return Response(serializer.data)
 
 

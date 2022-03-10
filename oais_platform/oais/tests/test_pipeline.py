@@ -22,7 +22,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next-step")
+        url = reverse("next_step")
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.HARVEST},
@@ -40,7 +40,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next-step")
+        url = reverse("next_step")
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.VALIDATION},
@@ -58,7 +58,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next-step")
+        url = reverse("next_step")
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.CHECKSUM},
@@ -76,7 +76,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next-step")
+        url = reverse("next_step")
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.ARCHIVE},
