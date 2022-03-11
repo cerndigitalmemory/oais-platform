@@ -378,7 +378,24 @@ def create_next_step(request):
     archive = request.data["archive"]
 
     if int(next_step) in Steps:
-        next_step = create_step(next_step, archive["id"], archive["last_step"])
+        """
+        If the next step is harvest, a harvest step waiting in approval should be created and not to initiate the harvest process.
+        When the harvest step has been spawned, remove the Harvest from the next steps list so it cannot be initiated again.
+        """
+        if next_step == Steps.HARVEST:
+            archive = Archive.objects.get(pk=archive["id"])
+            step = Step.objects.create(
+                archive=archive,
+                name=Steps.HARVEST,
+                status=Status.WAITING_APPROVAL,
+            )
+            next_steps_list = archive.next_steps
+            next_steps_list.remove(Steps.HARVEST)
+            archive.next_steps = next_steps_list
+            archive.save()
+            return Response()
+        else:
+            next_step = create_step(next_step, archive["id"], archive["last_step"])
     else:
         raise Exception("Wrong Step input")
 
@@ -420,6 +437,8 @@ def create_archive(request, recid, source):
         source=source,
         source_url=url,
         creator=request.user,
+        # Add as a next step the harvest step
+        next_steps=[Steps.HARVEST],
     )
 
     return redirect(
