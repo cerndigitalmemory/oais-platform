@@ -14,7 +14,11 @@ class PipelineTests(APITestCase):
         self.other_user = User.objects.create_user("other", password="pw")
 
         self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", creator=self.creator
+            recid="1",
+            source="test",
+            source_url="",
+            creator=self.creator,
+            next_steps=[Steps.HARVEST],
         )
 
     def test_create_step_harvest(self):
@@ -33,7 +37,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.HARVEST)
-        self.assertEqual(response.data["status"], Status.IN_PROGRESS)
+        self.assertEqual(response.data["status"], Status.WAITING_APPROVAL)
 
     def test_create_step_validate(self):
         self.client.force_authenticate(user=self.creator)

@@ -384,7 +384,7 @@ def create_next_step(request):
         """
         if next_step == Steps.HARVEST:
             archive = Archive.objects.get(pk=archive["id"])
-            step = Step.objects.create(
+            new_step = Step.objects.create(
                 archive=archive,
                 name=Steps.HARVEST,
                 status=Status.WAITING_APPROVAL,
@@ -393,7 +393,8 @@ def create_next_step(request):
             next_steps_list.remove(Steps.HARVEST)
             archive.next_steps = next_steps_list
             archive.save()
-            return Response()
+            serializer = StepSerializer(new_step, many=False)
+            return Response(serializer.data)
         else:
             next_step = create_step(next_step, archive["id"], archive["last_step"])
     else:
