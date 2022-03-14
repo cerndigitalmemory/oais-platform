@@ -1,5 +1,7 @@
 # OAIS platform
 
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) ![Python 3.7](https://img.shields.io/badge/python-3.7-blue.svg)
+
 Web API, built on Django, managing workflows for the CERN Digital Memory OAIS platform.
 
 Main goals of the platforms are:
@@ -82,6 +84,8 @@ docker-compose down
 docker volume prune -y
 docker-compose -f test-compose.yml up --exit-code-from django
 ```
+
+Code is formatted using **black** and linted with **flake8**. A VSCode settings file is provided for convenience.
 
 ## Configuration
 
