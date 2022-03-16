@@ -80,7 +80,7 @@ class Invenio(Source):
 
             results.append(
                 {
-                    "url": get_dict_value(record, url_key_list),
+                    "source_url": get_dict_value(record, url_key_list),
                     "recid": recid,
                     "title": get_dict_value(record, title_key_list),
                     "authors": authors,
@@ -128,7 +128,7 @@ class Invenio(Source):
         title_key_list = self.config["title"].split(",")
 
         return {
-            "url": get_dict_value(record, url_key_list),
+            "source_url": get_dict_value(record, url_key_list),
             "recid": recid,
             "title": get_dict_value(record, title_key_list),
             "authors": authors,
