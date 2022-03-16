@@ -107,7 +107,7 @@ class Indico(Source):
         if req.ok:
             record = json.loads(req.text)
             record_list = record["results"]
-            result.append(self.parse_record(record_list[0]))
+            result.append(self.parse_record_by_id(record_list[0]))
 
         return {"result": result}
 
@@ -126,5 +126,23 @@ class Indico(Source):
             "recid": recid,
             "title": record["title"],
             "authors": record["persons"],
+            "source": self.source,
+        }
+
+    def parse_record_by_id(self, record):
+        """
+        Parses each record returned from the API and returns the necessairy values
+        """
+        recid = record["id"]
+        if not isinstance(recid, str):
+            recid = str(recid)
+
+        url = self.get_record_url(recid)
+
+        return {
+            "url": url,
+            "recid": recid,
+            "title": record["title"],
+            "authors": [record["creator"]],
             "source": self.source,
         }
