@@ -85,7 +85,7 @@ class CDS(Source):
             title = meeting_name["a"]
 
         return {
-            "url": self.get_record_url(recid),
+            "source_url": self.get_record_url(recid),
             "recid": recid,
             "title": title,
             "authors": authors,
