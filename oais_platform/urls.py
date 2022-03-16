@@ -25,6 +25,7 @@ router.register(r"groups", views.GroupViewSet)
 router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
 router.register(r"collections", views.CollectionViewSet)
+router.register(r"records", views.RecordViewSet)
 
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -71,6 +72,27 @@ urlpatterns = [
                     views.create_archive,
                     name="create_archive",
                 ),
+                path(
+                    "create-archive-from-record/<str:id>/",
+                    views.create_archive_from_record,
+                    name="create_archive",
+                ),
+                path(
+                    "create-record/",
+                    views.create_record,
+                    name="create_record",
+                ),
+                path(
+                    "records/<int:pk>/actions/delete/",
+                    views.RecordViewSet.as_view({"post": "delete"}),
+                    name="collections_delete",
+                ),
+                path(
+                    "records/<int:pk>/actions/set/",
+                    views.RecordViewSet.as_view({"post": "set"}),
+                    name="set_record_tag",
+                ),
+                path("delete-records/", views.delete_records, name="delete_records"),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -101,6 +123,7 @@ urlpatterns = [
                     views.collection_details,
                     name="collection_details",
                 ),
+                path("all-tags/", views.get_all_tags, name="get_all_tags"),
                 path(
                     "record-check/",
                     views.check_archived_records,

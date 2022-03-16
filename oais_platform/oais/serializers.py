@@ -1,7 +1,7 @@
 from re import S
 
 from django.contrib.auth.models import Group, User
-from oais_platform.oais.models import Archive, Collection, Step
+from oais_platform.oais.models import Archive, Collection, Step, Record
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
 
@@ -79,6 +79,25 @@ class CollectionSerializer(serializers.ModelSerializer):
             "timestamp",
             "last_modification_date",
             "archives",
+        ]
+
+
+class RecordSerializer(serializers.ModelSerializer):
+    tags = CollectionSerializer(many=True)
+    record_creator = UserSerializer()
+
+    class Meta:
+        model = Record
+        fields = [
+            "id",
+            "source_url",
+            "title",
+            "recid",
+            "source",
+            "record_creator",
+            "timestamp",
+            "authors",
+            "tags",
         ]
 
 

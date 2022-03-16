@@ -15,11 +15,12 @@ from django.db.models import base
 from django.shortcuts import redirect
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
+from oais_platform.oais.models import Archive, Collection, Status, Step, Steps, Record
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
     filter_steps_by_user_perms,
     filter_collections_by_user_perms,
+    filter_records_by_user_perms,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -27,6 +28,7 @@ from oais_platform.oais.serializers import (
     GroupSerializer,
     LoginSerializer,
     StepSerializer,
+    RecordSerializer,
     UserSerializer,
     CollectionSerializer,
 )
@@ -271,6 +273,56 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return self.delete_collection(request, "oais.can_reject_archive")
 
 
+class RecordViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Record.objects.all().order_by("-id")
+    serializer_class = RecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return filter_records_by_user_perms(super().get_queryset(), self.request.user)
+
+    def set_record_tag(self, request, permission):
+        user = request.user
+        # if not user.has_perm(permission):
+        #     raise PermissionDenied()
+
+        if request.data["tags"] == None:
+            raise Exception("No tags selected")
+        else:
+            tags = request.data["tags"]
+
+        with transaction.atomic():
+            record = self.get_object()
+
+        record.tags.set(tags)
+
+        serializer = self.get_serializer(record)
+        return Response(serializer.data)
+
+    def delete_record(self, request, permission):
+        user = request.user
+
+        with transaction.atomic():
+            record = self.get_object()
+
+        record.delete()
+
+        return Response()
+
+    @action(detail=True, methods=["POST"], url_path="actions/set")
+    def set_tag(self, request, pk=None):
+        return self.set_record_tag(request, "oais.can_approve_archive")
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="actions/delete",
+        url_name="collections_delete",
+    )
+    def delete(self, request, pk=None):
+        return self.delete_record(request, "oais.can_reject_archive")
+
+
 @api_view(["GET"])
 def get_settings(request):
     try:
@@ -317,6 +369,22 @@ def collection_details(self, id):
 
     collection = Collection.objects.get(pk=id)
     serializer = CollectionSerializer(collection, many=False)
+    return Response(serializer.data)
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def get_all_tags(request):
+    """
+    Returns a list of all the available tags for a single user
+    """
+    try:
+        user = request.user
+    except InvalidSource:
+        raise BadRequest("Invalid request")
+
+    collections = Collection.objects.filter(creator=user)
+    serializer = CollectionSerializer(collections, many=True)
     return Response(serializer.data)
 
 
@@ -425,6 +493,74 @@ def create_archive(request, recid, source):
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
     )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_archive_from_record(request, id):
+    """
+    Gets a record, creates an archive object and then deletes the record
+    """
+    try:
+        record = Record.objects.get(pk=id)
+    except InvalidSource:
+        raise BadRequest("Invalid record")
+
+    # Always create a new archive instance
+    archive = Archive.objects.create(
+        recid=record.recid,
+        source=record.source,
+        source_url=record.source_url,
+        creator=request.user,
+    )
+    if record.tags.exists():
+        for tag in record.tags.all():
+            tag.add_archive(archive)
+
+    record.delete()
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_record(request):
+    """
+    Gets a source and the recid and creates a record object
+    """
+    try:
+        record = request.data["record"]
+    except InvalidSource:
+        raise BadRequest("Invalid source")
+
+    # Always create a new record instance
+    record = Record.objects.create(
+        recid=record["recid"],
+        source=record["source"],
+        source_url=record["url"],
+        title=record["title"],
+        record_creator=request.user,
+    )
+
+    return Response()
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def delete_records(request):
+    """
+    Deletes all the staged records of a specific user
+    """
+    try:
+        user = request.user
+    except InvalidSource:
+        raise BadRequest("Invalid request")
+
+    Record.objects.filter(record_creator=user).delete()
+
+    return Response()
 
 
 @api_view(["POST"])
