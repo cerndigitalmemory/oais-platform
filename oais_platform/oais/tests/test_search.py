@@ -50,6 +50,6 @@ class SearchTests(APITestCase):
         self.assertEqual(len(response.data["results"]), 1)
         record = response.data["results"][0]
         self.assertEqual(record["recid"], "1")
-        self.assertEqual(record["url"], source.get_record_url("1"))
+        self.assertEqual(record["source_url"], source.get_record_url("1"))
         self.assertEqual(record["title"], "query")
         self.assertEqual(record["source"], "test")
