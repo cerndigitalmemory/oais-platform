@@ -122,7 +122,7 @@ class Indico(Source):
         url = self.get_record_url(recid)
 
         return {
-            "url": url,
+            "source_url": url,
             "recid": recid,
             "title": record["title"],
             "authors": record["persons"],

@@ -11,7 +11,7 @@ class TestSource(Source):
             "total_num_hits": 1,
             "results": [
                 {
-                    "url": self.get_record_url("1"),
+                    "source_url": self.get_record_url("1"),
                     "recid": "1",
                     "title": query,
                     "authors": [],
@@ -24,7 +24,7 @@ class TestSource(Source):
         return {
             "result": [
                 {
-                    "url": self.get_record_url("1"),
+                    "source_url": self.get_record_url("1"),
                     "recid": "1",
                     "title": "test",
                     "authors": [],
