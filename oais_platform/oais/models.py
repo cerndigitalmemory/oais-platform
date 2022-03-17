@@ -47,6 +47,8 @@ class Archive(models.Model):
     path_to_sip = models.CharField(max_length=100)
     next_steps = models.JSONField(max_length=50, default=list)
     manifest = models.JSONField(default=None, null=True)
+    staged = models.BooleanField(default=False)
+    title = models.CharField(max_length=255, default="")
 
     class Meta:
         ordering = ["-id"]
@@ -79,6 +81,10 @@ class Archive(models.Model):
 
     def get_collections(self):
         return self.archive_collections.all()
+
+    def set_unstaged(self):
+        self.staged = False
+        self.save()
 
 
 class Step(models.Model):

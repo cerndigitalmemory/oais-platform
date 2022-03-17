@@ -58,6 +58,8 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "path_to_sip",
             "next_steps",
             "manifest",
+            "staged",
+            "title",
         ]
 
     def get_last_step(self, instance):

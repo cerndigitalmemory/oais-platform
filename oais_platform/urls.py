@@ -73,6 +73,11 @@ urlpatterns = [
                     name="create_archive",
                 ),
                 path(
+                    "create-staged-archive/",
+                    views.create_staged_archive,
+                    name="create_staged_archive",
+                ),
+                path(
                     "create-archive-from-record/<str:id>/",
                     views.create_archive_from_record,
                     name="create_archive",
@@ -158,6 +163,21 @@ urlpatterns = [
                     "archive/<int:pk>/get-collections/",
                     views.ArchiveViewSet.as_view({"get": "archive_collections"}),
                     name="get_collections",
+                ),
+                path(
+                    "archive/<int:pk>/unstage/",
+                    views.ArchiveViewSet.as_view({"get": "archive_unstage"}),
+                    name="archive_unstage",
+                ),
+                path(
+                    "archive/<int:pk>/delete/",
+                    views.ArchiveViewSet.as_view({"get": "archive_delete"}),
+                    name="archive_delete",
+                ),
+                path(
+                    "staged-archives/",
+                    views.get_staged_archives,
+                    name="staged_archives",
                 ),
                 path(
                     # Returns a list of similar archives (with the same recid + source)

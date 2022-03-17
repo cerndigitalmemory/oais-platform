@@ -145,6 +145,27 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = None
             return Response()
 
+    @action(detail=True, url_name="unstage")
+    def archive_unstage(self, request, pk=None):
+        archive = self.get_object()
+        archive.set_unstaged()
+
+        serializer = ArchiveSerializer(
+            filter_archives_by_user_perms(
+                archive,
+                self.request.user,
+            ),
+            many=False,
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, url_name="delete")
+    def archive_delete(self, request, pk=None):
+        archive = self.get_object()
+        archive.delete()
+
+        return Response()
+
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Step.objects.all().order_by("-start_date")
@@ -228,15 +249,21 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             collection = self.get_object()
 
         if add:
-            for archive in archives:
-                collection.add_archive(archive)
+            if archives is list:
+                for archive in archives:
+                    collection.add_archive(archive)
+            else:
+                collection.add_archive(archives)
 
         else:
-            for archive in archives:
-                if type(archive) == int:
-                    collection.remove_archive(archive)
-                else:
-                    collection.remove_archive(archive["id"])
+            if archives is list:
+                for archive in archives:
+                    if type(archive) == int:
+                        collection.remove_archive(archive)
+                    else:
+                        collection.remove_archive(archive["id"])
+            else:
+                collection.remove_archive(archives)
 
         collection.set_modification_timestamp()
         collection.save()
@@ -493,6 +520,45 @@ def create_archive(request, recid, source):
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
     )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_staged_archive(request):
+    """
+    Gets a source and the recid and creates a staged archive object
+    """
+    record = request.data["record"]
+
+    # Always create a new archive instance
+    archive = Archive.objects.create(
+        recid=record["recid"],
+        source=record["source"],
+        source_url=record["url"],
+        title=record["title"],
+        creator=request.user,
+        staged=True,
+    )
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def get_staged_archives(request):
+    """
+    Get all staged archives
+    """
+    try:
+        user = request.user
+    except InvalidSource:
+        raise BadRequest("Invalid request")
+
+    archives = Archive.objects.filter(staged=True, creator=user)
+    serializer = ArchiveSerializer(archives, many=True)
+    return Response(serializer.data)
 
 
 @api_view(["POST"])
