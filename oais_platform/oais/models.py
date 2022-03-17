@@ -182,37 +182,3 @@ class Collection(models.Model):
     def remove_archive(self, archive):
         self.archives.remove(archive)
         self.save()
-
-
-class Record(models.Model):
-    """
-    A single "staged" record
-    """
-
-    id = models.AutoField(primary_key=True)
-    source_url = models.CharField(max_length=100)
-    recid = models.CharField(max_length=50)
-    source = models.CharField(max_length=50)
-    title = models.CharField(max_length=255)
-    record_creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="records"
-    )
-    authors = models.JSONField(default=list)
-    timestamp = models.DateTimeField(default=timezone.now)
-    tags = models.ManyToManyField(
-        Collection,
-        blank=True,
-        related_name="record_tags",
-        default=None,
-    )
-
-    class Meta:
-        ordering = ["-id"]
-
-    def add_tag(self, collection):
-        self.tags.add(collection)
-        self.save()
-
-    def remove_tag(self, collection):
-        self.tags.remove(collection)
-        self.save()
