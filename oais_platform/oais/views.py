@@ -150,10 +150,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.set_unstaged()
 
         serializer = ArchiveSerializer(
-            filter_archives_by_user_perms(
-                archive,
-                self.request.user,
-            ),
+            archive,
             many=False,
         )
         return Response(serializer.data)
