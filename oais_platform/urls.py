@@ -71,6 +71,11 @@ urlpatterns = [
                     views.create_archive,
                     name="create_archive",
                 ),
+                path(
+                    "create-staged-archive/",
+                    views.create_staged_archive,
+                    name="create_staged_archive",
+                ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -101,6 +106,7 @@ urlpatterns = [
                     views.collection_details,
                     name="collection_details",
                 ),
+                path("all-tags/", views.get_all_tags, name="get_all_tags"),
                 path(
                     "record-check/",
                     views.check_archived_records,
@@ -135,6 +141,21 @@ urlpatterns = [
                     "archive/<int:pk>/get-collections/",
                     views.ArchiveViewSet.as_view({"get": "archive_collections"}),
                     name="get_collections",
+                ),
+                path(
+                    "archive/<int:pk>/unstage/",
+                    views.ArchiveViewSet.as_view({"get": "archive_unstage"}),
+                    name="archive_unstage",
+                ),
+                path(
+                    "archive/<int:pk>/delete/",
+                    views.ArchiveViewSet.as_view({"get": "archive_delete"}),
+                    name="archive_delete",
+                ),
+                path(
+                    "staged-archives/",
+                    views.get_staged_archives,
+                    name="staged_archives",
                 ),
                 path(
                     # Returns a list of similar archives (with the same recid + source)

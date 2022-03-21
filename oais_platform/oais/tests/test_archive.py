@@ -132,3 +132,26 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
+
+    def test_record_check(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("check_archived_records")
+        response = self.client.post(
+            url, {"recordList": [{"recid": "1", "source": "test"}]}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data[0]["archives"]), 1)
+        self.assertEqual(response.data[0]["archives"][0]["recid"], "1")
+        self.assertEqual(response.data[0]["archives"][0]["source"], "test")
+
+    def test_staged_archive(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("archive_unstage", args=[self.archive.id])
+        response = self.client.get(url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["staged"], False)
