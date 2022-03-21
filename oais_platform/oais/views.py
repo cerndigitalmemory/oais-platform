@@ -248,14 +248,14 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             collection = self.get_object()
 
         if add:
-            if archives is list:
+            if isinstance(archives, list):
                 for archive in archives:
                     collection.add_archive(archive)
             else:
                 collection.add_archive(archives)
 
         else:
-            if archives is list:
+            if isinstance(archives, list):
                 for archive in archives:
                     if type(archive) == int:
                         collection.remove_archive(archive)
