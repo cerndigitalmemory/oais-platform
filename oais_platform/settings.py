@@ -66,6 +66,7 @@ LOGIN_REDIRECT_URL = "/index.html#/login/callback"
 AUTHENTICATION_BACKENDS = [
     "oais_platform.oais.auth.CERNAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
+    "guardian.backends.ObjectPermissionBackend",
 ]
 
 
@@ -85,6 +86,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "drf_spectacular",
     "drf_spectacular_sidecar",
+    "guardian",
 ]
 
 MIDDLEWARE = [

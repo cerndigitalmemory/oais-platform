@@ -1,26 +1,8 @@
 from django.contrib.auth.models import User
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.utils import timezone
 
 from . import pipeline
-
-
-class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    indico_api_key = models.TextField(max_length=500, blank=True)
-
-
-@receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
-    if created:
-        Profile.objects.create(user=instance)
-
-
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    instance.profile.save()
 
 
 class Steps(models.IntegerChoices):
@@ -67,9 +49,11 @@ class Archive(models.Model):
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
+    restricted = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-id"]
+        permissions = (("grant_view_right", "Grant view right"),)
 
     def set_step(self, step_id):
         """

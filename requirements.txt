@@ -14,3 +14,4 @@ amclient==1.2.0
 celery>=5.1, <5.2
 drf-spectacular==0.21.1
 drf-spectacular-sidecar==2022.1.31
+django-guardian==2.4.0

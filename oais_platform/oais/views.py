@@ -18,6 +18,8 @@ from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
+    filter_archives_public,
+    filter_archives_for_user,
     filter_steps_by_user_perms,
     filter_collections_by_user_perms,
     filter_records_by_user_perms,
@@ -103,7 +105,21 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return filter_archives_by_user_perms(super().get_queryset(), self.request.user)
+        """
+        Gets the results based on the visibility filter
+        """
+        visibility = self.request.GET.get("filter", "public")
+
+        if visibility == "public":
+            return filter_archives_public(super().get_queryset())
+        elif visibility == "owned":
+            return filter_archives_by_user_perms(
+                super().get_queryset(), self.request.user
+            )
+        elif visibility == "private":
+            return filter_archives_for_user(super().get_queryset(), self.request.user)
+        else:
+            pass
 
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
@@ -480,7 +496,7 @@ def create_staged_archive(request):
     archive = Archive.objects.create(
         recid=record["recid"],
         source=record["source"],
-        source_url=record["url"],
+        source_url=record["source_url"],
         title=record["title"],
         creator=request.user,
         staged=True,
