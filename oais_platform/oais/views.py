@@ -18,10 +18,16 @@ from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
+<<<<<<< HEAD
     filter_archives_by_user_creator,
     filter_archives_public,
     filter_archives_for_user,
     filter_all_archives_user_has_access,
+=======
+    filter_archives_by_user_perms,
+    filter_archives_public,
+    filter_archives_for_user,
+>>>>>>> add guardian
     filter_steps_by_user_perms,
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
@@ -147,20 +153,32 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Gets the results based on the visibility filter
         """
+<<<<<<< HEAD
         visibility = self.request.GET.get("filter", "all")
+=======
+        visibility = self.request.GET.get("filter", "public")
+>>>>>>> add guardian
 
         if visibility == "public":
             return filter_archives_public(super().get_queryset())
         elif visibility == "owned":
+<<<<<<< HEAD
             return filter_archives_by_user_creator(
+=======
+            return filter_archives_by_user_perms(
+>>>>>>> add guardian
                 super().get_queryset(), self.request.user
             )
         elif visibility == "private":
             return filter_archives_for_user(super().get_queryset(), self.request.user)
         else:
+<<<<<<< HEAD
             return filter_all_archives_user_has_access(
                 super().get_queryset(), self.request.user
             )
+=======
+            pass
+>>>>>>> add guardian
 
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
