@@ -161,6 +161,7 @@ class Collection(models.Model):
     archives = models.ManyToManyField(
         Archive, blank=True, related_name="archive_collections"
     )
+    internal = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-id"]

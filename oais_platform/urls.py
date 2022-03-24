@@ -158,6 +158,11 @@ urlpatterns = [
                     name="staged_archives",
                 ),
                 path(
+                    "unstage-archives/",
+                    views.unstage_archives,
+                    name="unstage_archives",
+                ),
+                path(
                     # Returns a list of similar archives (with the same recid + source)
                     "archive/<int:pk>/search/",
                     views.ArchiveViewSet.as_view({"get": "archive_search"}),

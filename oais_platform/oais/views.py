@@ -22,6 +22,7 @@ from oais_platform.oais.permissions import (
     filter_archives_for_user,
     filter_steps_by_user_perms,
     filter_collections_by_user_perms,
+    filter_jobs_by_user_perms,
     filter_records_by_user_perms,
 )
 from oais_platform.oais.serializers import (
@@ -236,10 +237,15 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        internal = self.request.GET.get("internal")
 
-        return filter_collections_by_user_perms(
-            super().get_queryset(), self.request.user
-        )
+        if internal == "true":
+            return filter_jobs_by_user_perms(super().get_queryset(), self.request.user)
+        else:
+            print("NOT INTERNAL")
+            return filter_collections_by_user_perms(
+                super().get_queryset(), self.request.user
+            )
 
     @action(detail=True, url_name="collection-archives")
     def collection_archives(self, request, pk=None):
@@ -372,7 +378,7 @@ def get_all_tags(request):
     except InvalidSource:
         raise BadRequest("Invalid request")
 
-    collections = Collection.objects.filter(creator=user)
+    collections = Collection.objects.filter(creator=user, internal=False)
     serializer = CollectionSerializer(collections, many=True)
     return Response(serializer.data)
 
@@ -388,6 +394,7 @@ def create_collection(request):
         title=title,
         description=description,
         creator=request.user,
+        internal=False,
     )
     if archives:
         collection.archives.set(archives)
@@ -505,6 +512,33 @@ def create_staged_archive(request):
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
     )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def unstage_archives(request):
+    """
+    Gets an array of archive IDs, unstages them and creates a job tag for all of them
+    """
+
+    archives = request.data["archives"]
+
+    job_tag = Collection.objects.create(
+        internal=True,
+        creator=request.user,
+        title="Internal Job",
+    )
+
+    for archive in archives:
+        archive = Archive.objects.get(id=archive["id"])
+        archive.set_unstaged()
+        job_tag.add_archive(archive)
+
+        Step.objects.create(
+            archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
+        )
+
+    return Response(archives)
 
 
 @api_view()

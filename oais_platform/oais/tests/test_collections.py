@@ -18,7 +18,7 @@ class CollectionTests(APITestCase):
         )
         self.serializer1 = ArchiveSerializer(self.archive1, many=False)
 
-        self.collection = Collection.objects.create(title="test")
+        self.collection = Collection.objects.create(title="test", internal=False)
         self.collection.add_archive(self.archive1)
 
     def test_collection(self):
