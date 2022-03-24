@@ -5,38 +5,41 @@ import os
 import subprocess
 import time
 import zipfile
-
-from urllib.parse import unquote, urlparse
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlparse
+
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
 from django.db.models import base
 from django.shortcuts import redirect
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
     filter_archives_by_user_perms,
-    filter_steps_by_user_perms,
     filter_collections_by_user_perms,
     filter_records_by_user_perms,
+    filter_steps_by_user_perms,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     CollectionSerializer,
     GroupSerializer,
     LoginSerializer,
+    ProfileSerializer,
     StepSerializer,
     UserSerializer,
-    CollectionSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from rest_framework.views import APIView
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -46,6 +49,36 @@ from ..settings import (
     CELERY_RESULT_BACKEND,
 )
 from .tasks import create_step, process, validate
+
+
+@extend_schema_view(
+    post=extend_schema(request=ProfileSerializer, responses=UserSerializer),
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def update_profile(request):
+    """
+    Updates a Profile
+    """
+
+    user = request.user
+
+    data = {"indico_api_key": request.data.get("indico_api_key")}
+
+    serializer = UserSerializer(data=data)
+    if serializer.is_valid():
+        user.profile.indico_api_key = request.data["indico_api_key"]
+        user.save()
+
+    serializer = UserSerializer(user)
+    return Response(serializer.data)
+
+
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def me(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
