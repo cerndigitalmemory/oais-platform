@@ -1,17 +1,33 @@
 from re import S
 
 from django.contrib.auth.models import Group, User
-from oais_platform.oais.models import Archive, Collection, Step
+from oais_platform.oais.models import Archive, Collection, Profile, Step
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ["indico_api_key"]
 
 
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
 
+    # Serialize the additional profile values
+    profile = ProfileSerializer(required=True)
+
     class Meta:
         model = User
-        fields = ["id", "username", "permissions", "first_name", "last_name"]
+        fields = [
+            "id",
+            "username",
+            "permissions",
+            "first_name",
+            "last_name",
+            "profile",  # this points to the serialized profile
+        ]
 
     def get_permissions(self, obj):
         return obj.get_all_permissions()

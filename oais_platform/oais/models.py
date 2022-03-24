@@ -8,12 +8,17 @@ from . import pipeline
 
 
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    # Each profile is linked to a user and identified by the same PK
+    #  and it's used to save additional per-user values
+    #  (e.g. configuration, preferences, API tokens)
+    #  accessible as user.profile.VALUE
+    user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
     indico_api_key = models.TextField(max_length=500, blank=True)
 
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
+    # Every time a User is created (post_save), create an attached Profile, too
     if created:
         Profile.objects.create(user=instance)
 
