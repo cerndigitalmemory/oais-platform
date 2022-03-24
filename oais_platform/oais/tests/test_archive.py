@@ -12,36 +12,72 @@ class ArchiveTests(APITestCase):
         self.creator = User.objects.create_user("creator", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
 
-        self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", creator=self.creator
+        self.private_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            creator=self.creator,
+            restricted=True,
         )
 
-    def test_archive_list_creator(self):
+        self.public_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            creator=self.creator,
+            restricted=False,
+        )
+
+    def test_archive_list_creator_public(self):
         self.client.force_authenticate(user=self.creator)
 
         url = reverse("archive-list")
-        response = self.client.get(url, format="json")
+        response = self.client.get(url, {"filter": "public"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
 
-    def test_archive_list_creator_with_perm(self):
-        self.creator.user_permissions.add(self.permission)
-        self.creator.save()
-
+    def test_archive_list_creator_private(self):
         self.client.force_authenticate(user=self.creator)
 
         url = reverse("archive-list")
-        response = self.client.get(url, format="json")
+        response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(len(response.data["results"]), 0)
 
-    def test_archive_list_other_user(self):
+    def test_archive_list_creator_owned(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("archive-list")
+        response = self.client.get(url, {"filter": "owned"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_archive_list_other_user_private(self):
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("archive-list")
-        response = self.client.get(url, format="json")
+        response = self.client.get(url, {"filter": "private"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 0)
+
+    def test_archive_list_other_user_public(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-list")
+        response = self.client.get(url, {"filter": "public"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+
+    def test_archive_list_other_user_owned(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archive-list")
+        response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 0)
@@ -53,19 +89,19 @@ class ArchiveTests(APITestCase):
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("archive-list")
-        response = self.client.get(url, format="json")
+        response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_archive_details_creator(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-detail", args=[self.archive.id])
-        response = self.client.get(url, format="json")
+        url = reverse("archive-detail", args=[self.private_archive.id])
+        response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.archive.id)
+        self.assertEqual(response.data["id"], self.private_archive.id)
 
     def test_archive_details_creator_with_perm(self):
         self.creator.user_permissions.add(self.permission)
@@ -73,17 +109,17 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-detail", args=[self.archive.id])
-        response = self.client.get(url, format="json")
+        url = reverse("archive-detail", args=[self.private_archive.id])
+        response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.archive.id)
+        self.assertEqual(response.data["id"], self.private_archive.id)
 
     def test_archive_details_other_user(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-detail", args=[self.archive.id])
-        response = self.client.get(url, format="json")
+        url = reverse("archive-detail", args=[self.private_archive.id])
+        response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -93,28 +129,28 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-detail", args=[self.archive.id])
-        response = self.client.get(url, format="json")
+        url = reverse("archive-detail", args=[self.private_archive.id])
+        response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.archive.id)
+        self.assertEqual(response.data["id"], self.private_archive.id)
 
     def test_get_archive_details(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive_details", args=[self.archive.id])
+        url = reverse("archive_details", args=[self.private_archive.id])
         response = self.client.get(
             url,
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.archive.id)
+        self.assertEqual(response.data["id"], self.private_archive.id)
 
     def test_get_steps(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("get_steps", args=[self.archive.id])
+        url = reverse("get_steps", args=[self.private_archive.id])
         response = self.client.get(
             url,
             format="json",
@@ -122,8 +158,8 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)
 
-        self.step1 = Step.objects.create(archive=self.archive, name=0)
-        self.step2 = Step.objects.create(archive=self.archive, name=0)
+        self.step1 = Step.objects.create(archive=self.private_archive, name=0)
+        self.step2 = Step.objects.create(archive=self.private_archive, name=0)
 
         response = self.client.get(
             url,
@@ -143,15 +179,6 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(len(response.data[0]["archives"]), 1)
+        self.assertEqual(len(response.data[0]["archives"]), 2)
         self.assertEqual(response.data[0]["archives"][0]["recid"], "1")
         self.assertEqual(response.data[0]["archives"][0]["source"], "test")
-
-    def test_staged_archive(self):
-        self.client.force_authenticate(user=self.creator)
-
-        url = reverse("archive_unstage", args=[self.archive.id])
-        response = self.client.get(url, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["staged"], False)

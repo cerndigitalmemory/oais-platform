@@ -119,8 +119,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             )
         elif visibility == "private":
             return filter_archives_for_user(super().get_queryset(), self.request.user)
-        else:
-            pass
 
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
@@ -242,7 +240,6 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if internal == "true":
             return filter_jobs_by_user_perms(super().get_queryset(), self.request.user)
         else:
-            print("NOT INTERNAL")
             return filter_collections_by_user_perms(
                 super().get_queryset(), self.request.user
             )
