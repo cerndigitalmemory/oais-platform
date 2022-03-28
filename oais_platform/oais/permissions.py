@@ -92,14 +92,9 @@ def filter_all_archives_user_has_access(queryset, user):
     """
     if not user.has_perm("oais.can_access_all_archives"):
         private_queryset = get_objects_for_user(user, "oais.view_archive")
-        public_or_owned_queryset = queryset.filter(
-            Q(restricted=False) | Q(creator=user)
-        )
-        queryset = sorted(
-            chain(private_queryset, public_or_owned_queryset),
-            key=lambda instance: instance.timestamp,
-            reverse=True,
-        )
+        public_queryset = queryset.filter(restricted=False)
+        owned_queryset = queryset.filter(creator=user)
+        queryset = private_queryset | public_queryset | owned_queryset
 
     return queryset
 
