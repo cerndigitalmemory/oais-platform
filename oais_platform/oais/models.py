@@ -72,9 +72,11 @@ class Archive(models.Model):
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
+    restricted = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-id"]
+        permissions = (("grant_view_right", "Grant view right"),)
 
     def set_step(self, step_id):
         """
@@ -182,6 +184,7 @@ class Collection(models.Model):
     archives = models.ManyToManyField(
         Archive, blank=True, related_name="archive_collections"
     )
+    internal = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-id"]
