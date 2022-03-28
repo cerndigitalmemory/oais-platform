@@ -28,9 +28,27 @@ Containers overview:
   `docker exec -it <CONTAINER_NAME> <COMMAND>`
 - Open shell in container
   `docker exec -it <CONTAINER_NAME> sh`
+- Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
+  `docker-compose build`
+
+Django:
+
+- Collect static files (to correctly see the Django admin panel)
+  `python manage.py collectstatic`
+
+Postgres/database:
+
 - Browse database using PGAdmin
   Open [localhost:5050](http://localhost:5050) and create a new connection, with address `db` and the password provided in the docker-compose.yml (by default `overwritethisinprod!`).
-- Rebuild images (e.g. when changing any of the Dockerfiles)
-  `docker-compose build`
+
+Celery:
+
 - Celery: set log level to "DEBUG" instead of "INFO" in the worker:
   `celery -A oais_platform.celery worker -l INFO` -> `celery -A oais_platform.celery worker -l DEBUG`
+
+OpenSearch:
+
+- Create indices
+  `python manage.py opensearch index create`
+- Populate indices
+  `python3 manage.py opensearch document index`
