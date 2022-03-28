@@ -60,6 +60,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "manifest",
             "staged",
             "title",
+            "restricted",
         ]
 
     def get_last_step(self, instance):

@@ -17,9 +17,10 @@ from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
-    filter_archives_by_user_perms,
+    filter_archives_by_user_creator,
     filter_archives_public,
     filter_archives_for_user,
+    filter_all_archives_user_has_access,
     filter_steps_by_user_perms,
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
@@ -40,6 +41,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from django.db.models import Q
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -66,7 +68,9 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Gets all the archives for a specific user
         """
         user = self.get_object()
-        archives = filter_archives_by_user_perms(user.archives.all(), request.user)
+        archives = filter_all_archives_user_has_access(
+            user.archives.all(), request.user
+        )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
     @action(detail=True, url_name="user-archives_staged")
@@ -75,7 +79,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Gets all the archives for a specific user that are staged (no steps assigned)
         """
         user = self.get_object()
-        archives = filter_archives_by_user_perms(
+        archives = filter_all_archives_user_has_access(
             user.archives.filter(
                 last_step__isnull=True,
                 steps__isnull=True,
@@ -109,21 +113,25 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Gets the results based on the visibility filter
         """
-        visibility = self.request.GET.get("filter", "public")
+        visibility = self.request.GET.get("filter", "all")
 
         if visibility == "public":
             return filter_archives_public(super().get_queryset())
         elif visibility == "owned":
-            return filter_archives_by_user_perms(
+            return filter_archives_by_user_creator(
                 super().get_queryset(), self.request.user
             )
         elif visibility == "private":
             return filter_archives_for_user(super().get_queryset(), self.request.user)
+        else:
+            return filter_all_archives_user_has_access(
+                super().get_queryset(), self.request.user
+            )
 
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
         archive = self.get_object()
-        steps = filter_archives_by_user_perms(archive.steps.all(), self.request.user)
+        steps = filter_archives_by_user_creator(archive.steps.all(), self.request.user)
         return self.make_paginated_response(archive, ArchiveSerializer)
 
     @action(detail=True, url_name="get_collections")
@@ -148,7 +156,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 recid__contains=archive.recid, source__contains=archive.source
             )
             serializer = ArchiveSerializer(
-                filter_archives_by_user_perms(
+                filter_archives_by_user_creator(
                     archives,
                     self.request.user,
                 ),
@@ -418,7 +426,7 @@ def check_archived_records(request):
                 recid__contains=record["recid"], source__contains=record["source"]
             )
             serializer = ArchiveSerializer(
-                filter_archives_by_user_perms(
+                filter_archives_by_user_creator(
                     archives,
                     request.user,
                 ),
@@ -678,9 +686,28 @@ def search_query(request):
     https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
     """
     sources = ["indico", "cds", "inveniordm", "zenodo", "cod", "cds-test", "local"]
-    buckets = list()
+    visibilities = ["private", "public", "owned"]
+    source_buckets = list()
+    visibility_buckets = list()
     for source in sources:
-        buckets.append({"key": source, "doc_count": 0})
+        source_buckets.append({"key": source, "doc_count": 0})
+    for visibility in visibilities:
+        visibility_buckets.append({"key": visibility, "doc_count": 0})
+
+    """
+    Get request body
+    """
+    body = request.data
+
+    """
+    Get pagination parameters
+    """
+    results_from, results_size = 0, 20
+    if "from" in body:
+        results_from = body["from"]
+
+    if "size" in body:
+        results_size = body["size"]
 
     """
     Gets the API request data based and parses it according to
@@ -699,90 +726,204 @@ def search_query(request):
                     "field":"tags"
     }}}}}
     """
-    body = request.data
+
     if "query" not in body:
-        raise BadRequest("Missing parameter query")
-    query = body["query"]
+        search_query = ""
+    else:
+        """
+        If there is no query in body, return all the results
+        """
+        query = body["query"]
 
-    if "query_string" not in query:
-        raise BadRequest("Missing parameter query_string")
-    query_string = query["query_string"]
+        if "query_string" not in query:
+            raise BadRequest("Missing parameter query_string")
+        query_string = query["query_string"]
 
-    if "query" not in query_string:
-        raise BadRequest("Missing parameter search_query")
-    search_query = query_string["query"]
+        if "query" not in query_string:
+            raise BadRequest("Missing parameter search_query")
+        search_query = query_string["query"]
 
-    try:
+    post_filter = None
+    if "post_filter" not in body:
+        """
+        Post filter indicates that there are not active filters in the search request.
+        In that case a search in the database is executed without further filtering
+        """
+        try:
+            results = Archive.objects.filter(
+                Q(recid__contains=search_query)
+                | Q(title__contains=search_query)
+                | Q(id__contains=search_query)
+            )
+            unfiltered_results = results
+
+            unfiltered_serializer = ArchiveSerializer(unfiltered_results, many=True)
+            filtered_serializer = ArchiveSerializer(results, many=True)
+        except Exception:
+            raise BadRequest("Error while performing search")
+    else:
+        post_filter = body["post_filter"]
+        if "bool" not in post_filter:
+            raise BadRequest("Parameter Error: bool is not in body")
+        post_filter = post_filter["bool"]
+        if "must" not in post_filter:
+            raise BadRequest("Parameter Error: must is not in body")
+        post_filter = post_filter["must"]
+        source_filter, visibility_filter = None, None
+        for filter in post_filter:
+            if "terms" not in filter:
+                raise BadRequest("Parameter Error: terms is not in body")
+            filter = filter["terms"]
+            if "source" in filter:
+                source_filter = filter["source"]
+            if "visibility" in filter:
+                visibility_filter = filter["visibility"]
+            if (source_filter == None) and (visibility_filter == None):
+                raise BadRequest("Parameter Error: Filtering parameter is not in body")
+
+        # try:
         # Make the search at the database
-        results = Archive.objects.filter(recid__contains=search_query)
+        # If there is no visibility selected then return all public, private and owned records
+        unfiltered_results = filter_all_archives_user_has_access(
+            Archive.objects.filter(
+                Q(recid__contains=search_query)
+                | Q(title__contains=search_query)
+                | Q(id__contains=search_query)
+            ),
+            request.user,
+        )
+        results = unfiltered_results
+        if visibility_filter:
+            if visibility_filter[0] == "public":
+                results = filter_archives_public(
+                    Archive.objects.filter(
+                        Q(recid__contains=search_query)
+                        | Q(title__contains=search_query)
+                    )
+                )
+            elif visibility_filter[0] == "private":
+                results = filter_archives_for_user(
+                    Archive.objects.filter(
+                        Q(recid__contains=search_query)
+                        | Q(title__contains=search_query)
+                    ),
+                    request.user,
+                )
+            elif visibility_filter[0] == "owned":
+                results = filter_archives_by_user_creator(
+                    Archive.objects.filter(
+                        Q(recid__contains=search_query)
+                        | Q(title__contains=search_query)
+                    ),
+                    request.user,
+                )
 
-        serializer = ArchiveSerializer(results, many=True)
-    except Exception:
-        raise BadRequest("Error while performing search")
+        if source_filter:
+            results = results.filter(source__in=source_filter)
 
-    try:
-        """
-        Create response similar to Elasticsearch response:
+        unfiltered_serializer = ArchiveSerializer(unfiltered_results, many=True)
+        filtered_serializer = ArchiveSerializer(results, many=True)
 
-        {
-            "took": TIME ELAPSED,
-            "timed_out" : false,
-            "hits" : {
-                "total":{
-                    "value" : NUMBER OF RESULTS
-                    "relation" : "eq"
-                },
-                "max_score" : ELASTIC SEARCH MAX SCORE GIVEN,
-                "hits" : [ARCHIVE LIST OF RESULTS]
-            }
-            "aggregations":{
-                "first_agg": {
-                    "doc_count_error_upper_bound":0,
-                    "sum_other_doc_count":0,
-                    "buckets": [BUCKET LIST]
-                }
+        # except Exception:
+        #     raise BadRequest("Error while performing search")
 
-            }
+    # try:
+    """
+    Create response similar to Elasticsearch response:
+
+    {
+        "took": TIME ELAPSED,
+        "timed_out" : false,
+        "hits" : {
+            "total":{
+                "value" : NUMBER OF RESULTS
+                "relation" : "eq"
+            },
+            "max_score" : ELASTIC SEARCH MAX SCORE GIVEN,
+            "hits" : [ARCHIVE LIST OF RESULTS]
         }
-        """
-        response = dict()
-        hits = dict()
-        aggDetails = dict()
+        "aggregations":{
+            "first_agg": {
+                "doc_count_error_upper_bound":0,
+                "sum_other_doc_count":0,
+                "buckets": [BUCKET LIST]
+            }
 
-        response["took"] = time.time() - start_time
-        response["timeout"] = False
-        hits["total"] = {"value": len(results), "relation": "eq"}
-        hits["max_score"] = 5
-        result_list = []
-        for i in range(len(results)):
-            hitsDetails = dict()
-            hitsDetails["_index"] = "random"
-            hitsDetails["_type"] = "doc"
-            hitsDetails["_id"] = "CustomID"
-            hitsDetails["_score"] = 5
-            result = serializer.data[i]
-            hitsDetails["_source"] = result
-            if result["source"] in sources:
-                current_src = result["source"]
-                for source in buckets:
-                    if source["key"] == current_src:
-                        source["doc_count"] = source["doc_count"] + 1
-
-            result_list.append(hitsDetails)
-
-        # Here we need to parse filters based on request
-        aggDetails["source_agg"] = {
-            "doc_count_error_upper_bound": 0,
-            "sum_other_doc_count": 0,
-            "buckets": buckets,
         }
+    }
+    """
+    response = dict()
+    hits = dict()
+    aggDetails = dict()
 
-        hits["hits"] = result_list
-        response["aggregations"] = aggDetails
-        response["hits"] = hits
+    response["took"] = time.time() - start_time
+    response["timeout"] = False
+    hits["total"] = {"value": len(results), "relation": "eq"}
+    hits["max_score"] = 5
+    result_list = []
+    """
+    Create pagination by returning different results according to the results_from and results_size variables.
+    If the results_size is bigger than the results index length, then it is changed to match the exact length
+    """
+    if results_from + results_size > len(results):
+        results_size = len(results) - results_from
 
-    except Exception:
-        raise BadRequest("Error while creating response")
+    for i in range(results_from, results_from + results_size):
+        hitsDetails = dict()
+        hitsDetails["_index"] = "random"
+        hitsDetails["_type"] = "doc"
+        hitsDetails["_id"] = "CustomID"
+        hitsDetails["_score"] = 5
+        result = filtered_serializer.data[i]
+        hitsDetails["_source"] = result
+
+        result_list.append(hitsDetails)
+
+    for j in range(len(unfiltered_results)):
+        result = unfiltered_serializer.data[j]
+        if result["source"] in sources:
+            current_src = result["source"]
+            for source in source_buckets:
+                if source["key"] == current_src:
+                    source["doc_count"] = source["doc_count"] + 1
+
+    for j in range(len(results)):
+        result = unfiltered_serializer.data[j]
+        public = False
+        owned = False
+        if not result["restricted"]:
+            public = True
+        if result["creator"]:
+            creator = result["creator"]
+            if creator["id"] == request.user.id:
+                owned = True
+        for visibility in visibility_buckets:
+            if visibility["key"] == "public":
+                if public:
+                    visibility["doc_count"] = visibility["doc_count"] + 1
+            if visibility["key"] == "owned":
+                if owned:
+                    visibility["doc_count"] = visibility["doc_count"] + 1
+
+    # Here we need to parse filters based on request
+    aggDetails["source_agg"] = {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": source_buckets,
+    }
+
+    aggDetails["visibility_agg"] = {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": visibility_buckets,
+    }
+
+    hits["hits"] = result_list
+    response["aggregations"] = aggDetails
+    response["hits"] = hits
+
+    # except Exception:
+    #     raise BadRequest("Error while creating response")
 
     return Response(response)
 
@@ -820,7 +961,7 @@ def get_detailed_archives(request):
                 recid__contains=archive["recid"], source__contains=archive["source"]
             ).exclude(id__contains=archive["id"])
             archive_serializer = ArchiveSerializer(
-                filter_archives_by_user_perms(
+                filter_archives_by_user_creator(
                     duplicates,
                     request.user,
                 ),
