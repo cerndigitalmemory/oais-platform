@@ -203,7 +203,7 @@ SPECTACULAR_SETTINGS = {
 CORS_ORIGIN_ALLOW_ALL = True
 
 #
-OPENSEARCH_DSL = {"default": {"hosts": "opensearch-node1:9200"}}
+OPENSEARCH_DSL = {"default": {"hosts": environ.get("OPENSEARCH_HOST")}}
 
 # Sentry
 sentry_sdk.init(
