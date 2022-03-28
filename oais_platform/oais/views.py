@@ -18,15 +18,11 @@ from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
-<<<<<<< HEAD
     filter_archives_by_user_creator,
     filter_archives_public,
     filter_archives_for_user,
     filter_all_archives_user_has_access,
     filter_steps_by_user_perms,
-=======
-    filter_archives_by_user_perms,
->>>>>>> develop
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
     filter_records_by_user_perms,
@@ -48,11 +44,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-<<<<<<< HEAD
 from django.db.models import Q
-=======
 from rest_framework.views import APIView
->>>>>>> develop
 
 from ..settings import (
     AM_ABS_DIRECTORY,
