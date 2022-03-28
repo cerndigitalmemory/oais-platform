@@ -69,6 +69,10 @@ python manage.py migrate
 python manage.py createsuperuser
 # Run the application
 python manage.py runserver
+# (OpenSearch) create indices
+python manage.py opensearch index create
+# (OpenSearch) populate indices
+python manage.py opensearch document index
 ```
 
 ### Run tests
