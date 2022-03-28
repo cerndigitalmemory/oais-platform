@@ -24,6 +24,11 @@ services:
     ports:
       - 9200:9200
       - 9600:9600 # required for Performance Analyzer
+    healthcheck:
+      test: curl -s http://opensearch-node1:9200 >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 50
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:1.3.0
     container_name: opensearch-dashboards
@@ -55,7 +60,11 @@ services:
     volumes:
       - postgres:/data/postgres
     restart: unless-stopped
-
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   pgadmin:
     container_name: oais_pgadmin
     image: dpage/pgadmin4
@@ -88,7 +97,7 @@ services:
       sh -c "./wait-for-psql.sh db &&
              python3 manage.py migrate &&
              python3 manage.py spectacular --file schema.yml &&
-             python3 manage.py runserver 0.0.0.0:8000"
+             python3 manage.py test"
     environment:
       # Point to the postgres service
       - DB_HOST=db
@@ -97,8 +106,12 @@ services:
       - DB_NAME=oais_platform
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENSEARCH_HOST=http://opensearch-node1:9200
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      opensearch-node1:
+        condition: service_healthy
     env_file:
       - ./.env.dev
 
