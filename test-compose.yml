@@ -26,7 +26,7 @@ services:
       - 9600:9600 # required for Performance Analyzer
     healthcheck:
       test: curl -s http://opensearch-node1:9200 >/dev/null || exit 1
-      interval: 30s
+      interval: 1s
       timeout: 10s
       retries: 50
   nginx:
@@ -52,9 +52,9 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 1s
+      timeout: 10s
+      retries: 50
 
   pgadmin:
     container_name: oais_pgadmin
@@ -85,8 +85,7 @@ services:
       # Create OpenAPI specification with `rdf-spectacular` and output it in schema.yml
       # Bring up the web server on port 8000
       >
-      sh -c "./wait-for-psql.sh db &&
-             python3 manage.py makemigrations &&
+      sh -c "python3 manage.py makemigrations &&
              python3 manage.py migrate &&
              python3 manage.py test"
     environment:
