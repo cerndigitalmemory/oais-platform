@@ -21,7 +21,6 @@ class HarvestTests(APITestCase):
         response = self.client.post(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], "Invalid source")
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Step.objects.count(), 0)
 

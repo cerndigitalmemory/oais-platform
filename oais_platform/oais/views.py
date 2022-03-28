@@ -481,7 +481,7 @@ def create_archive(request, recid, source):
     try:
         url = get_source(source).get_record_url(recid)
     except InvalidSource:
-        raise BadRequest("Invalid source")
+        raise BadRequest("Invalid source: ", source)
 
     # Always create a new archive instance
     archive = Archive.objects.create(

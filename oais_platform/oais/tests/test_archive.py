@@ -44,7 +44,7 @@ class ArchiveTests(APITestCase):
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 0)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_archive_list_creator_owned(self):
         self.client.force_authenticate(user=self.creator)
