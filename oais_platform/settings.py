@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "drf_spectacular",
     "drf_spectacular_sidecar",
+    "django_opensearch_dsl",
 ]
 
 MIDDLEWARE = [
@@ -201,6 +202,8 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ORIGIN_ALLOW_ALL = True
 
+#
+OPENSEARCH_DSL = {"default": {"hosts": "opensearch-node1:9200"}}
 
 # Sentry
 sentry_sdk.init(
