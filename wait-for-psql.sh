@@ -1,5 +1,8 @@
 #!/bin/sh
 # wait-for-postgres.sh
+# This script "holds" the execution of the given command until
+# a postgres instances is found on the specified location
+# (the postgres client needs to be installed)
 
 set -e
   

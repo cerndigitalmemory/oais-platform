@@ -41,7 +41,9 @@ urlpatterns = [
         r"api/",
         include(
             [
+                # Serve the generated API schema (as a yaml file)
                 path("schema/", SpectacularAPIView.as_view(), name="schema"),
+                # Serve the Swagger UI
                 path(
                     "schema/swagger-ui/",
                     SpectacularSwaggerView.as_view(url_name="schema"),
@@ -65,6 +67,7 @@ urlpatterns = [
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
+                path("edit-profile/", views.update_profile, name="update_user"),
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 path(
                     "create-archive/<str:recid>/<str:source>/",
