@@ -66,8 +66,41 @@ def filter_archives_public(queryset):
 
 
 def filter_archives_for_user(queryset, user):
+    """Filters a queryset of archives based on the user's permissions.
+
+    In particular, if the user does not have the "oais.can_access_all_archives"
+    permission, then the queryset will return all the archives user has been granted access to
+    but they are restricted.
+    """
     if not user.has_perm("oais.can_access_all_archives"):
-        queryset = get_objects_for_user(user, "oais.view_archive")
+        private_others_queryset = get_objects_for_user(user, "oais.view_archive")
+        private_owned_queryset = queryset.filter(Q(restricted=True) & Q(creator=user))
+        queryset = sorted(
+            chain(private_others_queryset, private_owned_queryset),
+            key=lambda instance: instance.timestamp,
+            reverse=True,
+        )
+    return queryset
+
+
+def filter_all_archives_user_has_access(queryset, user):
+    """Filters a queryset of archives based on the user's permissions.
+
+    In particular, if the user does not have the "oais.can_access_all_archives"
+    permission, then the queryset will return all the archives user has access to
+    (Public, Private and Owned).
+    """
+    if not user.has_perm("oais.can_access_all_archives"):
+        private_queryset = get_objects_for_user(user, "oais.view_archive")
+        public_or_owned_queryset = queryset.filter(
+            Q(restricted=False) | Q(creator=user)
+        )
+        queryset = sorted(
+            chain(private_queryset, public_or_owned_queryset),
+            key=lambda instance: instance.timestamp,
+            reverse=True,
+        )
+
     return queryset
 
 
