@@ -367,6 +367,10 @@ def get_settings(request):
         )
     except Exception:
         githash = "n/a"
+
+    user = request.user
+    serializer = UserSerializer(user)
+
     data = {
         "am_url": AM_URL,
         "AM_ABS_DIRECTORY": AM_ABS_DIRECTORY,
@@ -374,7 +378,9 @@ def get_settings(request):
         "git_hash": githash,
         "CELERY_BROKER_URL": CELERY_BROKER_URL,
         "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
+        "indico_api_key": serializer.data["profile"]["indico_api_key"],
     }
+
     return Response(data)
 
 
