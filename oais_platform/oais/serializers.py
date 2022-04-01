@@ -4,6 +4,7 @@ from django.contrib.auth.models import Group, User
 from oais_platform.oais.models import Archive, Collection, Profile, Step
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
+from opensearch_dsl import utils
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -30,6 +31,9 @@ class UserSerializer(serializers.ModelSerializer):
         ]
 
     def get_permissions(self, obj):
+        if type(obj) == utils.AttrDict:
+            id = obj["id"]
+            obj = User.objects.get(pk=id)
         return obj.get_all_permissions()
 
 
