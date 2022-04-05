@@ -2,8 +2,9 @@ from django.shortcuts import render
 import abc
 
 from django.http import HttpResponse
-from opensearch_dsl import Q, serializer, Search
+from opensearch_dsl import Q, A, Search
 from opensearchpy import OpenSearch
+from opensearch_dsl.connections import connections
 
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.views import APIView
@@ -35,9 +36,32 @@ class PaginatedSearchAPIView(APIView, LimitOffsetPagination):
             ssl_show_warn=False,
             # ca_certs = ca_certs_path
         )
+        # Data initialization, will be from get request
+        query = "the"
+        source = ["cds"]
+        restricted = True
+        user = "root"
 
-        s = Search(using=client, index="archive").from_dict(query)
+        # Queries the tiltle and recid fields
+        q = Q("match", title=query) | Q("match", recid=query)
 
+        # Search initialization
+        s = Search(using=client).query(q)
+
+        # Add Aggregations
+        s.aggs.bucket("sources", "terms", field="source").bucket(
+            "restricted", "terms", field="restricted"
+        ).bucket("visibility", "terms", field="last_step")
+
+        # Filtering
+        if source:
+            s = s.filter("terms", source=source)
+        if restricted == True:
+            s = s.filter("term", creator__username=user)
+        if restricted == False:
+            s = s.filter("term", restricted=False)
+
+        # Execute search
         response = s.execute()
 
         dict_response = response.to_dict()
