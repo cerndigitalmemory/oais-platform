@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "oais_platform",
     "oais_platform.oais",
+    "oais_platform.search",
     "corsheaders",
     "django_celery_beat",
     "drf_spectacular",
