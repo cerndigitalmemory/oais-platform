@@ -1,9 +1,28 @@
 # documents.py
-
+from django.contrib.auth.models import User
 from django_opensearch_dsl import Document, fields
 from django_opensearch_dsl.registries import registry
 
-from .models import Archive, User
+from .models import Archive, Step
+
+
+@registry.register_document
+class UserDocument(Document):
+    class Index:
+        name = "users"
+        settings = {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+        }
+
+    class Django:
+        model = User
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "username",
+        ]
 
 
 @registry.register_document
@@ -20,6 +39,14 @@ class ArchiveDocument(Document):
     )
     last_step = fields.ObjectField()
     source = fields.KeywordField()
+
+    steps = fields.ObjectField(
+        properties={
+            "id": fields.IntegerField(),
+            "name": fields.IntegerField(),
+            "status": fields.IntegerField(),
+        },
+    )
 
     class Index:
         name = "archive"  # Name of the Opensearch index
@@ -43,7 +70,13 @@ class ArchiveDocument(Document):
         ]
         # Paginate the Django queryset used to populate the index with the specified size
         # This per-Document setting overrides settings.OPENSEARCH_DSL_QUERYSET_PAGINATION.
+        related_models = [Step, User]
         queryset_pagination = 5000
 
-    def get_queryset(self, filter_=None, exclude=None, count=0):
-        return super().get_queryset()
+    def get_instances_from_related(self, related_instance):
+        """If related_models is set, define how to retrieve the Car instance(s) from the related model.
+        The related_models option should be used with caution because it can lead in the index
+        to the updating of a lot of items.
+        """
+        if isinstance(related_instance, Step):
+            return related_instance.steps_set.all()
