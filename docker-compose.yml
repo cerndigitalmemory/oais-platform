@@ -142,6 +142,7 @@ services:
       - DB_NAME=oais_platform
       - DB_USER=postgres
       - DB_PASS=overwritethisinprod!
+      - OPENSEARCH_HOST=http://opensearch-node1:9200
 
 volumes:
   postgres:
