@@ -23,7 +23,7 @@ Containers overview:
 - Remove containers
   `docker-compose down`
 - Clean up volumes (e.g. to reset the database)
-  `docker volume prune -y`
+  `docker volume prune -f`
 - Run command in container
   `docker exec -it <CONTAINER_NAME> <COMMAND>`
 - Open shell in container
