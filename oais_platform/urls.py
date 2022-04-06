@@ -18,6 +18,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from oais_platform.oais import views
+from oais_platform.search.views import SearchArchives
 
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet)
@@ -36,11 +37,13 @@ from drf_spectacular.views import (
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # path("search/", include("oais_platform.search.urls")),
     path(
         # Set base path
         r"api/",
         include(
             [
+                path("opensearch/", SearchArchives.as_view()),
                 # Serve the generated API schema (as a yaml file)
                 path("schema/", SpectacularAPIView.as_view(), name="schema"),
                 # Serve the Swagger UI

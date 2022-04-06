@@ -946,7 +946,7 @@ def search_query(request):
                     visibility["doc_count"] = visibility["doc_count"] + 1
 
     # Here we need to parse filters based on request
-    aggDetails["source_agg"] = {
+    aggDetails["sources"] = {
         "doc_count_error_upper_bound": 0,
         "sum_other_doc_count": 0,
         "buckets": source_buckets,
