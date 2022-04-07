@@ -111,6 +111,10 @@ class Archive(models.Model):
         self.staged = False
         self.save()
 
+    def set_path(self, new_path):
+        self.path_to_sip = new_path
+        self.save()
+
 
 class Step(models.Model):
     """

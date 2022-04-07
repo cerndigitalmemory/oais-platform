@@ -24,6 +24,7 @@ from oais_platform.settings import (
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
+    BIC_UPLOAD_PATH
 )
 from oais_utils.validate import validate_sip
 
@@ -161,16 +162,26 @@ def process(self, archive_id, step_id, input_data=None):
         recid=archive.recid,
         source=archive.source,
         loglevel=2,
+        target=BIC_UPLOAD_PATH,
     )
+
+    path_to_sip = bagit_result["foldername"]
+
+    if BIC_UPLOAD_PATH:
+        archive.set_path(os.path.join(BIC_UPLOAD_PATH, path_to_sip))
+    else:
+        archive.set_path(path_to_sip)
 
     return bagit_result
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
 def validate(self, archive_id, step_id, input_data):
-    res = ast.literal_eval(input_data)
 
-    path_to_sip = res["foldername"]
+    archive = Archive.objects.get(pk=archive_id)
+    path_to_sip = archive.path_to_sip
+    print(path_to_sip)
+
     logger.info(f"Starting SIP validation {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
@@ -193,9 +204,9 @@ def validate(self, archive_id, step_id, input_data):
 
 @shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
 def checksum(self, archive_id, step_id, input_data):
-    res = ast.literal_eval(input_data)
+    archive = Archive.objects.get(pk=archive_id)
+    path_to_sip = archive.path_to_sip
 
-    path_to_sip = res["foldername"]
     logger.info(f"Starting checksum validation {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
@@ -250,8 +261,9 @@ def archivematica(self, archive_id, step_id, input_data):
     """
     Gets the current step_id and the path to the sip folder and calls sends the sip to archivematica
     """
-    res = ast.literal_eval(input_data)
-    path_to_sip = res["foldername"]
+    archive = Archive.objects.get(pk=archive_id)
+    path_to_sip = archive.path_to_sip
+
     logger.info(f"Starting archiving {path_to_sip}")
 
     current_step = Step.objects.get(pk=step_id)
