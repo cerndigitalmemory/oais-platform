@@ -244,4 +244,4 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
 # Bagit Create Settings
 
-BIC_UPLOAD_PATH = 'tests'
+BIC_UPLOAD_PATH = None
