@@ -240,3 +240,8 @@ AM_TRANSFER_SOURCE = "6acde1a5-6f5a-4d66-8e3f-79f193baf62e"
 AM_ABS_DIRECTORY = "/mnt/am_folder/oais-data"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
+
+
+# Bagit Create Settings
+
+BIC_UPLOAD_PATH = None
