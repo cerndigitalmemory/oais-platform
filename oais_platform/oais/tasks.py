@@ -380,11 +380,12 @@ def check_am_status(self, message, step_id, archive_id):
                 periodic_task.delete()
 
             if step.status == Status.NOT_RUN:
-                pass
+                am_status = {'status':"PROCESSING",'microservice':None}
 
+        logger.info(f"Status for {step_id} is: {am_status}")
         status = am_status["status"]
         microservice = am_status["microservice"]
-        logger.info(f"Status for {step_id} is: {status}")
+
         if status == "COMPLETE":
             step.set_finish_date()
             step.set_status(Status.COMPLETED)
