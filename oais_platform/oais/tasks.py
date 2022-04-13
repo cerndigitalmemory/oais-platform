@@ -380,7 +380,8 @@ def check_am_status(self, message, step_id, archive_id):
                 periodic_task.delete()
 
             if step.status == Status.NOT_RUN:
-                am_status = {'status':"PROCESSING",'microservice':None}
+                # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
+                am_status = {'status':"PROCESSING",'microservice':"Waiting for upload",'path':'','directory':'', 'name': 'Pending...', 'uuid':'Pending...', 'message':'Waiting for upload to Archivematica' }
 
         logger.info(f"Status for {step_id} is: {am_status}")
         status = am_status["status"]
