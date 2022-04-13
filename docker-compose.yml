@@ -124,7 +124,7 @@ services:
     restart: always
     build:
       context: .
-    command: celery -A oais_platform.celery worker -l INFO
+    command: celery -A oais_platform.celery worker -l INFO -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - .:/oais_platform
     env_file:
