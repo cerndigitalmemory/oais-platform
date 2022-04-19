@@ -106,11 +106,6 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENSEARCH_HOST=http://opensearch-node1:9200
-    depends_on:
-      db:
-        condition: service_healthy
-      opensearch-node1:
-        condition: service_healthy
     env_file:
       - ./.env.dev
 
@@ -124,7 +119,7 @@ services:
     restart: always
     build:
       context: .
-    command: celery -A oais_platform.celery worker -l INFO
+    command: celery -A oais_platform.celery worker -l INFO -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - .:/oais_platform
     env_file:
