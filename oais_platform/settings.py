@@ -234,14 +234,14 @@ AM_USERNAME = "test"
 AM_API_KEY = "test"
 
 # add the UUID of the transfer source
-AM_TRANSFER_SOURCE = "6acde1a5-6f5a-4d66-8e3f-79f193baf62e"
+AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/mnt/am_folder/oais-data"
+AM_ABS_DIRECTORY = "/root/oais-platform/out"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
 
 # Bagit Create Settings
 
-BIC_UPLOAD_PATH = None
+BIC_UPLOAD_PATH = "oais-data"
