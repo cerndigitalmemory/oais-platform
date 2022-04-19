@@ -291,16 +291,6 @@ def archivematica(self, archive_id, step_id, input_data):
         ntpath.basename(path_to_sip),
     )
 
-    # # Copy the folders and the contents to the archivematica transfer source folder
-    # try:
-    #     mkpath(path_to_sip, mode=0o777)
-    #     copy_tree(path_to_sip, system_dst, update=1)
-    # except FileExistsError:
-    #     print("File exists.")
-    # except Exception as e:
-    #     step = Step.objects.get(pk=step_id)
-    #     step.set_status(Status.FAILED)
-
     # Get configuration from archivematica from settings
     am = AMClient()
     am.am_url = AM_URL
@@ -320,6 +310,11 @@ def archivematica(self, archive_id, step_id, input_data):
         # After 2 seconds check if the folder has been transfered to archivematica
         package = am.create_package()
         if (package == 3):
+            """
+            In case there is an error in the request (Error 400, Error 404 etc), 
+            archivematica returns as a result the number 3. By filtering the result in that way,
+            we know if am.create_package was executed successfully
+            """
             logger.error(
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
@@ -375,6 +370,11 @@ def check_am_status(self, message, step_id, archive_id):
             am_status = am.get_unit_status(message["id"])
         except Exception as e:
             if message == 3:
+                """
+                In case there is an error in the request (Error 400, Error 404 etc), 
+                archivematica returns as a result the number 3. By filtering the result in that way,
+                we know if am.get_unit_status was executed successfully
+                """
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()

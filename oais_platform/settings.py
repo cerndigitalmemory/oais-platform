@@ -237,7 +237,7 @@ AM_API_KEY = "test"
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/home/kchelakis/oais5/oais-platform/oais-data"
+AM_ABS_DIRECTORY = "/root/oais-platform/out"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
