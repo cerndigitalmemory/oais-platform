@@ -250,4 +250,5 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 BIC_UPLOAD_PATH = "oais-data"
 
 AIP_PATH="/oais-data/aip/"
+SIP_PATH="/oais-data/sip/"
 FILES_URL="https://oais.web.cern.ch/"

@@ -29,6 +29,7 @@ from oais_platform.settings import (
     SS_USERNAME,
     SS_API_KEY,
     BIC_UPLOAD_PATH,
+    SIP_PATH,
     AIP_PATH,
     FILES_URL
 )
@@ -153,7 +154,11 @@ def create_path_artifact(step, name, path, description=None):
     """
     Given a step, the name and the path artifact and the description, 
     """
-    oais_path = os.path.join(AIP_PATH, path)
+    if name == Artifacts.SIP:
+        oais_path = os.path.join(SIP_PATH, path)
+    if name == Artifacts.AIP:
+        oais_path = os.path.join(AIP_PATH, path)
+    
     url = urljoin(FILES_URL, oais_path)
 
     path = Path.objects.create(
@@ -192,6 +197,8 @@ def process(self, archive_id, step_id, input_data=None):
         path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
         
     archive.set_path(path_to_sip)
+
+
     # Create a SIP path artifact
     create_path_artifact(step, Artifacts.SIP, path_to_sip)
 
