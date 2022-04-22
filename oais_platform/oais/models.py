@@ -233,12 +233,6 @@ class Path(models.Model):
     url = models.TextField(max_length=1024, null=True, default=None)
     timestamp = models.DateTimeField(default=timezone.now)
     
-    class Meta:
-        permissions = [
-            ("can_access_all_archives", "Can access all the archival requests"),
-            ("can_approve_archive", "Can approve an archival request"),
-            ("can_reject_archive", "Can reject an archival request"),
-        ]
 
     def set_description(self, description):
         self.description = description
