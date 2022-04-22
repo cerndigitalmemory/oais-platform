@@ -46,12 +46,6 @@ class Status(models.IntegerChoices):
     REJECTED = 6
 
 
-class Artifacts(models.IntegerChoices):
-    SIP = 1
-    AIP = 2
-    DIP = 3
-
-
 class Archive(models.Model):
     """
     An archival process of a single addressable record in a upstream
@@ -217,27 +211,4 @@ class Collection(models.Model):
 
     def remove_archive(self, archive):
         self.archives.remove(archive)
-        self.save()
-
-
-class Path(models.Model):
-    """
-    A path artifact to save the name, the path and the description of a step output
-    """
-
-    id = models.AutoField(primary_key=True)
-    step = models.ForeignKey(Step, on_delete=models.PROTECT, related_name="artifacts")
-    name = models.IntegerField(choices=Artifacts.choices)
-    description = models.TextField(max_length=1024, null=True, default=None)
-    path = models.TextField(max_length=1024, null=True, default=None)
-    url = models.TextField(max_length=1024, null=True, default=None)
-    timestamp = models.DateTimeField(default=timezone.now)
-    
-
-    def set_description(self, description):
-        self.description = description
-        self.save()
-
-    def set_path(self, path):
-        self.path = path
         self.save()

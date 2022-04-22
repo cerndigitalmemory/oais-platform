@@ -17,7 +17,7 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from oais_platform.oais.models import Archive, Status, Step, Steps, Path, Artifacts
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.settings import (
     AM_ABS_DIRECTORY,
     AM_API_KEY,
@@ -150,24 +150,20 @@ def create_step(step_name, archive_id, input_step_id=None):
 
     return step
 
-def create_path_artifact(step, name, path, description=None):
+
+def create_path_artifact(name, path, description=None):
     """
     Given a step, the name and the path artifact and the description, 
     """
-    if name == Artifacts.SIP:
-        oais_path = os.path.join(SIP_PATH, path)
-    if name == Artifacts.AIP:
-        oais_path = os.path.join(AIP_PATH, path)
-    
-    url = urljoin(FILES_URL, oais_path)
+    url = urljoin(FILES_URL, path)
 
-    path = Path.objects.create(
-        name=name,
-        step=step,
-        path=oais_path,
-        url=url,
-        description=description
-    )
+    return dict({
+        "artifact_name":name,
+        "artifact_path":path,
+        "artifact_url":url,
+        "artifact_description":description
+    })
+
 
 
 # Steps implementations
@@ -200,7 +196,9 @@ def process(self, archive_id, step_id, input_data=None):
 
 
     # Create a SIP path artifact
-    create_path_artifact(step, Artifacts.SIP, path_to_sip)
+    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
+
+    bagit_result["artifact"] = output_artifact
 
     return bagit_result
 
@@ -442,6 +440,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
             aip_uuid = None
 
             aip_list = am.aips()
+            path_artifact = None
             for aip in aip_list:
                 if transfer_name_with_underscores in aip["current_path"]:
                     aip_path = aip["current_path"]
@@ -450,7 +449,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                     am_status["aip_uuid"] = aip_uuid
                     am_status["aip_path"] = aip_path
 
-                    create_path_artifact(step, Artifacts.AIP, aip_path)
+                    path_artifact = create_path_artifact( "AIP", os.path.join(AIP_PATH, aip_path))
+
+            am_status["artifact"] = path_artifact
 
             finalize(
                 self=self,
