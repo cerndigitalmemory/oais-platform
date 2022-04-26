@@ -157,12 +157,11 @@ def create_path_artifact(name, path):
     """
     url = urljoin(FILES_URL, path)
 
-
-    return dict({
+    return {
         "artifact_name":name,
         "artifact_path":path,
         "artifact_url":url,
-    })
+    }
 
 
 
@@ -485,4 +484,6 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
             f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
         )
         logger.warning(e)
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+        periodic_task.delete()
         step.set_status(Status.FAILED)
