@@ -424,7 +424,7 @@ def get_all_tags(request):
         raise BadRequest("Invalid request")
 
     collections = Collection.objects.filter(creator=user, internal=False)
-    serializer = Collectionset_archive_manifestSerializer(collections, many=True)
+    serializer = CollectionSerializer(collections, many=True)
     return Response(serializer.data)
 
 
