@@ -25,9 +25,9 @@ from oais_platform.settings import (
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
-    SS_URL,
-    SS_USERNAME,
-    SS_API_KEY,
+    AM_SS_URL,
+    AM_SS_USERNAME,
+    AM_SS_API_KEY,
     BIC_UPLOAD_PATH,
     SIP_PATH,
     AIP_PATH,
@@ -313,6 +313,7 @@ def archivematica(self, archive_id, step_id, input_data):
         ntpath.basename(path_to_sip),
     )
 
+    # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
 
     # Get configuration from archivematica from settings
@@ -387,9 +388,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
     am.am_user_name = AM_USERNAME
     am.am_api_key = AM_API_KEY
     am.transfer_source = AM_TRANSFER_SOURCE
-    am.ss_url = SS_URL
-    am.ss_user_name = SS_USERNAME
-    am.ss_api_key = SS_API_KEY
+    am.ss_url = AM_SS_URL
+    am.ss_user_name = AM_SS_USERNAME
+    am.ss_api_key = AM_SS_API_KEY
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
@@ -438,6 +439,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
             periodic_task = PeriodicTask.objects.get(name=task_name)
             periodic_task.delete()
 
+            # Changes the :: to __ because archivematica by default does this transformation and this is needed so we can read the correct file
             transfer_name_with_underscores = transfer_name.replace("::","__")
 
             aip_path = None
