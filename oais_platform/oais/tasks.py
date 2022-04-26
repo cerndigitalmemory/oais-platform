@@ -151,17 +151,17 @@ def create_step(step_name, archive_id, input_step_id=None):
     return step
 
 
-def create_path_artifact(name, path, description=None):
+def create_path_artifact(name, path):
     """
     Given a step, the name and the path artifact and the description, 
     """
     url = urljoin(FILES_URL, path)
 
+
     return dict({
         "artifact_name":name,
         "artifact_path":path,
         "artifact_url":url,
-        "artifact_description":description
     })
 
 
@@ -186,6 +186,8 @@ def process(self, archive_id, step_id, input_data=None):
         loglevel=2,
         target=BIC_UPLOAD_PATH,
     )
+
+    logger.info(bagit_result)
 
     path_to_sip = bagit_result["foldername"]
 
@@ -343,8 +345,7 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_status(Status.FAILED)
             return {"status": 1, "message": "Wrong Archivematica configuration"}
 
-        step = Step.objects.get(pk=step_id)
-        step.set_status(Status.NOT_RUN)
+        current_step.set_status(Status.NOT_RUN)
 
         # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(
@@ -364,6 +365,7 @@ def archivematica(self, archive_id, step_id, input_data):
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
         )
         current_step.set_status(Status.FAILED)
+        current_step.set_output_data({"status": 1, "message": e})
         return {"status": 1, "message": e}
 
     return {"status": 0, "message": "Uploaded to Archivematica"}
@@ -402,6 +404,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 archivematica returns as a result the number 1. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
+                step.set_output_data({"status": 1, "message": e})
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()
@@ -412,6 +415,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 archivematica returns as a result the number 3. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
+                step.set_output_data({"status": 1, "message": e})
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()
