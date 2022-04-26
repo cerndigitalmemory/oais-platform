@@ -79,7 +79,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
             # If harvest or upload is completed then add the audit of the sip.json to the archive.manifest field
             if step.name == 2 or step.name == 1:
-                sip_folder_name = retval["foldername"]
+                sip_folder_name = archive.path_to_sip
                 sip_manifest_path = "data/meta/sip.json"
                 sip_location = os.path.join(sip_folder_name, sip_manifest_path)
                 try:
