@@ -232,15 +232,15 @@ sentry_sdk.init(
 AM_URL = "http://umbrinus.cern.ch:62080"
 AM_USERNAME = "test"
 AM_API_KEY = "test"
-SS_URL = "http://umbrinus.cern.ch:62081"
-SS_USERNAME = "test"
-SS_API_KEY = "test"
+AM_SS_URL = "http://umbrinus.cern.ch:62081"
+AM_SS_USERNAME = "test"
+AM_SS_API_KEY = "test"
 
 # add the UUID of the transfer source
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/root/oais-platform/out"
+AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
