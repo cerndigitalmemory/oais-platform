@@ -431,22 +431,22 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
         logger.info(f"Status for {step_id} is: {status}")
 
-        if status == "COMPLETE":
-            step.set_finish_date()
-            step.set_status(Status.COMPLETED)
-
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-
+        # Needs to validate both because just status=complete does not guarantee that aip is stored
+        if status == "COMPLETE" and microservice == "Remove the processing directory":
+            """
+            Archivematica does not return the uuid of a package AIP so in order to find the AIP details we need to look to all the AIPs and find
+            the one with the same name. This way we can get the uuid and the path which are needed to access the AIP file 
+            """
             # Changes the :: to __ because archivematica by default does this transformation and this is needed so we can read the correct file
             transfer_name_with_underscores = transfer_name.replace("::","__")
 
             aip_path = None
             aip_uuid = None
 
-            aip_list = am.aips()
+            aip_list = am.aips() # Retrieves all the AIPs (needs AM_SS_* configuration)
             path_artifact = None
             for aip in aip_list:
+                # Looks for aips with the same transfer name
                 if transfer_name_with_underscores in aip["current_path"]:
                     aip_path = aip["current_path"]
                     aip_uuid = aip["uuid"]
@@ -456,17 +456,27 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
                     path_artifact = create_path_artifact( "AIP", os.path.join(AIP_PATH, aip_path))
 
-            am_status["artifact"] = path_artifact
+            # If the path artifact is found return complete otherwise set in progress and try again
+            if path_artifact:
+                am_status["artifact"] = path_artifact
 
-            finalize(
-                self=self,
-                status=states.SUCCESS,
-                retval={"status": 0},
-                task_id=None,
-                args=[archive_id, step_id],
-                kwargs=None,
-                einfo=None,
-            )
+                finalize(
+                    self=self,
+                    status=states.SUCCESS,
+                    retval={"status": 0},
+                    task_id=None,
+                    args=[archive_id, step_id],
+                    kwargs=None,
+                    einfo=None,
+                )
+
+                step.set_finish_date()
+                step.set_status(Status.COMPLETED)
+
+                periodic_task = PeriodicTask.objects.get(name=task_name)
+                periodic_task.delete()
+            else:
+                step.set_status(Status.IN_PROGRESS)
 
         elif status == "FAILED" and microservice == "Move to the failed directory":
             step.set_status(Status.FAILED)
