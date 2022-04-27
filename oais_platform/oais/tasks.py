@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from logging import log
 from distutils.dir_util import copy_tree, mkpath
+from urllib.parse import urljoin
 
 from amclient import AMClient
 from bagit_create import main as bic
@@ -24,7 +25,13 @@ from oais_platform.settings import (
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
-    BIC_UPLOAD_PATH
+    AM_SS_URL,
+    AM_SS_USERNAME,
+    AM_SS_API_KEY,
+    BIC_UPLOAD_PATH,
+    SIP_PATH,
+    AIP_PATH,
+    FILES_URL
 )
 from oais_utils.validate import validate_sip
 
@@ -72,7 +79,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
             # If harvest or upload is completed then add the audit of the sip.json to the archive.manifest field
             if step.name == 2 or step.name == 1:
-                sip_folder_name = retval["foldername"]
+                sip_folder_name = archive.path_to_sip
                 sip_manifest_path = "data/meta/sip.json"
                 sip_location = os.path.join(sip_folder_name, sip_manifest_path)
                 try:
@@ -143,6 +150,20 @@ def create_step(step_name, archive_id, input_step_id=None):
     return step
 
 
+def create_path_artifact(name, path):
+    """
+    Given a step, the name and the path artifact and the description, 
+    """
+    url = urljoin(FILES_URL, path)
+
+    return {
+        "artifact_name":name,
+        "artifact_path":path,
+        "artifact_url":url,
+    }
+
+
+
 # Steps implementations
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
 def process(self, archive_id, step_id, input_data=None):
@@ -164,12 +185,20 @@ def process(self, archive_id, step_id, input_data=None):
         target=BIC_UPLOAD_PATH,
     )
 
+    logger.info(bagit_result)
+
     path_to_sip = bagit_result["foldername"]
 
     if BIC_UPLOAD_PATH:
-        archive.set_path(os.path.join(BIC_UPLOAD_PATH, path_to_sip))
-    else:
-        archive.set_path(path_to_sip)
+        path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
+        
+    archive.set_path(path_to_sip)
+
+
+    # Create a SIP path artifact
+    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
+
+    bagit_result["artifact"] = output_artifact
 
     return bagit_result
 
@@ -238,14 +267,6 @@ def checksum(self, archive_id, step_id, input_data):
                 else:
                     return {"status": 1}
 
-    tempfile = os.path.join(os.path.dirname(path_to_sip), str(uuid.uuid4()))
-    with open(tempfile, "w") as f:
-        json.dump(data, f, indent=4)
-
-    # rename temporary file to sip2 json
-    new_sip_json = os.path.join(path_to_sip, "data/meta/sip2.json")
-    os.rename(tempfile, new_sip_json)
-
     logger.info(f"Checksum completed!")
 
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
@@ -290,6 +311,9 @@ def archivematica(self, archive_id, step_id, input_data):
         ntpath.basename(path_to_sip),
     )
 
+    # Adds an _ between Archive and the id because archivematica messes up with spaces
+    transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
+
     # Get configuration from archivematica from settings
     am = AMClient()
     am.am_url = AM_URL
@@ -297,7 +321,7 @@ def archivematica(self, archive_id, step_id, input_data):
     am.am_api_key = AM_API_KEY
     am.transfer_source = AM_TRANSFER_SOURCE
     am.transfer_directory = archivematica_dst
-    am.transfer_name = ntpath.basename(path_to_sip) + "::Archive " + str(archive_id.id)
+    am.transfer_name = transfer_name
     am.processing_config = "automated"
 
     # Create archivematica package
@@ -332,7 +356,7 @@ def archivematica(self, archive_id, step_id, input_data):
             interval=schedule,
             name=f"Archivematica status for step: {current_step.id}",
             task="check_am_status",
-            args=json.dumps([package, current_step.id, archive_id.id]),
+            args=json.dumps([package, current_step.id, archive_id.id, transfer_name]),
             expires=timezone.now() + timedelta(minutes=600),
         )
 
@@ -341,6 +365,7 @@ def archivematica(self, archive_id, step_id, input_data):
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
         )
         current_step.set_status(Status.FAILED)
+        current_step.set_output_data({"status": 1, "message": e})
         return {"status": 1, "message": e}
 
     return {"status": 0, "message": "Uploaded to Archivematica"}
@@ -351,7 +376,7 @@ def archivematica(self, archive_id, step_id, input_data):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id, archive_id):
+def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
@@ -362,18 +387,35 @@ def check_am_status(self, message, step_id, archive_id):
     am.am_user_name = AM_USERNAME
     am.am_api_key = AM_API_KEY
     am.transfer_source = AM_TRANSFER_SOURCE
+    am.ss_url = AM_SS_URL
+    am.ss_user_name = AM_SS_USERNAME
+    am.ss_api_key = AM_SS_API_KEY
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
+        am_status = {'status':"PROCESSING",'microservice':"Waiting for upload"}
+
         try:
             am_status = am.get_unit_status(message["id"])
-        except Exception as e:
+        except TypeError as e:
+            if message == 1:
+                """
+                In case archivematica is not connected (Error 500, Error 502 etc), 
+                archivematica returns as a result the number 1. By filtering the result in that way,
+                we know if am.get_unit_status was executed successfully
+                """
+                step.set_output_data({"status": 1, "message": e})
+                step.set_status(Status.FAILED)
+                periodic_task = PeriodicTask.objects.get(name=task_name)
+                periodic_task.delete()
+
             if message == 3:
                 """
                 In case there is an error in the request (Error 400, Error 404 etc), 
                 archivematica returns as a result the number 3. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
+                step.set_output_data({"status": 1, "message": e})
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()
@@ -382,26 +424,59 @@ def check_am_status(self, message, step_id, archive_id):
                 # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
                 am_status = {'status':"PROCESSING",'microservice':"Waiting for upload",'path':'','directory':'', 'name': 'Pending...', 'uuid':'Pending...', 'message':'Waiting for upload to Archivematica' }
 
-        logger.info(f"Status for {step_id} is: {am_status}")
+            logger.warning("Error while checking archivematica status: ", e)
+         
         status = am_status["status"]
         microservice = am_status["microservice"]
 
-        if status == "COMPLETE":
-            step.set_finish_date()
-            step.set_status(Status.COMPLETED)
+        logger.info(f"Status for {step_id} is: {status}")
 
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
+        # Needs to validate both because just status=complete does not guarantee that aip is stored
+        if status == "COMPLETE" and microservice == "Remove the processing directory":
+            """
+            Archivematica does not return the uuid of a package AIP so in order to find the AIP details we need to look to all the AIPs and find
+            the one with the same name. This way we can get the uuid and the path which are needed to access the AIP file 
+            """
+            # Changes the :: to __ because archivematica by default does this transformation and this is needed so we can read the correct file
+            transfer_name_with_underscores = transfer_name.replace("::","__")
 
-            finalize(
-                self=self,
-                status=states.SUCCESS,
-                retval={"status": 0},
-                task_id=None,
-                args=[archive_id, step_id],
-                kwargs=None,
-                einfo=None,
-            )
+            aip_path = None
+            aip_uuid = None
+
+            aip_list = am.aips() # Retrieves all the AIPs (needs AM_SS_* configuration)
+            path_artifact = None
+            for aip in aip_list:
+                # Looks for aips with the same transfer name
+                if transfer_name_with_underscores in aip["current_path"]:
+                    aip_path = aip["current_path"]
+                    aip_uuid = aip["uuid"]
+
+                    am_status["aip_uuid"] = aip_uuid
+                    am_status["aip_path"] = aip_path
+
+                    path_artifact = create_path_artifact( "AIP", os.path.join(AIP_PATH, aip_path))
+
+            # If the path artifact is found return complete otherwise set in progress and try again
+            if path_artifact:
+                am_status["artifact"] = path_artifact
+
+                finalize(
+                    self=self,
+                    status=states.SUCCESS,
+                    retval={"status": 0},
+                    task_id=None,
+                    args=[archive_id, step_id],
+                    kwargs=None,
+                    einfo=None,
+                )
+
+                step.set_finish_date()
+                step.set_status(Status.COMPLETED)
+
+                periodic_task = PeriodicTask.objects.get(name=task_name)
+                periodic_task.delete()
+            else:
+                step.set_status(Status.IN_PROGRESS)
 
         elif status == "FAILED" and microservice == "Move to the failed directory":
             step.set_status(Status.FAILED)
@@ -419,4 +494,6 @@ def check_am_status(self, message, step_id, archive_id):
             f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
         )
         logger.warning(e)
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+        periodic_task.delete()
         step.set_status(Status.FAILED)

@@ -52,3 +52,9 @@ OpenSearch:
   `python manage.py opensearch index create`
 - Populate indices
   `python3 manage.py opensearch document index`
+
+Show test coverage:
+
+- Get test coverage: `coverage run --source='.' manage.py test`
+- Show coverage report: `coverage report`
+- Export detailed html: `coverage html`
