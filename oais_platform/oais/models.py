@@ -44,6 +44,7 @@ class Status(models.IntegerChoices):
     COMPLETED = 4
     WAITING_APPROVAL = 5
     REJECTED = 6
+    WAITING = 7
 
 
 class Archive(models.Model):
