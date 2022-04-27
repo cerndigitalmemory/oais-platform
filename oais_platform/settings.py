@@ -229,15 +229,18 @@ sentry_sdk.init(
 # ARCHIVEMATICA SETTINGS
 
 # add the URL archivematica is running, username and password
-AM_URL = "http://127.0.0.1:2080"
+AM_URL = "http://umbrinus.cern.ch:62080"
 AM_USERNAME = "test"
 AM_API_KEY = "test"
+AM_SS_URL = "http://umbrinus.cern.ch:62081"
+AM_SS_USERNAME = "test"
+AM_SS_API_KEY = "test"
 
 # add the UUID of the transfer source
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 
 # This is the absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/root/oais-platform/out"
+AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
 # This is the directory Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
@@ -245,3 +248,7 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 # Bagit Create Settings
 
 BIC_UPLOAD_PATH = "oais-data"
+
+AIP_PATH="/oais-data/aip/"
+SIP_PATH="/oais-data/sip/"
+FILES_URL="https://oais.web.cern.ch/"
