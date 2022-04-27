@@ -134,8 +134,7 @@ def create_step(step_name, archive_id, input_step_id=None):
         name=step_name,
         input_step=input_step,
         input_data=input_data,
-        # change to waiting/not run
-        status=Status.IN_PROGRESS,
+        status=Status.WAITING,
     )
 
     # Consider switching this to "eval"?
@@ -345,7 +344,8 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_status(Status.FAILED)
             return {"status": 1, "message": "Wrong Archivematica configuration"}
 
-        current_step.set_status(Status.NOT_RUN)
+        step = Step.objects.get(pk=step_id)
+        step.set_status(Status.WAITING)
 
         # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(

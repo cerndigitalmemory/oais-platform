@@ -33,7 +33,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.HARVEST)
-        self.assertEqual(response.data["status"], Status.IN_PROGRESS)
+        self.assertEqual(response.data["status"], Status.WAITING)
 
     def test_create_step_validate(self):
         self.client.force_authenticate(user=self.creator)
@@ -51,7 +51,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.VALIDATION)
-        self.assertEqual(response.data["status"], Status.IN_PROGRESS)
+        self.assertEqual(response.data["status"], Status.WAITING)
 
     def test_create_step_checksum(self):
         self.client.force_authenticate(user=self.creator)
@@ -69,7 +69,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.CHECKSUM)
-        self.assertEqual(response.data["status"], Status.IN_PROGRESS)
+        self.assertEqual(response.data["status"], Status.WAITING)
 
     def test_create_step_archivematica(self):
         self.client.force_authenticate(user=self.creator)
@@ -87,7 +87,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.ARCHIVE)
-        self.assertEqual(response.data["status"], Status.IN_PROGRESS)
+        self.assertEqual(response.data["status"], Status.WAITING)
 
     def test_edit_manifests(self):
         self.client.force_authenticate(user=self.creator)
