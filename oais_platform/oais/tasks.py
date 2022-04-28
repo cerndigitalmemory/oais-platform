@@ -176,11 +176,10 @@ def process(self, archive_id, step_id, input_data=None):
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
-def validate(self, archive_id, step_id, input_data):
+def validate(self, archive_id, step_id, input_data=None):
 
     archive = Archive.objects.get(pk=archive_id)
     path_to_sip = archive.path_to_sip
-    print(path_to_sip)
 
     logger.info(f"Starting SIP validation {path_to_sip}")
 
