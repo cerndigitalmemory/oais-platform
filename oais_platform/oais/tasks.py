@@ -33,7 +33,7 @@ from oais_platform.settings import (
     AIP_PATH,
     FILES_URL
 )
-from oais_utils.validate import validate_sip
+from oais_utils import validate as validator
 
 logger = get_task_logger(__name__)
 
@@ -185,20 +185,21 @@ def process(self, archive_id, step_id, input_data=None):
         target=BIC_UPLOAD_PATH,
     )
 
-    logger.info(bagit_result)
+    logger.info(f"BagIt{bagit_result}")
 
-    path_to_sip = bagit_result["foldername"]
+    if bagit_result["status"] == 0:
+        path_to_sip = bagit_result["foldername"]
 
-    if BIC_UPLOAD_PATH:
-        path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
-        
-    archive.set_path(path_to_sip)
+        if BIC_UPLOAD_PATH:
+            path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
+            
+        archive.set_path(path_to_sip)
 
 
-    # Create a SIP path artifact
-    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
+        # Create a SIP path artifact
+        output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
 
-    bagit_result["artifact"] = output_artifact
+        bagit_result["artifact"] = output_artifact
 
     return bagit_result
 
@@ -221,10 +222,10 @@ def validate(self, archive_id, step_id, input_data=None):
     sip_exists = os.path.exists(path_to_sip)
 
     if not sip_exists:
-        return {"status": 1}
+        return {"status": 1, "errormsg": "SIP folder was not found"}
 
     # Runs validate_sip from oais_utils
-    valid = validate_sip(path_to_sip)
+    valid = validator.validate_sip(path_to_sip)
 
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
@@ -244,27 +245,30 @@ def checksum(self, archive_id, step_id, input_data):
 
     sip_exists = os.path.exists(path_to_sip)
     if not sip_exists:
-        return {"status": 1}
+        return {"status": 1, "errormsg": "SIP folder was not found"}
 
-    sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
+    try:
+        sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
 
-    with open(sip_json) as json_file:
-        data = json.load(json_file)
-        for file in data["contentFiles"]:
-            try:
-                checksum_list = []
-                for checksum in file["checksum"]:
-                    splited = checksum.split(":")
-                    checksum = splited[0] + ":" + "0"
-                    checksum_list.append(checksum)
-            except Exception:
-                if (
-                    file["origin"]["filename"] == "bagitcreate.log"
-                    or file["origin"]["filename"] == "sip.json"
-                ):
-                    pass
-                else:
-                    return {"status": 1}
+        with open(sip_json) as json_file:
+            data = json.load(json_file)
+            for file in data["contentFiles"]:
+                try:
+                    checksum_list = []
+                    for checksum in file["checksum"]:
+                        splited = checksum.split(":")
+                        checksum = splited[0] + ":" + "0"
+                        checksum_list.append(checksum)
+                except Exception as e:
+                    if (
+                        file["origin"]["filename"] == "bagitcreate.log"
+                        or file["origin"]["filename"] == "sip.json"
+                    ):
+                        pass
+                    else:
+                        return {"status": 1, "errormsg": f"Checksum failed: {e}"}
+    except Exception as e:
+        return {"status": 1, "errormsg": f"sip.json file error: {e}"}
 
     logger.info(f"Checksum completed!")
 
@@ -276,7 +280,7 @@ def checksum(self, archive_id, step_id, input_data):
     bind=True,
     ignore_result=True,
 )
-def archivematica(self, archive_id, step_id, input_data):
+def archivematica(self, archive_id, step_id, input_data=None):
     """
     Gets the current step_id and the path to the sip folder and calls sends the sip to archivematica
     """
@@ -329,7 +333,7 @@ def archivematica(self, archive_id, step_id, input_data):
     )
 
     try:
-        # After 2 seconds check if the folder has been transfered to archivematica
+        # Check if the folder has been transfered to archivematica
         package = am.create_package()
         if (package == 3):
             """
@@ -353,9 +357,9 @@ def archivematica(self, archive_id, step_id, input_data):
         # Create a periodic task that checks the status of archivematica avery 10 seconds.
         PeriodicTask.objects.create(
             interval=schedule,
-            name=f"Archivematica status for step: {current_step.id}",
+            name=f"Archivematica: {current_step.id} {self.request.id}",
             task="check_am_status",
-            args=json.dumps([package, current_step.id, archive_id.id, transfer_name]),
+            args=json.dumps([package, current_step.id, archive_id.id, self.request.id, transfer_name]),
             expires=timezone.now() + timedelta(minutes=600),
         )
 
@@ -375,10 +379,10 @@ def archivematica(self, archive_id, step_id, input_data):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id, archive_id, transfer_name=None):
+def check_am_status(self, message, step_id, archive_id, am_task_id, transfer_name=None):
 
     step = Step.objects.get(pk=step_id)
-    task_name = f"Archivematica status for step: {step_id}"
+    task_name = f"Archivematica: {step_id} {am_task_id}"
 
     # Get the current configuration
     am = AMClient()
