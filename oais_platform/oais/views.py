@@ -1072,7 +1072,8 @@ def save_manifest(request, id):
         if "manifest" not in body:
             raise BadRequest("Missing manifest")
         manifest = body["manifest"]
-        archive.set_archive_manifest(manifest)
+        json_manifest = json.loads(manifest)
+        archive.set_archive_manifest(json_manifest)
         step.set_output_data(manifest)
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
