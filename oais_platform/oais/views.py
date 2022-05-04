@@ -1078,10 +1078,10 @@ def save_manifest(request, id):
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
         return Response()
-    except Exception:
+    except Exception as e:
         step.set_status(Status.FAILED)
         step.set_finish_date()
-        raise BadRequest("An error occured while saving the manifests.")
+        raise BadRequest("An error occured while saving the manifests.", e)
 
 
 @api_view(["POST"])
