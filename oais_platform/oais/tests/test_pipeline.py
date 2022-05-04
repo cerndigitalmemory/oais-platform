@@ -97,11 +97,11 @@ class PipelineTests(APITestCase):
         url = reverse("save_manifest", args=[self.archive.id])
         response = self.client.post(
             url,
-            {"manifest": "test"},
+            {"manifest": "{\"test\":\"test\"}"},
             format="json",
         )
 
         self.archive.refresh_from_db()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.manifest, "test")
+        self.assertEqual(self.archive.manifest, {'test': 'test'})

@@ -98,11 +98,11 @@ class Archive(models.Model):
 
         return self.next_steps
 
-    def set_archive_manifest(self, manifest_json):
+    def set_archive_manifest(self, manifest):
         """
-        Set manifest to the given sip json file
+        Set manifest to the given object
         """
-        self.manifest = manifest_json
+        self.manifest = manifest
         self.save()
 
     def get_collections(self):
