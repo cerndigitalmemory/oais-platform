@@ -27,7 +27,11 @@ class TaskTests(TestCase):
         )
     
     @override_settings(
-        CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True,BROCKER_BACKEND='memory')
+        task_eager_propagates=True,
+        task_always_eager=True,
+        broker_url='memory://',
+        backend='memory',
+        BIC_UPLOAD_PATH='test')
     @patch("bagit_create.main.process")
     def test_harvest(self, bagit):
         bagit.return_value = {'status': 0,'foldername': "test", 'errormsg': None}
