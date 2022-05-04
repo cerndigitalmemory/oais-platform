@@ -11,18 +11,17 @@ from urllib.parse import unquote, urlparse
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from django.db.models import base
+from django.db.models import Q, base
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
-    filter_archives_by_user_creator,
-    filter_archives_public,
-    filter_archives_for_user,
     filter_all_archives_user_has_access,
-    filter_steps_by_user_perms,
+    filter_archives_by_user_creator,
+    filter_archives_for_user,
+    filter_archives_public,
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
     filter_records_by_user_perms,
@@ -44,7 +43,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from django.db.models import Q
 from rest_framework.views import APIView
 
 from ..settings import (
@@ -1071,16 +1069,18 @@ def save_manifest(request, id):
         body = request.data
         if "manifest" not in body:
             raise BadRequest("Missing manifest")
-        manifest = body["manifest"]
+        json_manifest = body["manifest"]
+        # Deserialize the edited manifest
+        manifest = json.loads(json_manifest)
         archive.set_archive_manifest(manifest)
-        step.set_output_data(manifest)
+        step.set_output_data(json_manifest)
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
         return Response()
-    except Exception:
+    except Exception as e:
         step.set_status(Status.FAILED)
         step.set_finish_date()
-        raise BadRequest("An error occured while saving the manifests.")
+        raise BadRequest("An error occured while saving the manifests.", e)
 
 
 @api_view(["POST"])
