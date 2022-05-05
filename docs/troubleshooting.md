@@ -13,10 +13,10 @@ Containers overview:
 | oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
 
 - Bring up the containers (start everything), showing aggregated logs
-  `docker compose up`
+  `docker-compose up`
   Stop containers with <kbd>CTRL</kbd>+<kbd>C</kbd>
 - Bring up the containers in detached mode (no logs)
-  `docker compose up -f`
+  `docker-compose up -d`
 - Show logs of single container
   `docker-compose logs <CONTAINER_NAME>`
   Use `-f` to keep following the logs
@@ -30,6 +30,18 @@ Containers overview:
   `docker exec -it <CONTAINER_NAME> sh`
 - Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
   `docker-compose build`
+
+To reset your instance:
+
+```bash
+docker-compose down
+docker volume purge
+docker-compose up
+# sometimes django needs to be restarted manually..
+docker start oais_django
+# create a new superuser (user and pass admin) without entering manually the values
+docker exec -e DJANGO_SUPERUSER_PASSWORD=admin oais_django python3 manage.py createsuperuser --noinput --username admin --email root@root.com
+```
 
 Django:
 
@@ -52,9 +64,3 @@ OpenSearch:
   `python manage.py opensearch index create`
 - Populate indices
   `python3 manage.py opensearch document index`
-
-Show test coverage:
-
-- Get test coverage: `coverage run --source='.' manage.py test`
-- Show coverage report: `coverage report`
-- Export detailed html: `coverage html`
