@@ -1069,11 +1069,9 @@ def save_manifest(request, id):
         body = request.data
         if "manifest" not in body:
             raise BadRequest("Missing manifest")
-        json_manifest = body["manifest"]
-        # Deserialize the edited manifest
-        manifest = json.loads(json_manifest)
+        manifest = body["manifest"]
         archive.set_archive_manifest(manifest)
-        step.set_output_data(json_manifest)
+        step.set_output_data(manifest)
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
         return Response()

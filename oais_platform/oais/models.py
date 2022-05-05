@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
@@ -161,7 +163,7 @@ class Step(models.Model):
         self.save()
 
     def set_output_data(self, data):
-        self.output_data = data
+        self.output_data = json.dumps(data)
         self.save()
 
     def set_finish_date(self):
