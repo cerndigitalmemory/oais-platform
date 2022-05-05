@@ -6,14 +6,14 @@ Web API, built on Django, managing workflows for the CERN Digital Memory OAIS pl
 
 Main goals of the platforms are:
 
-- Trigger resource harvesting and produce BagIt packages, using the [bagit-create](https://gitlab.cern.ch/digitalmemory/bagit-create) tool;
-- Trigger the preservations and sorrounding workflows;
-  - Evaluation of a3m, an alternative Archivemeativa version (gRPC service);
+- Allow users to trigger the _harvesting_ of resources and produce SIPs (using the [bagit-create](https://gitlab.cern.ch/digitalmemory/bagit-create) tool);
+- Allow services and users to _deposit_ SIPs and ingest them in the platform;
+- Trigger preservation workflows;
   - Interface with a distributed deployment of Archivematica;
   - Send SIPs to Archiver.eu platforms and evaluate their interfaces, performance and behaviour on ingestions and processing metadata;
 - Send prepared AIPs to the new CERN Tape Archive (CTA);
 - Maintain a _registry_ of the successfully harvested and ingested resources, processing and exposing metadata;
-- Expose resources on an access system (powered by Invenio?), exploiting the metadata and revisions features of the CERN AIP specification.
+- Expose resources on an access system powered by InvenioRDM.
 
 ## Run
 
@@ -57,7 +57,7 @@ See [troubleshooting](docs/troubleshooting.md) for more instructions on how to s
 
 ### Django
 
-To run these commands inside a Docker container, prefix them with `docker exec -it oais_django`.
+To run these commands inside a Docker container, run it in the container shell with `docker exec -it oais_django sh`.
 
 ```bash
 # python manage.py showmigrations
@@ -66,7 +66,7 @@ python manage.py makemigrations oais
 # Apply migrations
 python manage.py migrate
 # Create administrator user
-python manage.py createsuperuser
+DJANGO_SUPERUSER_PASSWORD=root DJANGO_SUPERUSER_USERNAME=root DJANGO_SUPERUSER_EMAIL=root@root.com python3 manage.py createsuperuser --noinput
 # Run the application
 python manage.py runserver
 # (OpenSearch) create indices
