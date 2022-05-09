@@ -2,9 +2,9 @@ from re import S
 
 from django.contrib.auth.models import Group, User
 from oais_platform.oais.models import Archive, Collection, Profile, Step
+from opensearch_dsl import utils
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
-from opensearch_dsl import utils
 
 
 class ProfileSerializer(serializers.ModelSerializer):
