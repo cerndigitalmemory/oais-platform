@@ -85,13 +85,11 @@ INSTALLED_APPS = [
     "rest_framework",
     "oais_platform",
     "oais_platform.oais",
-    "oais_platform.search",
     "corsheaders",
     "django_celery_beat",
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "guardian",
-    "django_opensearch_dsl",
 ]
 
 MIDDLEWARE = [
@@ -205,9 +203,6 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ORIGIN_ALLOW_ALL = True
 
-#
-OPENSEARCH_DSL = {"default": {"hosts": environ.get("OPENSEARCH_HOST")}}
-
 # Sentry
 sentry_sdk.init(
     dsn=environ.get("SENTRY_DSN"),
@@ -249,6 +244,6 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
 BIC_UPLOAD_PATH = "oais-data"
 
-AIP_PATH="/oais-data/aip/"
-SIP_PATH="/oais-data/sip/"
-FILES_URL="https://oais.web.cern.ch/"
+AIP_PATH = "/oais-data/aip/"
+SIP_PATH = "/oais-data/sip/"
+FILES_URL = "https://oais.web.cern.ch/"

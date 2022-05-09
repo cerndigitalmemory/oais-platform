@@ -18,7 +18,6 @@ from django.urls import include, path
 from rest_framework import routers
 
 from oais_platform.oais import views
-from oais_platform.search.views import SearchArchives
 
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet)
@@ -43,7 +42,6 @@ urlpatterns = [
         r"api/",
         include(
             [
-                path("opensearch/", SearchArchives.as_view()),
                 # Serve the generated API schema (as a yaml file)
                 path("schema/", SpectacularAPIView.as_view(), name="schema"),
                 # Serve the Swagger UI
