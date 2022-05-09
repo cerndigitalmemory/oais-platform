@@ -1,7 +1,7 @@
 from django.contrib.auth.models import Permission, User
 from oais_platform.oais.models import Archive, Steps, Step, Status
-from rest_framework.test import APITestCase
-from django.test import TestCase, override_settings, modify_settings
+from rest_framework.test import APITestCase, override_settings
+#from django.test import SimpleTestCase,TestCase, override_settings, modify_settings
 from oais_platform.oais.tests.utils import get_sample_sip_json
 from oais_platform.oais import tasks
 from unittest import mock
@@ -10,12 +10,33 @@ from os.path import join
 import tempfile, os, bagit_create, oais_utils
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
+from celery.contrib.testing.worker import start_worker
 
-from oais_platform.settings import BIC_UPLOAD_PATH
+from django.conf import settings
+from oais_platform.celery import app
+import pytest
 
 
+@pytest.mark.usefixtures('celery_session_app')
+@pytest.mark.usefixtures('celery_session_worker')
+class TaskTests():
+    # databases = '__all__'
 
-class TaskTests(TestCase):
+    # @classmethod
+    # def setUpClass(cls):
+    #     super().setUpClass()
+
+    #     # Start up celery worker
+    #     cls.celery_worker = start_worker(app, perform_ping_check=False)
+    #     cls.celery_worker.__enter__()
+
+    # @classmethod
+    # def tearDownClass(cls):
+    #     super().tearDownClass()
+
+    #     # Close worker
+    #     cls.celery_worker.__exit__(None, None, None)
+
     def setUp(self):
         self.permission = Permission.objects.get(codename="can_access_all_archives")
 
@@ -27,31 +48,30 @@ class TaskTests(TestCase):
         )
     
     @override_settings(
-        task_eager_propagates=True,
-        task_always_eager=True,
-        broker_url='memory://',
-        backend='memory',
+        # CELERY_EAGER_PROPAGATES_EXCEPTIONS=True,
+        # CELERY_ALWAYS_EAGER=True,
         BIC_UPLOAD_PATH='test')
     @patch("bagit_create.main.process")
-    def test_harvest(self, bagit):
-        bagit.return_value = {'status': 0,'foldername': "test", 'errormsg': None}
+    def test_harvest(self, bagit_mock):
+        bagit_mock.return_value = {'status': 0,'foldername': "test", 'errormsg': None}
 
         step = tasks.create_step(Steps.HARVEST, self.archive.id)
-
         self.task = tasks.process.delay(self.archive.id, step.id)
-    
+
         self.bagit_result = self.task.get()
-        bagit.assert_called()
+        bagit_mock.assert_called()
         
         self.assertEqual(step.status, Status.WAITING)
         self.archive.refresh_from_db()
         step.refresh_from_db()
 
+        print(settings.BIC_UPLOAD_PATH)
+
         self.assertEqual(self.bagit_result, {'status': 0,'foldername': "test", 'errormsg': None, 'artifact': 
-            {'artifact_name': 'SIP','artifact_path': f"/{BIC_UPLOAD_PATH}/sip/oais-data/test",'artifact_url': f'https://oais.web.cern.ch/oais-data/sip/{BIC_UPLOAD_PATH}/test'}})
+            {'artifact_name': 'SIP','artifact_path': f"/{settings.BIC_UPLOAD_PATH}/sip/oais-data/test",'artifact_url': f'https://oais.web.cern.ch/oais-data/sip/{settings.BIC_UPLOAD_PATH}/test'}})
         self.assertEqual(step.name, Steps.HARVEST)
         self.assertEqual(step.status, Status.COMPLETED)
-        self.assertEqual(self.archive.path_to_sip, join(BIC_UPLOAD_PATH,self.bagit_result["foldername"]))
+        self.assertEqual(self.archive.path_to_sip, join(settings.BIC_UPLOAD_PATH,self.bagit_result["foldername"]))
 
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True)

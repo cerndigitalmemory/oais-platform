@@ -185,6 +185,8 @@ def process(self, archive_id, step_id, input_data=None):
         target=BIC_UPLOAD_PATH,
     )
 
+    print(BIC_UPLOAD_PATH)
+
     logger.info(f"BagIt{bagit_result}")
 
     if bagit_result["status"] == 0:
