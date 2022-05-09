@@ -97,7 +97,7 @@ class PipelineTests(APITestCase):
         url = reverse("save_manifest", args=[self.archive.id])
         response = self.client.post(
             url,
-            {"manifest": "{\"test\":\"test\"}"},
+            {"manifest": {'test':'test'}},
             format="json",
         )
 
