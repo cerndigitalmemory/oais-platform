@@ -52,7 +52,7 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process, validate
+from .tasks import create_step, process, validate, run_next_step
 
 
 @extend_schema_view(
@@ -636,6 +636,8 @@ def upload(request):
 
     # Using root tmp folder
     base_path = os.path.join(os.getcwd(), "tmp")
+    if not os.path.exists(base_path):
+        os.mkdir(base_path)
     try:
         # Save compressed SIP
         compressed_path = os.path.join(base_path, "compressed.zip")
@@ -657,18 +659,25 @@ def upload(request):
 
         # Save path and change status of the archive
         archive.path_to_sip = os.path.join(base_path, sip_dir)
+        archive.update_next_steps(step.name)
         archive.save()
 
-        next_step = Step.objects.create(
-            archive=archive,
-            name=Steps.VALIDATION,
-            input_step=step.id,
-            status=Status.WAITING_APPROVAL,
-        )
-    except Exception:
-        step.set_status(Status.FAILED)
+        # next_step = Step.objects.create(
+        #     archive=archive,
+        #     name=Steps.VALIDATION,
+        #     input_step=step,
+        #     status=Status.IN_PROGRESS,
+        # )
 
-    return Response({"msg": "SIP uploading started, see Archives page"})
+        run_next_step(archive.id, step.id)
+
+        return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
+    except Exception as e:
+        print(e)
+        step.set_status(Status.FAILED)
+        return Response({"status": 1, "msg": e})
+
+    
 
 
 @api_view()
