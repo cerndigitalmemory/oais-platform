@@ -675,7 +675,7 @@ def upload(request):
             os.remove(compressed_path)
         if(step):
             step.set_status(Status.FAILED)
-        raise HTTPError({"status": 1, "msg": e.detail})
+        raise HTTPError({"status": 1, "msg": e})
 
     
 
