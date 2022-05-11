@@ -1,19 +1,17 @@
-import json
-import logging
 import os
 import subprocess
 import time
 import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
 
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from django.db.models import Q, base
+from django.db.models import Q
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.exceptions import BadRequest, DoesNotExist
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
@@ -39,10 +37,8 @@ from oais_platform.oais.sources import InvalidSource, get_source
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from rest_framework.views import APIView
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -51,7 +47,7 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process, validate
+from .tasks import create_step, process
 
 
 @extend_schema_view(
@@ -61,26 +57,32 @@ from .tasks import create_step, process, validate
 @permission_classes([permissions.IsAuthenticated])
 def update_profile(request):
     """
-    Updates a Profile
+    Updates the user profile, overwriting the passed values
     """
 
     user = request.user
 
-    data = {"indico_api_key": request.data.get("indico_api_key")}
-
-    serializer = UserSerializer(data=data)
+    serializer = ProfileSerializer(data=request.data)
     if serializer.is_valid():
-        user.profile.indico_api_key = request.data["indico_api_key"]
+        user.profile.update(serializer.data)
         user.save()
+    
+    # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
+    # if (serializer.data == request.data)
 
     serializer = UserSerializer(user)
     return Response(serializer.data)
 
 
+@extend_schema(responses=UserSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
-def me(request):
-    serializer = UserSerializer(request.user)
+def user_info(request, id=None):
+    """
+    Get complete information and settings of the user
+    """
+    user = request.user
+    serializer = UserSerializer(user)
     return Response(serializer.data)
 
 
@@ -356,6 +358,13 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
 @api_view(["GET"])
 def get_settings(request):
+    """
+    Returns a collection of (read-only) the main configuration values and some
+    information about the backend
+    Also include some user-side settings
+    """
+
+    # Try to get the commit hash of the backend
     try:
         githash = (
             subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])

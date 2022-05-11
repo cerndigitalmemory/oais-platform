@@ -67,8 +67,8 @@ urlpatterns = [
                 path("logout/", views.logout, name="logout"),
                 # API
                 path("", include(router.urls)),
-                path("me/", views.me, name="me"),
-                path("edit-profile/", views.update_profile, name="update_user"),
+                path("user/me/", views.user_info, name="me"),
+                path("user/update/", views.update_profile, name="update_user"),
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 path(
                     "create-archive/<str:recid>/<str:source>/",
