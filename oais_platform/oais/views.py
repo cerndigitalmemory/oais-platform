@@ -44,6 +44,8 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
+from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_utils.validate import get_manifest
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -605,39 +607,13 @@ def get_staged_archives(request):
 def upload(request):
     file = request.FILES.getlist("file")[0]
 
-    # WORKAROUND FOR NOW : Get directory name from compressed filename
-    # TODO getting source and recid from sip.json?
-    try:
-        sip_dir = file.name.split(".")[0]
-        sip_data = sip_dir.split("::")
-        source = sip_data[1]
-        recid = sip_data[2]
-    except:
-        raise BadRequest("Wrong file format")
-
-    try:
-        url = get_source(source).get_record_url(recid)
-    except InvalidSource:
-        raise BadRequest("Invalid source")
-
-    # Always create a new Archive instance
-    archive = Archive.objects.create(
-        recid=recid,
-        source=source,
-        source_url=url,
-        creator=request.user,
-    )
-
-    step = Step.objects.create(
-        archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
-    )
-
-    archive.set_step(step)
-
+    
     # Using root tmp folder
-    base_path = os.path.join(os.getcwd(), "tmp")
-    if not os.path.exists(base_path):
-        os.mkdir(base_path)
+    if BIC_UPLOAD_PATH:
+        base_path = os.path.join(os.getcwd,BIC_UPLOAD_PATH)
+    else: 
+        base_path = os.getcwd()
+
     try:
         # Save compressed SIP
         compressed_path = os.path.join(base_path, "compressed.zip")
@@ -646,9 +622,37 @@ def upload(request):
             destination.write(chunk)
         destination.close()
 
-        # Extract it
+        # Extract it and get the top directory folder
         with zipfile.ZipFile(compressed_path, "r") as compressed:
             compressed.extractall(base_path)
+            top = [item.split('/')[0] for item in compressed.namelist()]
+        
+        # Get the folder location and the sip_json using oais utils
+        folder_location = top[0]     
+        sip_json = get_manifest(os.path.join(base_path, folder_location))
+        sip_location = os.path.join(base_path, folder_location)
+
+        source = sip_json["source"]
+        recid = sip_json["recid"]
+
+        try:
+            url = get_source(source).get_record_url(recid)
+        except InvalidSource:
+            raise BadRequest("Invalid source")
+
+        # Create a new Archive instance
+        archive = Archive.objects.create(
+            recid=recid,
+            source=source,
+            source_url=url,
+            creator=request.user,
+        )
+
+        step = Step.objects.create(
+            archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+        )
+
+        archive.set_step(step)
 
         # Remove zip
         os.remove(compressed_path)
@@ -658,22 +662,16 @@ def upload(request):
         step.set_finish_date()
 
         # Save path and change status of the archive
-        archive.path_to_sip = os.path.join(base_path, sip_dir)
+        archive.path_to_sip = sip_location
         archive.update_next_steps(step.name)
         archive.save()
-
-        # next_step = Step.objects.create(
-        #     archive=archive,
-        #     name=Steps.VALIDATION,
-        #     input_step=step,
-        #     status=Status.IN_PROGRESS,
-        # )
 
         run_next_step(archive.id, step.id)
 
         return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
     except Exception as e:
-        print(e)
+        if(os.path.exists(compressed_path)):
+            os.remove(compressed_path)
         step.set_status(Status.FAILED)
         return Response({"status": 1, "msg": e})
 
