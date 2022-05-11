@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import time
+from urllib.error import HTTPError
 import zipfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
@@ -606,17 +607,15 @@ def get_staged_archives(request):
 @permission_classes([permissions.IsAuthenticated])
 def upload(request):
     file = request.FILES.getlist("file")[0]
-
-    
-    # Using root tmp folder
-    if BIC_UPLOAD_PATH:
-        base_path = os.path.join(os.getcwd,BIC_UPLOAD_PATH)
-    else: 
-        base_path = os.getcwd()
+    step = None
 
     try:
+        if BIC_UPLOAD_PATH:
+            base_path = BIC_UPLOAD_PATH
+        else: 
+            base_path = os.getcwd()
         # Save compressed SIP
-        compressed_path = os.path.join(base_path, "compressed.zip")
+        compressed_path = os.path.join(base_path, f"compressed_{file.name}")
         destination = open(compressed_path, "wb+")
         for chunk in file.chunks():
             destination.write(chunk)
@@ -626,7 +625,8 @@ def upload(request):
         with zipfile.ZipFile(compressed_path, "r") as compressed:
             compressed.extractall(base_path)
             top = [item.split('/')[0] for item in compressed.namelist()]
-        
+        os.remove(compressed_path)
+    
         # Get the folder location and the sip_json using oais utils
         folder_location = top[0]     
         sip_json = get_manifest(os.path.join(base_path, folder_location))
@@ -635,11 +635,9 @@ def upload(request):
         source = sip_json["source"]
         recid = sip_json["recid"]
 
-        try:
-            url = get_source(source).get_record_url(recid)
-        except InvalidSource:
-            raise BadRequest("Invalid source")
+        url = get_source(source).get_record_url(recid)
 
+        
         # Create a new Archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -652,10 +650,7 @@ def upload(request):
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
 
-        archive.set_step(step)
-
-        # Remove zip
-        os.remove(compressed_path)
+        archive.set_step(step)   
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
@@ -669,11 +664,18 @@ def upload(request):
         run_next_step(archive.id, step.id)
 
         return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
+    except zipfile.BadZipFile:
+        raise BadRequest({"status": 1, "msg":"Check the zip file for errors"})
+    except TypeError:
+        if(os.path.exists(compressed_path)):
+            os.remove(compressed_path)
+        raise BadRequest({"status": 1, "msg":"Check your SIP structure"})
     except Exception as e:
         if(os.path.exists(compressed_path)):
             os.remove(compressed_path)
-        step.set_status(Status.FAILED)
-        return Response({"status": 1, "msg": e})
+        if(step):
+            step.set_status(Status.FAILED)
+        raise HTTPError({"status": 1, "msg": e.detail})
 
     
 

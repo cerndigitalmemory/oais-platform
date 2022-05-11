@@ -1,8 +1,10 @@
 from cmath import log
+import ntpath
 from unittest import mock
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from django.core.files.uploadedfile import TemporaryUploadedFile, SimpleUploadedFile
 from oais_platform.oais.models import Archive, Status, Step
@@ -14,7 +16,7 @@ from bagit_create import main as bic
 
 import json, tempfile, os
 import zipfile
-import ast
+from oais_platform.settings import BIC_UPLOAD_PATH
 
 
 class UploadTests(APITestCase):
@@ -33,7 +35,7 @@ class UploadTests(APITestCase):
         )
         response = self.client.post(url, {"file": file})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], "Wrong file format")
+
         f1.close()
 
     def test_harvest_wrong_source(self):
@@ -49,9 +51,10 @@ class UploadTests(APITestCase):
         )
         response = self.client.post(url, {"file": file})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], "Invalid source")
+
         f1.close()
 
+    @override_settings(BIC_UPLOAD_PATH=None)
     def test_upload_sip(self):
         # Prepare a temp folder to save the results
         with tempfile.TemporaryDirectory() as tmpdir2:
@@ -67,19 +70,28 @@ class UploadTests(APITestCase):
 
             foldername = res["foldername"]
 
-            path_to_sip = os.path.join(os.path.abspath(tmpdir2), foldername)
-
-            zipfile.ZipFile(f"{path_to_sip}.zip", mode="w").write(path_to_sip)
-
+            path_to_sip = os.path.join(tmpdir2, foldername)
             path_to_zip = path_to_sip + ".zip"
 
-            with open(path_to_zip, mode="rb") as myzip:
+            # create a ZipFile object
+            with zipfile.ZipFile("test.zip", 'w') as zipf:
+                # Iterate over all the files in directory
+                len_dir_path = len(tmpdir2)
+                for root, _, files in os.walk(tmpdir2):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        zipf.write(file_path, file_path[len_dir_path:])
+            zipf.close()
+            
+
+            with open("test.zip", mode="rb") as myzip:
 
                 url = reverse("upload")
-
                 response = self.client.post(url, {"file": myzip})
+            
+            os.remove("test.zip")
 
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(
-                response.data["msg"], "SIP uploading started, see Archives page"
-            )
+            
+            self.assertEqual(response.data["status"], 0)
+            self.assertEqual(response.data["msg"], 'SIP uploading started, see Archives page')
