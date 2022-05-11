@@ -1,4 +1,3 @@
-import collections
 import json
 import logging
 import os
@@ -382,6 +381,7 @@ def get_settings(request):
     return Response(data)
 
 
+@extend_schema(responses=StepSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_steps(request, id):
@@ -410,11 +410,12 @@ def collection_details(self, id):
     return Response(serializer.data)
 
 
+@extend_schema(responses=CollectionSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_all_tags(request):
     """
-    Returns a list of all the available tags for a single user
+    Returns a list of all the Tags a User has created
     """
     try:
         user = request.user
