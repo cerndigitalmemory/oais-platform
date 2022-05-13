@@ -54,44 +54,45 @@ class UploadTests(APITestCase):
 
         f1.close()
 
-    @override_settings(BIC_UPLOAD_PATH=None)
+
     def test_upload_sip(self):
-        # Prepare a temp folder to save the results
-        with tempfile.TemporaryDirectory() as tmpdir2:
+        with override_settings(BIC_UPLOAD_PATH=None):
+            # Prepare a temp folder to save the results
+            with tempfile.TemporaryDirectory() as tmpdir2:
 
-            # Run Bagit Create with the following parameters:
-            # Save the results to tmpdir2
-            res = bic.process(
-                recid="2728246",
-                source="cds",
-                target=tmpdir2,
-                loglevel=0,
-            )
+                # Run Bagit Create with the following parameters:
+                # Save the results to tmpdir2
+                res = bic.process(
+                    recid="2728246",
+                    source="cds",
+                    target=tmpdir2,
+                    loglevel=0,
+                )
 
-            foldername = res["foldername"]
+                foldername = res["foldername"]
 
-            path_to_sip = os.path.join(tmpdir2, foldername)
-            path_to_zip = path_to_sip + ".zip"
+                path_to_sip = os.path.join(tmpdir2, foldername)
+                path_to_zip = path_to_sip + ".zip"
 
-            # create a ZipFile object
-            with zipfile.ZipFile("test.zip", 'w') as zipf:
-                # Iterate over all the files in directory
-                len_dir_path = len(tmpdir2)
-                for root, _, files in os.walk(tmpdir2):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        zipf.write(file_path, file_path[len_dir_path:])
-            zipf.close()
-            
+                # create a ZipFile object
+                with zipfile.ZipFile("test.zip", 'w') as zipf:
+                    # Iterate over all the files in directory
+                    len_dir_path = len(tmpdir2)
+                    for root, _, files in os.walk(tmpdir2):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            zipf.write(file_path, file_path[len_dir_path:])
+                zipf.close()
+                
 
-            with open("test.zip", mode="rb") as myzip:
+                with open("test.zip", mode="rb") as myzip:
 
-                url = reverse("upload")
-                response = self.client.post(url, {"file": myzip})
-            
-            os.remove("test.zip")
+                    url = reverse("upload")
+                    response = self.client.post(url, {"file": myzip})
+                
+                os.remove("test.zip")
 
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            
-            self.assertEqual(response.data["status"], 0)
-            self.assertEqual(response.data["msg"], 'SIP uploading started, see Archives page')
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                
+                self.assertEqual(response.data["status"], 0)
+                self.assertEqual(response.data["msg"], 'SIP uploading started, see Archives page')
