@@ -1,10 +1,11 @@
 import os
 import subprocess
 import time
+from urllib.error import HTTPError
 import zipfile
 from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
-
+from django.conf import settings 
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
@@ -40,6 +41,9 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from rest_framework.views import APIView
+from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_utils.validate import get_manifest
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -48,7 +52,7 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process
+from .tasks import create_step, process, validate, run_next_step
 
 
 # Get (and set) user data
@@ -645,71 +649,78 @@ def get_staged_archives(request):
 @permission_classes([permissions.IsAuthenticated])
 def upload(request):
     file = request.FILES.getlist("file")[0]
-
-    # WORKAROUND FOR NOW : Get directory name from compressed filename
-    # TODO getting source and recid from sip.json?
-    try:
-        sip_dir = file.name.split(".")[0]
-        sip_data = sip_dir.split("::")
-        source = sip_data[1]
-        recid = sip_data[2]
-    except:
-        raise BadRequest("Wrong file format")
+    step = None
 
     try:
-        url = get_source(source).get_record_url(recid)
-    except InvalidSource:
-        raise BadRequest("Invalid source")
-
-    # Always create a new Archive instance
-    archive = Archive.objects.create(
-        recid=recid,
-        source=source,
-        source_url=url,
-        creator=request.user,
-    )
-
-    step = Step.objects.create(
-        archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
-    )
-
-    archive.set_step(step)
-
-    # Using root tmp folder
-    base_path = os.path.join(os.getcwd(), "tmp")
-    try:
+        # Settings must be imported from django.conf.settings in order to be overridable from the tests
+        if settings.BIC_UPLOAD_PATH:
+            base_path = settings.BIC_UPLOAD_PATH
+        else: 
+            base_path = os.getcwd()
         # Save compressed SIP
-        compressed_path = os.path.join(base_path, "compressed.zip")
+        compressed_path = os.path.join(base_path, f"compressed_{file.name}")
         destination = open(compressed_path, "wb+")
         for chunk in file.chunks():
             destination.write(chunk)
         destination.close()
 
-        # Extract it
+        # Extract it and get the top directory folder
         with zipfile.ZipFile(compressed_path, "r") as compressed:
             compressed.extractall(base_path)
-
-        # Remove zip
+            top = [item.split('/')[0] for item in compressed.namelist()]
         os.remove(compressed_path)
+    
+        # Get the folder location and the sip_json using oais utils
+        folder_location = top[0]     
+        sip_json = get_manifest(os.path.join(base_path, folder_location))
+        sip_location = os.path.join(base_path, folder_location)
+
+        source = sip_json["source"]
+        recid = sip_json["recid"]
+
+        url = get_source(source).get_record_url(recid)
+
+        
+        # Create a new Archive instance
+        archive = Archive.objects.create(
+            recid=recid,
+            source=source,
+            source_url=url,
+            creator=request.user,
+        )
+
+        step = Step.objects.create(
+            archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+        )
+
+        archive.set_step(step)   
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
 
         # Save path and change status of the archive
-        archive.path_to_sip = os.path.join(base_path, sip_dir)
+        archive.path_to_sip = sip_location
+        archive.update_next_steps(step.name)
         archive.save()
 
-        next_step = Step.objects.create(
-            archive=archive,
-            name=Steps.VALIDATION,
-            input_step=step.id,
-            status=Status.WAITING_APPROVAL,
-        )
-    except Exception:
-        step.set_status(Status.FAILED)
+        run_next_step(archive.id, step.id)
 
-    return Response({"msg": "SIP uploading started, see Archives page"})
+        return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
+    except zipfile.BadZipFile:
+        raise BadRequest({"status": 1, "msg":"Check the zip file for errors"})
+    except TypeError:
+        if(os.path.exists(compressed_path)):
+            os.remove(compressed_path)
+        raise BadRequest({"status": 1, "msg":"Check your SIP structure"})
+    except Exception as e:
+        if(os.path.exists(compressed_path)):
+            os.remove(compressed_path)
+        if(step):
+            step.set_status(Status.FAILED)
+        raise BadRequest({"status": 1, "msg": e})
+
+    
 
 
 @api_view()
