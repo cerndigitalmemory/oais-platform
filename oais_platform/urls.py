@@ -67,18 +67,24 @@ urlpatterns = [
                 path("logout/", views.logout, name="logout"),
                 # API
                 path("", include(router.urls)),
-                path("user/me/", views.user_info, name="me"),
-                path("user/update/", views.update_profile, name="update_user"),
+                # Get or Set user information
+                path("user/me/", views.user_get_set, name="me"),
+                path(
+                    "archive/create/harvest",
+                    views.create_by_harvest,
+                    name="create-by-harvest",
+                ),
+                path(
+                    "archive/create/staged",
+                    views.create_staged_archive,
+                    name="create_staged_archive",
+                ),
+                # OLD PATHS
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 path(
                     "create-archive/<str:recid>/<str:source>/",
                     views.create_archive,
                     name="create_archive",
-                ),
-                path(
-                    "create-staged-archive/",
-                    views.create_staged_archive,
-                    name="create_staged_archive",
                 ),
                 path("upload/", views.upload, name="upload"),
                 path("search/<str:source>/", views.search, name="search"),

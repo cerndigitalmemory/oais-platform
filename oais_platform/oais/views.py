@@ -30,6 +30,7 @@ from oais_platform.oais.serializers import (
     GroupSerializer,
     LoginSerializer,
     ProfileSerializer,
+    RequestHarvestSerializer,
     StepSerializer,
     UserSerializer,
 )
@@ -50,40 +51,38 @@ from ..settings import (
 from .tasks import create_step, process
 
 
+# Get (and set) user data
 @extend_schema_view(
-    post=extend_schema(request=ProfileSerializer, responses=UserSerializer),
+    post=extend_schema(
+        description="Updates the user profile, overwriting the passed values",
+        request=ProfileSerializer,
+        responses=UserSerializer,
+    ),
+    get=extend_schema(
+        description="Get complete information and settings (profile) of the user",
+        responses=UserSerializer,
+    ),
 )
-@api_view(["POST"])
+@api_view(["POST", "GET"])
 @permission_classes([permissions.IsAuthenticated])
-def update_profile(request):
-    """
-    Updates the user profile, overwriting the passed values
-    """
+def user_get_set(request):
+    if request.method == "POST":
+        user = request.user
 
-    user = request.user
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
 
-    serializer = ProfileSerializer(data=request.data)
-    if serializer.is_valid():
-        user.profile.update(serializer.data)
-        user.save()
-    
-    # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
-    # if (serializer.data == request.data)
+        # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
+        # if (serializer.data == request.data)
 
-    serializer = UserSerializer(user)
-    return Response(serializer.data)
-
-
-@extend_schema(responses=UserSerializer)
-@api_view()
-@permission_classes([permissions.IsAuthenticated])
-def user_info(request, id=None):
-    """
-    Get complete information and settings of the user
-    """
-    user = request.user
-    serializer = UserSerializer(user)
-    return Response(serializer.data)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -501,6 +500,38 @@ def create_next_step(request):
 
     serializer = StepSerializer(next_step, many=False)
     return Response(serializer.data)
+
+
+@extend_schema(request=RequestHarvestSerializer, responses=ArchiveSerializer)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_by_harvest(request):
+    """
+    Creates an Archive triggering an harvest of it, from the specified Source and Record ID.
+    """
+
+    serializer = RequestHarvestSerializer(data=request.data)
+
+    if serializer.is_valid():
+        source = serializer.data["source"]
+        recid = serializer.data["source"]
+
+    try:
+        url = get_source(source).get_record_url(recid)
+    except InvalidSource:
+        raise BadRequest("Invalid source: ", source)
+
+    # Always create a new archive instance
+    archive = Archive.objects.create(
+        recid=recid,
+        source=source,
+        source_url=url,
+        creator=request.user,
+    )
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
 
 
 @api_view(["POST"])

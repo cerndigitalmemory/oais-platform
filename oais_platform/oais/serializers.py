@@ -108,3 +108,7 @@ class CollectionSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128)
+
+class RequestHarvestSerializer(serializers.Serializer):
+    source = serializers.CharField(max_length=150, required=True)
+    recid = serializers.CharField(max_length=128, required=True)
