@@ -242,8 +242,12 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
 # Bagit Create Settings
 
+# Path where bagitcreate exports data (using the target option)
 BIC_UPLOAD_PATH = "oais-data"
 
-AIP_PATH = "/oais-data/aip/"
-SIP_PATH = "/oais-data/sip/"
+# URL that serves files (AIPs,SIPs)
 FILES_URL = "https://oais.web.cern.ch/"
+# Upstream path to aip (e.x. https://oais.web.cern.ch/oais-data/aip)
+AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
+# Upstream path to aip (e.x. https://oais.web.cern.ch/oais-data/sip)
+SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
