@@ -28,11 +28,11 @@ from oais_platform.settings import (
     AM_SS_URL,
     AM_SS_USERNAME,
     AM_SS_API_KEY,
-    BIC_UPLOAD_PATH,
     SIP_PATH,
     AIP_PATH,
     FILES_URL
 )
+from django.conf import settings
 from oais_utils import validate as validator
 
 logger = get_task_logger(__name__)
@@ -182,21 +182,18 @@ def process(self, archive_id, step_id, input_data=None):
         recid=archive.recid,
         source=archive.source,
         loglevel=2,
-        target=BIC_UPLOAD_PATH,
+        target=settings.BIC_UPLOAD_PATH,
     )
-
-    print(BIC_UPLOAD_PATH)
 
     logger.info(f"BagIt{bagit_result}")
 
     if bagit_result["status"] == 0:
         path_to_sip = bagit_result["foldername"]
 
-        if BIC_UPLOAD_PATH:
-            path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
+        if settings.BIC_UPLOAD_PATH:
+            path_to_sip = os.path.join(settings.BIC_UPLOAD_PATH, path_to_sip)
             
         archive.set_path(path_to_sip)
-
 
         # Create a SIP path artifact
         output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
@@ -321,12 +318,12 @@ def archivematica(self, archive_id, step_id, input_data=None):
 
     # Get configuration from archivematica from settings
     am = AMClient()
-    am.am_url = AM_URL
-    am.am_user_name = AM_USERNAME
-    am.am_api_key = AM_API_KEY
-    am.transfer_source = AM_TRANSFER_SOURCE
-    am.transfer_directory = archivematica_dst
-    am.transfer_name = transfer_name
+    am.am_url = settings.AM_URL
+    am.am_user_name = settings.AM_USERNAME
+    am.am_api_key = settings.AM_API_KEY
+    am.transfer_source = settings.AM_TRANSFER_SOURCE
+    am.transfer_directory = settings.archivematica_dst
+    am.transfer_name = settings.transfer_name
     am.processing_config = "automated"
 
     # Create archivematica package
@@ -388,13 +385,13 @@ def check_am_status(self, message, step_id, archive_id, am_task_id, transfer_nam
 
     # Get the current configuration
     am = AMClient()
-    am.am_url = AM_URL
-    am.am_user_name = AM_USERNAME
-    am.am_api_key = AM_API_KEY
-    am.transfer_source = AM_TRANSFER_SOURCE
-    am.ss_url = AM_SS_URL
-    am.ss_user_name = AM_SS_USERNAME
-    am.ss_api_key = AM_SS_API_KEY
+    am.am_url = settings.AM_URL
+    am.am_user_name = settings.AM_USERNAME
+    am.am_api_key = settings.AM_API_KEY
+    am.transfer_source = settings.AM_TRANSFER_SOURCE
+    am.ss_url = settings.AM_SS_URL
+    am.ss_user_name = settings.AM_SS_USERNAME
+    am.ss_api_key = settings.AM_SS_API_KEY
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)

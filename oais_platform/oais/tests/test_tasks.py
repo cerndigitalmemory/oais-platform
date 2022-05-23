@@ -14,28 +14,10 @@ from celery.contrib.testing.worker import start_worker
 
 from django.conf import settings
 from oais_platform.celery import app
-import pytest
+# import pytest
 
 
-@pytest.mark.usefixtures('celery_session_app')
-@pytest.mark.usefixtures('celery_session_worker')
-class TaskTests():
-    # databases = '__all__'
-
-    # @classmethod
-    # def setUpClass(cls):
-    #     super().setUpClass()
-
-    #     # Start up celery worker
-    #     cls.celery_worker = start_worker(app, perform_ping_check=False)
-    #     cls.celery_worker.__enter__()
-
-    # @classmethod
-    # def tearDownClass(cls):
-    #     super().tearDownClass()
-
-    #     # Close worker
-    #     cls.celery_worker.__exit__(None, None, None)
+class TaskTests(APITestCase):
 
     def setUp(self):
         self.permission = Permission.objects.get(codename="can_access_all_archives")
@@ -47,10 +29,7 @@ class TaskTests():
             recid="1", source="test", source_url="", creator=self.creator
         )
     
-    @override_settings(
-        # CELERY_EAGER_PROPAGATES_EXCEPTIONS=True,
-        # CELERY_ALWAYS_EAGER=True,
-        BIC_UPLOAD_PATH='test')
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True,BIC_UPLOAD_PATH='test')
     @patch("bagit_create.main.process")
     def test_harvest(self, bagit_mock):
         bagit_mock.return_value = {'status': 0,'foldername': "test", 'errormsg': None}
@@ -65,10 +44,8 @@ class TaskTests():
         self.archive.refresh_from_db()
         step.refresh_from_db()
 
-        print(settings.BIC_UPLOAD_PATH)
-
         self.assertEqual(self.bagit_result, {'status': 0,'foldername': "test", 'errormsg': None, 'artifact': 
-            {'artifact_name': 'SIP','artifact_path': f"/{settings.BIC_UPLOAD_PATH}/sip/oais-data/test",'artifact_url': f'https://oais.web.cern.ch/oais-data/sip/{settings.BIC_UPLOAD_PATH}/test'}})
+            {'artifact_name': 'SIP','artifact_path': f"/oais-data/sip/{settings.BIC_UPLOAD_PATH}/test",'artifact_url': f'https://oais.web.cern.ch/oais-data/sip/{settings.BIC_UPLOAD_PATH}/test'}})
         self.assertEqual(step.name, Steps.HARVEST)
         self.assertEqual(step.status, Status.COMPLETED)
         self.assertEqual(self.archive.path_to_sip, join(settings.BIC_UPLOAD_PATH,self.bagit_result["foldername"]))
@@ -215,14 +192,12 @@ class TaskTests():
             self.assertEqual(step.name, Steps.CHECKSUM)
             self.assertEqual(step.status, Status.IN_PROGRESS)
     
-    @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True)
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True, BIC_UPLOAD_PATH='test')
     @patch("django_celery_beat.models.PeriodicTask.objects.create")
     def test_archivematica(self, periodic_task):
-        with tempfile.TemporaryDirectory(dir=BIC_UPLOAD_PATH) as test_dir:
+        with tempfile.TemporaryDirectory(dir=settings.BIC_UPLOAD_PATH) as test_dir:
             self.archive.set_path(test_dir)
             with tempfile.TemporaryFile(dir=test_dir) as fp:
-
-                periodic_task.return_value = None
 
                 step = tasks.create_step(Steps.ARCHIVE, self.archive.id)
 
@@ -243,14 +218,11 @@ class TaskTests():
     When a celery task is called we need to find a way to override the settings in order to check error handling in case
     of wrong archivematica configuration, username, password etc. Right now settings are overriden in the test but not in celery.
     """
-    @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True,BROCKER_BACKEND='memory',BROCKER_URL='memory://',AM_URL="wrong_url.cern.ch")
-    @patch("django_celery_beat.models.PeriodicTask.objects.create")
-    def test_archivematica_wrong_config(self, periodic_task):
-        with tempfile.TemporaryDirectory(dir=BIC_UPLOAD_PATH) as test_dir:
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True,CELERY_TASK_EAGER_PROPOGATES=True,BIC_UPLOAD_PATH='test',AM_URL="wrong_url.cern.ch")
+    def test_archivematica_wrong_config(self):
+        with tempfile.TemporaryDirectory(dir=settings.BIC_UPLOAD_PATH) as test_dir:
             self.archive.set_path(test_dir)
             with tempfile.TemporaryFile(dir=test_dir) as fp:
-
-                periodic_task.return_value = None
 
                 step = tasks.create_step(Steps.ARCHIVE, self.archive.id)
 
@@ -260,8 +232,9 @@ class TaskTests():
 
         self.archive.refresh_from_db()
         step.refresh_from_db()
+        print(am_result)
 
-        self.assertEqual(am_result, {"status": 0, "message": "Uploaded to Archivematica"})
+        self.assertEqual(am_result, {"status": 1, "message": f"Error while archiving {step.id}. Check your archivematica settings configuration."})
         self.assertEqual(step.name, Steps.ARCHIVE)
         self.assertEqual(step.status, Status.WAITING)
 
