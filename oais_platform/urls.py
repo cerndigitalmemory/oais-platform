@@ -162,6 +162,11 @@ urlpatterns = [
                     name="staged_archives",
                 ),
                 path(
+                    "get-archive-information-labels/",
+                    views.get_archive_information_labels,
+                    name="get_archive_information_labels",
+                ),
+                path(
                     "unstage-archives/",
                     views.unstage_archives,
                     name="unstage_archives",

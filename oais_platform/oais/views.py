@@ -602,6 +602,23 @@ def get_staged_archives(request):
     serializer = ArchiveSerializer(archives, many=True)
     return Response(serializer.data)
 
+@api_view()
+@permission_classes([permissions.IsAuthenticated])
+def get_archive_information_labels(request):
+    """
+    Get archive
+    """
+    try:
+        user = request.user
+    except InvalidSource:
+        raise BadRequest("Invalid request")
+
+    staged_archives = Archive.objects.filter(staged=True, creator=user)
+    unstaged_archives = Archive.objects.filter(staged=False, creator=user)
+
+    return Response({"staged": len(staged_archives),"unstaged": len(unstaged_archives)})
+
+
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
