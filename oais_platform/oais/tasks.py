@@ -29,8 +29,8 @@ from oais_platform.settings import (
     AM_SS_USERNAME,
     AM_SS_API_KEY,
     BIC_UPLOAD_PATH,
-    SIP_PATH,
-    AIP_PATH,
+    SIP_UPSTREAM_BASEPATH,
+    AIP_UPSTREAM_BASEPATH,
     FILES_URL
 )
 from oais_utils.validate import validate_sip
@@ -187,16 +187,16 @@ def process(self, archive_id, step_id, input_data=None):
 
     logger.info(bagit_result)
 
-    path_to_sip = bagit_result["foldername"]
+    sip_folder_name = bagit_result["foldername"]
 
     if BIC_UPLOAD_PATH:
-        path_to_sip = os.path.join(BIC_UPLOAD_PATH, path_to_sip)
+        sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
         
-    archive.set_path(path_to_sip)
+    archive.set_path(sip_folder_name)
 
 
     # Create a SIP path artifact
-    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_PATH, path_to_sip))
+    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name))
 
     bagit_result["artifact"] = output_artifact
 
@@ -207,10 +207,9 @@ def process(self, archive_id, step_id, input_data=None):
 def validate(self, archive_id, step_id, input_data):
 
     archive = Archive.objects.get(pk=archive_id)
-    path_to_sip = archive.path_to_sip
-    print(path_to_sip)
+    sip_folder_name = archive.path_to_sip
 
-    logger.info(f"Starting SIP validation {path_to_sip}")
+    logger.info(f"Starting SIP validation {sip_folder_name}")
 
     current_step = Step.objects.get(pk=step_id)
     current_step.set_status(Status.IN_PROGRESS)
@@ -219,15 +218,15 @@ def validate(self, archive_id, step_id, input_data):
     current_step.set_task(self.request.id)
 
     # Checking registry = checking if the folder exists
-    sip_exists = os.path.exists(path_to_sip)
+    sip_exists = os.path.exists(sip_folder_name)
 
     if not sip_exists:
         return {"status": 1}
 
     # Runs validate_sip from oais_utils
-    valid = validate_sip(path_to_sip)
+    valid = validate_sip(sip_folder_name)
 
-    return {"status": 0, "errormsg": None, "foldername": path_to_sip}
+    return {"status": 0, "errormsg": None, "foldername": sip_folder_name}
 
 
 @shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
@@ -454,7 +453,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                     am_status["aip_uuid"] = aip_uuid
                     am_status["aip_path"] = aip_path
 
-                    path_artifact = create_path_artifact( "AIP", os.path.join(AIP_PATH, aip_path))
+                    path_artifact = create_path_artifact( "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path))
 
             # If the path artifact is found return complete otherwise set in progress and try again
             if path_artifact:
