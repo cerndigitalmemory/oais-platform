@@ -234,9 +234,9 @@ AM_SS_API_KEY = "test"
 # add the UUID of the transfer source
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 
-# This is the absolute directory of the source folder for archivematica
+# Absolute directory of the source folder for archivematica
 AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
-# This is the directory Archivematica "sees" on the local system
+# Directory that Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
 
@@ -245,9 +245,9 @@ AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 # Path where bagitcreate exports data (using the target option)
 BIC_UPLOAD_PATH = "oais-data"
 
-# URL that serves files (AIPs,SIPs)
+# Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
-# Upstream path to aip (e.x. https://oais.web.cern.ch/oais-data/aip)
+# Path where the AIPs will be served from
 AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
-# Upstream path to aip (e.x. https://oais.web.cern.ch/oais-data/sip)
+# Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
