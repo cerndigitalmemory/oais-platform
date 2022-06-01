@@ -358,7 +358,7 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     def delete(self, request, pk=None):
         return self.delete_collection(request, "oais.can_reject_archive")
 
-
+# called by /settings
 @api_view(["GET"])
 def get_settings(request):
     """
@@ -387,10 +387,29 @@ def get_settings(request):
         "git_hash": githash,
         "CELERY_BROKER_URL": CELERY_BROKER_URL,
         "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
-        "indico_api_key": serializer.data["profile"]["indico_api_key"],
     }
 
     return Response(data)
+
+
+# called by user/me/settings
+@api_view(["POST", "GET"])
+@permission_classes([permissions.IsAuthenticated])
+def user_settings_get_set(request):
+    if request.method == "POST":
+        user = request.user
+
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
+
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        profile = user.profile
+        serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
 
 
 @extend_schema(responses=StepSerializer)

@@ -69,6 +69,7 @@ urlpatterns = [
                 path("", include(router.urls)),
                 # Get or Set user information
                 path("user/me/", views.user_get_set, name="me"),
+                path("user/me/settings/", views.user_settings_get_set, name="me_settings"),
                 path(
                     "archive/create/harvest",
                     views.create_by_harvest,
