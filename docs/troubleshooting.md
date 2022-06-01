@@ -45,6 +45,16 @@ docker exec -e DJANGO_SUPERUSER_PASSWORD=admin oais_django python3 manage.py cre
 
 Django:
 
+If you need to create migrations, create a local virtual env to run `manage.py`:
+
+```bash
+python -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+python manage.py makemigrations
+# on the next start of the container a "migrate" command is run
+```
+
 - Collect static files (to correctly see the Django admin panel)
   `python manage.py collectstatic`
 
