@@ -1,11 +1,12 @@
 import os
 import subprocess
 import time
-from urllib.error import HTTPError
 import zipfile
 from pathlib import PurePosixPath
+from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
-from django.conf import settings 
+
+from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
@@ -36,14 +37,14 @@ from oais_platform.oais.serializers import (
     UserSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
+from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
-from oais_platform.settings import BIC_UPLOAD_PATH
-from oais_utils.validate import get_manifest
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -52,7 +53,7 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process, validate, run_next_step
+from .tasks import create_step, process, run_next_step, validate
 
 
 # Get (and set) user data
@@ -358,13 +359,13 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     def delete(self, request, pk=None):
         return self.delete_collection(request, "oais.can_reject_archive")
 
+
 # called by /settings
 @api_view(["GET"])
 def get_settings(request):
     """
     Returns a collection of (read-only) the main configuration values and some
     information about the backend
-    Also include some user-side settings
     """
 
     # Try to get the commit hash of the backend
@@ -396,6 +397,10 @@ def get_settings(request):
 @api_view(["POST", "GET"])
 @permission_classes([permissions.IsAuthenticated])
 def user_settings_get_set(request):
+    """
+    Return (and update) the editable user settings,
+    such as personal tokens and cookies
+    """
     if request.method == "POST":
         user = request.user
 
@@ -674,7 +679,7 @@ def upload(request):
         # Settings must be imported from django.conf.settings in order to be overridable from the tests
         if settings.BIC_UPLOAD_PATH:
             base_path = settings.BIC_UPLOAD_PATH
-        else: 
+        else:
             base_path = os.getcwd()
         # Save compressed SIP
         compressed_path = os.path.join(base_path, f"compressed_{file.name}")
@@ -686,11 +691,11 @@ def upload(request):
         # Extract it and get the top directory folder
         with zipfile.ZipFile(compressed_path, "r") as compressed:
             compressed.extractall(base_path)
-            top = [item.split('/')[0] for item in compressed.namelist()]
+            top = [item.split("/")[0] for item in compressed.namelist()]
         os.remove(compressed_path)
-    
+
         # Get the folder location and the sip_json using oais utils
-        folder_location = top[0]     
+        folder_location = top[0]
         sip_json = get_manifest(os.path.join(base_path, folder_location))
         sip_location = os.path.join(base_path, folder_location)
 
@@ -699,7 +704,6 @@ def upload(request):
 
         url = get_source(source).get_record_url(recid)
 
-        
         # Create a new Archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -712,7 +716,7 @@ def upload(request):
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
 
-        archive.set_step(step)   
+        archive.set_step(step)
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
@@ -725,21 +729,25 @@ def upload(request):
 
         run_next_step(archive.id, step.id)
 
-        return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
+        return Response(
+            {
+                "status": 0,
+                "archive": archive.id,
+                "msg": "SIP uploading started, see Archives page",
+            }
+        )
     except zipfile.BadZipFile:
-        raise BadRequest({"status": 1, "msg":"Check the zip file for errors"})
+        raise BadRequest({"status": 1, "msg": "Check the zip file for errors"})
     except TypeError:
-        if(os.path.exists(compressed_path)):
+        if os.path.exists(compressed_path):
             os.remove(compressed_path)
-        raise BadRequest({"status": 1, "msg":"Check your SIP structure"})
+        raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
     except Exception as e:
-        if(os.path.exists(compressed_path)):
+        if os.path.exists(compressed_path):
             os.remove(compressed_path)
-        if(step):
+        if step:
             step.set_status(Status.FAILED)
         raise BadRequest({"status": 1, "msg": e})
-
-    
 
 
 @api_view()
