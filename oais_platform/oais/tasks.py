@@ -184,18 +184,19 @@ def process(self, archive_id, step_id, input_data=None):
         try:
             user = archive.creator
             api_token = user.profile.indico_api_key
-            if api_token == '':
-                return {"status": 1, "errormsg": "No indico api key found, set an indico api key at settings page and try again."}
         except Exception as e:
             return {"status": 1, "errormsg": e}
 
-    bagit_result = bic.process(
-        recid=archive.recid,
-        source=archive.source,
-        loglevel=2,
-        target=BIC_UPLOAD_PATH,
-        token=api_token,
-    )
+    try: 
+        bagit_result = bic.process(
+            recid=archive.recid,
+            source=archive.source,
+            loglevel=2,
+            target=BIC_UPLOAD_PATH,
+            token=api_token,
+        )
+    except Exception as e:
+        return {"status": 1, "errormsg": e}
 
     logger.info(bagit_result)
 
