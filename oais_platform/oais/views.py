@@ -543,21 +543,22 @@ def create_staged_archive(request):
     """
     Gets a source and the recid and creates a staged archive object
     """
-    record = request.data["record"]
-
-    # Always create a new archive instance
-    archive = Archive.objects.create(
-        recid=record["recid"],
-        source=record["source"],
-        source_url=record["source_url"],
-        title=record["title"],
-        creator=request.user,
-        staged=True,
-    )
-
-    return redirect(
-        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
-    )
+    records = request.data["records"]
+    
+    try:
+        for record in records:
+            # Always create a new archive instance
+            archive = Archive.objects.create(
+                recid=record["recid"],
+                source=record["source"],
+                source_url=record["source_url"],
+                title=record["title"],
+                creator=request.user,
+                staged=True,
+            )
+        return Response({"status":0, "errormsg": None})
+    except Exception as e:
+        return Response({"status":1, "errormsg": e})
 
 
 @api_view(["POST"])
