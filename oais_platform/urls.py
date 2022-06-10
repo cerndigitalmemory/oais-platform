@@ -162,6 +162,11 @@ urlpatterns = [
                     name="staged_archives",
                 ),
                 path(
+                    "staged-archives-paginated/",
+                    views.ArchiveViewSet.as_view({"get": "get_staged_archives_paginated"}),
+                    name="staged_archives_paginated",
+                ),
+                path(
                     "get-archive-information-labels/",
                     views.get_archive_information_labels,
                     name="get_archive_information_labels",
