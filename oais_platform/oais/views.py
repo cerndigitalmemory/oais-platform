@@ -163,6 +163,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
+    @action(detail=False, url_name='get-staged-archives-paginated')
+    def get_staged_archives_paginated(self, request):
+        archives = Archive.objects.filter(staged=True, creator=self.request.user)
+        return self.make_paginated_response(archives, ArchiveSerializer)
+
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
         archive = self.get_object()
