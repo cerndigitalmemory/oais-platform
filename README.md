@@ -44,6 +44,8 @@ cd ..
 docker-compose up
 ```
 
+Node version 14.19.3 or newer is required for this (use `node -v` to check the current version).
+
 If you also want the React application to hot-reload on file modifications, instead of running `npm run build`, keep a shell open and run `npm run serve`.
 
 The following endpoints are then available, on `localhost`:
