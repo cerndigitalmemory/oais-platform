@@ -99,6 +99,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 create_step(next_steps[0], archive_id, step_id)
         else:
             step.set_status(Status.FAILED)
+            step.set_output_data(retval)
     else:
         step.set_status(Status.FAILED)
 
@@ -177,15 +178,31 @@ def process(self, archive_id, step_id, input_data=None):
 
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
+    
+    api_token = None
+    if(archive.source == 'indico'):
+        try:
+            user = archive.creator
+            api_token = user.profile.indico_api_key
+        except Exception as e:
+            return {"status": 1, "errormsg": e}
 
-    bagit_result = bic.process(
-        recid=archive.recid,
-        source=archive.source,
-        loglevel=2,
-        target=BIC_UPLOAD_PATH,
-    )
+    try: 
+        bagit_result = bic.process(
+            recid=archive.recid,
+            source=archive.source,
+            loglevel=2,
+            target=BIC_UPLOAD_PATH,
+            token=api_token,
+        )
+    except Exception as e:
+        return {"status": 1, "errormsg": e}
 
     logger.info(bagit_result)
+
+    # If bagit returns an error return the error message
+    if bagit_result["status"] == 1:
+        return {"status": 1, "errormsg": bagit_result["errormsg"]}
 
     sip_folder_name = bagit_result["foldername"]
 
@@ -221,7 +238,7 @@ def validate(self, archive_id, step_id, input_data):
     sip_exists = os.path.exists(sip_folder_name)
 
     if not sip_exists:
-        return {"status": 1}
+        return {"status": 1, "errormsg": "SIP does not exist"}
 
     # Runs validate_sip from oais_utils
     valid = validate_sip(sip_folder_name)
@@ -244,7 +261,7 @@ def checksum(self, archive_id, step_id, input_data):
 
     sip_exists = os.path.exists(path_to_sip)
     if not sip_exists:
-        return {"status": 1}
+        return {"status": 1, "errormsg": "SIP does not exist"}
 
     sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
 
@@ -341,7 +358,7 @@ def archivematica(self, archive_id, step_id, input_data):
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
-            return {"status": 1, "message": "Wrong Archivematica configuration"}
+            return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
 
         step = Step.objects.get(pk=step_id)
         step.set_status(Status.WAITING)
@@ -364,10 +381,10 @@ def archivematica(self, archive_id, step_id, input_data):
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
         )
         current_step.set_status(Status.FAILED)
-        current_step.set_output_data({"status": 1, "message": e})
-        return {"status": 1, "message": e}
+        current_step.set_output_data({"status": 1, "errormsg": e})
+        return {"status": 1, "errormsg": e}
 
-    return {"status": 0, "message": "Uploaded to Archivematica"}
+    return {"status": 0, "errormsg": "Uploaded to Archivematica"}
 
 
 @shared_task(
@@ -403,7 +420,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 archivematica returns as a result the number 1. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
-                step.set_output_data({"status": 1, "message": e})
+                step.set_output_data({"status": 1, "errormsg": e})
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()
@@ -414,7 +431,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 archivematica returns as a result the number 3. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
-                step.set_output_data({"status": 1, "message": e})
+                step.set_output_data({"status": 1, "errormsg": e})
                 step.set_status(Status.FAILED)
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.delete()
