@@ -767,7 +767,8 @@ def search(request, source):
         size = request.GET["s"]
 
     try:
-        results = get_source(source).search(query, page, size)
+        api_token = request.user.profile.indico_api_key
+        results = get_source(source, api_token).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
@@ -778,7 +779,8 @@ def search(request, source):
 @permission_classes([permissions.IsAuthenticated])
 def search_by_id(request, source, recid):
     try:
-        result = get_source(source).search_by_id(recid.strip())
+        api_token = request.user.profile.indico_api_key
+        result = get_source(source, api_token).search_by_id(recid.strip())
     except InvalidSource:
         raise BadRequest("Invalid source")
 
