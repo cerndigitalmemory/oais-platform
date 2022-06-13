@@ -22,7 +22,6 @@ class Profile(models.Model):
     def update(self, data):
         for key in data:
             setattr(self, key, data[key])
-
         self.save()
 
 @receiver(post_save, sender=User)
