@@ -16,7 +16,13 @@ class Profile(models.Model):
     #  accessible as user.profile.VALUE
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
     indico_api_key = models.TextField(max_length=500, blank=True)
+    codimd_api_key = models.TextField(max_length=500, blank=True)
+    sso_comp_token = models.TextField(max_length=500, blank=True)
 
+    def update(self, data):
+        for key in data:
+            setattr(self, key, data[key])
+        self.save()
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
