@@ -87,6 +87,51 @@ def me(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
 
+@api_view(["POST", "GET"])
+@permission_classes([permissions.IsAuthenticated])
+def user_get_set(request):
+    if request.method == "POST":
+        user = request.user
+
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
+
+        # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
+        # if (serializer.data == request.data)
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+# called by user/me/settings
+@api_view(["POST", "GET"])
+@permission_classes([permissions.IsAuthenticated])
+def user_settings_get_set(request):
+    """
+    Return (and update) the editable user settings,
+    such as personal tokens and cookies
+    """
+    if request.method == "POST":
+        user = request.user
+
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
+
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        profile = user.profile
+        serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
+
+
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """

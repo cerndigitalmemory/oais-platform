@@ -65,6 +65,10 @@ urlpatterns = [
                 # Auth endpoints used to login/logout (local accounts)
                 path("login/", views.login, name="login"),
                 path("logout/", views.logout, name="logout"),
+                # temporary settings routes
+                # Get or Set user information
+                path("user/me/", views.user_get_set, name="me"),
+                path("user/me/settings/", views.user_settings_get_set, name="me_settings"),
                 # API
                 path("", include(router.urls)),
                 path("me/", views.me, name="me"),
