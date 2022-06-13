@@ -10,7 +10,7 @@ from rest_framework.fields import IntegerField
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ["indico_api_key"]
+        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token"]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -108,3 +108,7 @@ class CollectionSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128)
+
+class RequestHarvestSerializer(serializers.Serializer):
+    source = serializers.CharField(max_length=150, required=True)
+    recid = serializers.CharField(max_length=128, required=True)

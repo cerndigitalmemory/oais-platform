@@ -1,21 +1,19 @@
-import collections
-import json
-import logging
 import os
 import subprocess
 import time
-from urllib.error import HTTPError
 import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
+from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
-from django.conf import settings 
+
+from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from django.db.models import Q, base
+from django.db.models import Q
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.exceptions import BadRequest, DoesNotExist
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
@@ -34,19 +32,19 @@ from oais_platform.oais.serializers import (
     GroupSerializer,
     LoginSerializer,
     ProfileSerializer,
+    RequestHarvestSerializer,
     StepSerializer,
     UserSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
+from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
-from oais_platform.settings import BIC_UPLOAD_PATH
-from oais_utils.validate import get_manifest
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -55,37 +53,41 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process, validate, run_next_step
+from .tasks import create_step, process, run_next_step, validate
 
 
+# Get (and set) user data
 @extend_schema_view(
-    post=extend_schema(request=ProfileSerializer, responses=UserSerializer),
+    post=extend_schema(
+        description="Updates the user profile, overwriting the passed values",
+        request=ProfileSerializer,
+        responses=UserSerializer,
+    ),
+    get=extend_schema(
+        description="Get complete information and settings (profile) of the user",
+        responses=UserSerializer,
+    ),
 )
-@api_view(["POST"])
+@api_view(["POST", "GET"])
 @permission_classes([permissions.IsAuthenticated])
-def update_profile(request):
-    """
-    Updates a Profile
-    """
+def user_get_set(request):
+    if request.method == "POST":
+        user = request.user
 
-    user = request.user
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
 
-    data = {"indico_api_key": request.data.get("indico_api_key")}
+        # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
+        # if (serializer.data == request.data)
 
-    serializer = UserSerializer(data=data)
-    if serializer.is_valid():
-        user.profile.indico_api_key = request.data["indico_api_key"]
-        user.save()
-
-    serializer = UserSerializer(user)
-    return Response(serializer.data)
-
-
-@api_view()
-@permission_classes([permissions.IsAuthenticated])
-def me(request):
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -222,7 +224,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     def archive_delete(self, request, pk=None):
         archive = self.get_object()
         archive.delete()
-
         return Response()
 
 
@@ -363,8 +364,15 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return self.delete_collection(request, "oais.can_reject_archive")
 
 
+# called by /settings
 @api_view(["GET"])
 def get_settings(request):
+    """
+    Returns a collection of (read-only) the main configuration values and some
+    information about the backend
+    """
+
+    # Try to get the commit hash of the backend
     try:
         githash = (
             subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
@@ -384,12 +392,36 @@ def get_settings(request):
         "git_hash": githash,
         "CELERY_BROKER_URL": CELERY_BROKER_URL,
         "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
-        "indico_api_key": serializer.data["profile"]["indico_api_key"],
     }
 
     return Response(data)
 
 
+# called by user/me/settings
+@api_view(["POST", "GET"])
+@permission_classes([permissions.IsAuthenticated])
+def user_settings_get_set(request):
+    """
+    Return (and update) the editable user settings,
+    such as personal tokens and cookies
+    """
+    if request.method == "POST":
+        user = request.user
+
+        serializer = ProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            user.profile.update(serializer.data)
+            user.save()
+
+        return Response(serializer.data)
+    elif request.method == "GET":
+        user = request.user
+        profile = user.profile
+        serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
+
+
+@extend_schema(responses=StepSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_steps(request, id):
@@ -418,11 +450,12 @@ def collection_details(self, id):
     return Response(serializer.data)
 
 
+@extend_schema(responses=CollectionSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_all_tags(request):
     """
-    Returns a list of all the available tags for a single user
+    Returns a list of all the Tags a User has created
     """
     try:
         user = request.user
@@ -499,6 +532,38 @@ def create_next_step(request):
 
     serializer = StepSerializer(next_step, many=False)
     return Response(serializer.data)
+
+
+@extend_schema(request=RequestHarvestSerializer, responses=ArchiveSerializer)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def create_by_harvest(request):
+    """
+    Creates an Archive triggering an harvest of it, from the specified Source and Record ID.
+    """
+
+    serializer = RequestHarvestSerializer(data=request.data)
+
+    if serializer.is_valid():
+        source = serializer.data["source"]
+        recid = serializer.data["source"]
+
+    try:
+        url = get_source(source).get_record_url(recid)
+    except InvalidSource:
+        raise BadRequest("Invalid source: ", source)
+
+    # Always create a new archive instance
+    archive = Archive.objects.create(
+        recid=recid,
+        source=source,
+        source_url=url,
+        creator=request.user,
+    )
+
+    return redirect(
+        reverse("archive-detail", request=request, kwargs={"pk": archive.id})
+    )
 
 
 @api_view(["POST"])
@@ -636,7 +701,7 @@ def upload(request):
         # Settings must be imported from django.conf.settings in order to be overridable from the tests
         if settings.BIC_UPLOAD_PATH:
             base_path = settings.BIC_UPLOAD_PATH
-        else: 
+        else:
             base_path = os.getcwd()
         # Save compressed SIP
         compressed_path = os.path.join(base_path, f"compressed_{file.name}")
@@ -648,11 +713,11 @@ def upload(request):
         # Extract it and get the top directory folder
         with zipfile.ZipFile(compressed_path, "r") as compressed:
             compressed.extractall(base_path)
-            top = [item.split('/')[0] for item in compressed.namelist()]
+            top = [item.split("/")[0] for item in compressed.namelist()]
         os.remove(compressed_path)
-    
+
         # Get the folder location and the sip_json using oais utils
-        folder_location = top[0]     
+        folder_location = top[0]
         sip_json = get_manifest(os.path.join(base_path, folder_location))
         sip_location = os.path.join(base_path, folder_location)
 
@@ -661,7 +726,6 @@ def upload(request):
 
         url = get_source(source).get_record_url(recid)
 
-        
         # Create a new Archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -674,7 +738,7 @@ def upload(request):
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
 
-        archive.set_step(step)   
+        archive.set_step(step)
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
@@ -687,21 +751,25 @@ def upload(request):
 
         run_next_step(archive.id, step.id)
 
-        return Response({"status": 0,"archive":archive.id,"msg": "SIP uploading started, see Archives page"})
+        return Response(
+            {
+                "status": 0,
+                "archive": archive.id,
+                "msg": "SIP uploading started, see Archives page",
+            }
+        )
     except zipfile.BadZipFile:
-        raise BadRequest({"status": 1, "msg":"Check the zip file for errors"})
+        raise BadRequest({"status": 1, "msg": "Check the zip file for errors"})
     except TypeError:
-        if(os.path.exists(compressed_path)):
+        if os.path.exists(compressed_path):
             os.remove(compressed_path)
-        raise BadRequest({"status": 1, "msg":"Check your SIP structure"})
+        raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
     except Exception as e:
-        if(os.path.exists(compressed_path)):
+        if os.path.exists(compressed_path):
             os.remove(compressed_path)
-        if(step):
+        if step:
             step.set_status(Status.FAILED)
         raise BadRequest({"status": 1, "msg": e})
-
-    
 
 
 @api_view()
@@ -1045,7 +1113,7 @@ def get_detailed_archives(request):
     return Response(archives)
 
 
-@api_view(["POST"])
+@api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def get_steps_status(request):
     """
