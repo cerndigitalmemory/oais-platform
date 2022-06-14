@@ -9,7 +9,7 @@ sources = {
     "zenodo": Invenio("zenodo", "https://zenodo.org/api"),
     "inveniordm": Invenio("inveniordm", "https://inveniordm.web.cern.ch/api"),
     "cod": Invenio("cod", "https://opendata.cern.ch/api"),
-    "indico": Indico("indico", "https://indico.cern.ch"),
+    #"indico": Indico("indico", "https://indico.cern.ch"),
     #"codimd": CodiMD("codimd", "https://codimd.web.cern.ch")
 }
 
@@ -18,9 +18,11 @@ class InvalidSource(Exception):
     pass
 
 
-def get_source(source, token=None):
+def get_source(source, api_token=None):
     if source == "codimd":
-        return CodiMD("codimd", "https://codimd.web.cern.ch", token)
+        return CodiMD("codimd", "https://codimd.web.cern.ch", api_token)
+    elif source == "indico":
+        return Indico("indico", "https://indico.cern.ch", api_token)
 
     if source not in sources:
         raise InvalidSource(f"Invalid source: {source}")

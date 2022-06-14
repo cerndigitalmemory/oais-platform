@@ -5,10 +5,10 @@ from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
 class CodiMD(Source):
-    def __init__(self, source, baseURL, session_id):
+    def __init__(self, source, baseURL, api_key):
         self.source = source
         self.baseURL = baseURL
-        self.session_id = session_id
+        self.api_key = api_key
 
 
     def get_record_url(self, recid):
@@ -20,7 +20,7 @@ class CodiMD(Source):
             req = requests.get(
                 "https://codimd.web.cern.ch/history",
                 stream=True,
-                cookies={"connect.sid": self.session_id},
+                cookies={"connect.sid": self.api_key},
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")

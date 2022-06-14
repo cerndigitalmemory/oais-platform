@@ -12,9 +12,10 @@ class ConfigFileUnavailable(Exception):
 
 
 class Indico(Source):
-    def __init__(self, source, baseURL):
+    def __init__(self, source, baseURL, api_key):
         self.source = source
         self.baseURL = baseURL
+        self.api_key = api_key
 
         self.config_file = configparser.ConfigParser()
         self.config_file.read(os.path.join(os.path.dirname(__file__), "indico.ini"))
@@ -64,12 +65,15 @@ class Indico(Source):
         # Makes the api calls to get the results
         for api_page in range(number_of_api_calls):
             try:
+                headers = {"Authorization": "Bearer " + self.api_key}
+
                 req = requests.get(
                     self.baseURL
                     + "/search/api/search?q="
                     + query
                     + "&type=event"
-                    + f"&page={api_page + actual_page}"
+                    + f"&page={api_page + actual_page}",
+                    headers = headers
                 )
             except Exception:
                 raise ServiceUnavailable("Cannot perform search")
@@ -100,7 +104,8 @@ class Indico(Source):
         result = []
 
         try:
-            req = requests.get(self.get_record_by_id(recid))
+            headers = {"Authorization": "Bearer " + self.api_key}
+            req = requests.get(self.get_record_by_id(recid), headers=headers)
         except Exception:
             raise ServiceUnavailable("Cannot perform searching", recid)
 
