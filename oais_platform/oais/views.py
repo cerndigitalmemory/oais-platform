@@ -3,7 +3,6 @@ import subprocess
 import time
 import zipfile
 from pathlib import PurePosixPath
-from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
 
 from django.conf import settings
@@ -13,7 +12,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest, DoesNotExist
+from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.permissions import (
@@ -23,7 +22,6 @@ from oais_platform.oais.permissions import (
     filter_archives_public,
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
-    filter_records_by_user_perms,
     filter_steps_by_user_perms,
 )
 from oais_platform.oais.serializers import (
@@ -32,19 +30,17 @@ from oais_platform.oais.serializers import (
     GroupSerializer,
     LoginSerializer,
     ProfileSerializer,
-    RequestHarvestSerializer,
+    SourceRecordSerializer,
     StepSerializer,
     UserSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
-from oais_platform.settings import BIC_UPLOAD_PATH
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from rest_framework.views import APIView
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -53,7 +49,7 @@ from ..settings import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
 )
-from .tasks import create_step, process, run_next_step, validate
+from .tasks import create_step, process, run_next_step
 
 
 # Get (and set) user data
@@ -165,7 +161,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
-    @action(detail=False, url_name='get-staged-archives-paginated')
+    @action(detail=False, url_name="get-staged-archives-paginated")
     def get_staged_archives_paginated(self, request):
         archives = Archive.objects.filter(staged=True, creator=self.request.user)
         return self.make_paginated_response(archives, ArchiveSerializer)
@@ -304,7 +300,7 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         # if not user.has_perm(permission):
         #     raise PermissionDenied()
 
-        if request.data["archives"] == None:
+        if request.data["archives"] is None:
             raise Exception("No archives selected")
         else:
             archives = request.data["archives"]
@@ -496,7 +492,7 @@ def check_archived_records(request):
     """
     records = request.data["recordList"]
 
-    if records == None:
+    if records is None:
         return Response(None)
 
     for record in records:
@@ -534,7 +530,7 @@ def create_next_step(request):
     return Response(serializer.data)
 
 
-@extend_schema(request=RequestHarvestSerializer, responses=ArchiveSerializer)
+@extend_schema(request=SourceRecordSerializer, responses=ArchiveSerializer)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def create_by_harvest(request):
@@ -542,11 +538,11 @@ def create_by_harvest(request):
     Creates an Archive triggering an harvest of it, from the specified Source and Record ID.
     """
 
-    serializer = RequestHarvestSerializer(data=request.data)
+    serializer = SourceRecordSerializer(data=request.data)
 
     if serializer.is_valid():
         source = serializer.data["source"]
-        recid = serializer.data["source"]
+        recid = serializer.data["recid"]
 
     try:
         url = get_source(source).get_record_url(recid)
@@ -614,7 +610,7 @@ def create_staged_archive(request):
     Gets a source and the recid and creates a staged archive object
     """
     records = request.data["records"]
-    
+
     try:
         for record in records:
             # Always create a new archive instance
@@ -626,9 +622,9 @@ def create_staged_archive(request):
                 creator=request.user,
                 staged=True,
             )
-        return Response({"status":0, "errormsg": None})
+        return Response({"status": 0, "errormsg": None})
     except Exception as e:
-        return Response({"status":1, "errormsg": e})
+        return Response({"status": 1, "errormsg": e})
 
 
 @api_view(["POST"])
@@ -673,6 +669,7 @@ def get_staged_archives(request):
     serializer = ArchiveSerializer(archives, many=True)
     return Response(serializer.data)
 
+
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
 def get_archive_information_labels(request):
@@ -687,8 +684,9 @@ def get_archive_information_labels(request):
     staged_archives = Archive.objects.filter(staged=True, creator=user)
     unstaged_archives = Archive.objects.filter(staged=False, creator=user)
 
-    return Response({"staged": len(staged_archives),"unstaged": len(unstaged_archives)})
-
+    return Response(
+        {"staged": len(staged_archives), "unstaged": len(unstaged_archives)}
+    )
 
 
 @api_view(["POST"])
@@ -917,7 +915,7 @@ def search_query(request):
                 source_filter = filter["source"]
             if "visibility" in filter:
                 visibility_filter = filter["visibility"]
-            if (source_filter == None) and (visibility_filter == None):
+            if (source_filter is None) and (visibility_filter is None):
                 raise BadRequest("Parameter Error: Filtering parameter is not in body")
 
         # try:
