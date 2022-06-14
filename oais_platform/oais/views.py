@@ -393,30 +393,6 @@ def get_settings(request):
     return Response(data)
 
 
-# called by user/me/settings
-@api_view(["POST", "GET"])
-@permission_classes([permissions.IsAuthenticated])
-def user_settings_get_set(request):
-    """
-    Return (and update) the editable user settings,
-    such as personal tokens and cookies
-    """
-    if request.method == "POST":
-        user = request.user
-
-        serializer = ProfileSerializer(data=request.data)
-        if serializer.is_valid():
-            user.profile.update(serializer.data)
-            user.save()
-
-        return Response(serializer.data)
-    elif request.method == "GET":
-        user = request.user
-        profile = user.profile
-        serializer = ProfileSerializer(profile)
-        return Response(serializer.data)
-
-
 @extend_schema(responses=StepSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])

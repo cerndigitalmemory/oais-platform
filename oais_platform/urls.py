@@ -15,6 +15,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 from rest_framework import routers
 
 from oais_platform.oais import views
@@ -26,11 +31,6 @@ router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
 router.register(r"collections", views.CollectionViewSet)
 
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularRedocView,
-    SpectacularSwaggerView,
-)
 
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browsable API.
@@ -67,9 +67,11 @@ urlpatterns = [
                 path("logout/", views.logout, name="logout"),
                 # API
                 path("", include(router.urls)),
-                # Get or Set user information
+                # Get or set user information
                 path("user/me/", views.user_get_set, name="me"),
-                path("user/me/settings/", views.user_settings_get_set, name="me_settings"),
+                # (Currently unused)
+                # Creates a new Archive given a Source and Record ID and triggers
+                #  the Harvest step on it
                 path(
                     "archive/create/harvest/",
                     views.create_by_harvest,
@@ -123,7 +125,9 @@ urlpatterns = [
                 ),
                 path(
                     "staged-archives-paginated/",
-                    views.ArchiveViewSet.as_view({"get": "get_staged_archives_paginated"}),
+                    views.ArchiveViewSet.as_view(
+                        {"get": "get_staged_archives_paginated"}
+                    ),
                     name="staged_archives_paginated",
                 ),
                 path(
