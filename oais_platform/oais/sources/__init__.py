@@ -1,6 +1,7 @@
 from oais_platform.oais.sources.cds import CDS
 from oais_platform.oais.sources.invenio import Invenio
 from oais_platform.oais.sources.indico import Indico
+from oais_platform.oais.sources.codimd import CodiMD
 
 sources = {
     "cds": CDS("cds", "https://cds.cern.ch"),
@@ -9,6 +10,7 @@ sources = {
     "inveniordm": Invenio("inveniordm", "https://inveniordm.web.cern.ch/api"),
     "cod": Invenio("cod", "https://opendata.cern.ch/api"),
     "indico": Indico("indico", "https://indico.cern.ch"),
+    #"codimd": CodiMD("codimd", "https://codimd.web.cern.ch")
 }
 
 
@@ -16,9 +18,13 @@ class InvalidSource(Exception):
     pass
 
 
-def get_source(source):
+def get_source(source, token=None):
+    if source == "codimd":
+        return CodiMD("codimd", "https://codimd.web.cern.ch", token)
+
     if source not in sources:
         raise InvalidSource(f"Invalid source: {source}")
+
     return sources[source]
 
 
