@@ -783,7 +783,11 @@ def search(request, source):
         size = request.GET["s"]
 
     try:
-        results = get_source(source).search(query, page, size)
+        if source == "codimd":
+            api_token = request.user.profile.codimd_api_key
+        else:
+            api_token = None
+        results = get_source(source, api_token).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
@@ -794,7 +798,11 @@ def search(request, source):
 @permission_classes([permissions.IsAuthenticated])
 def search_by_id(request, source, recid):
     try:
-        result = get_source(source).search_by_id(recid.strip())
+        if source == "codimd":
+            api_token = request.user.profile.codimd_api_key
+        else:
+            api_token = None
+        results = get_source(source, api_token).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
