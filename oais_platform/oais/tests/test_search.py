@@ -43,7 +43,7 @@ class SearchTests(APITestCase):
 
         self.assertNotEqual(len(get_source.call_args_list), 0)
         for args in get_source.call_args_list:
-            self.assertEqual(args, mock.call("test"))
+            self.assertEqual(args, mock.call("test", None))
 
         self.assertEqual(response.data["total_num_hits"], 1)
 
