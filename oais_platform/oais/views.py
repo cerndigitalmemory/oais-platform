@@ -8,6 +8,7 @@ from urllib.parse import unquote, urlparse
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect
@@ -106,21 +107,34 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
-    @action(detail=True, url_name="user-archives_staged")
-    def archives_staged(self, request, pk=None):
-        """
-        Gets all the archives for a specific user that are staged (no steps assigned)
-        """
-        user = self.get_object()
-        archives = filter_all_archives_user_has_access(
-            user.archives.filter(
-                last_step__isnull=True,
-                steps__isnull=True,
-                archive_collections__isnull=True,
-            ),
-            request.user,
-        )
-        return self.make_paginated_response(archives, ArchiveSerializer)
+
+# Get (and set) the user staging area
+@extend_schema_view(
+    post=extend_schema(
+        description="Adds the passed archives to the user staging area",
+        request=[ArchiveSerializer],
+        responses=UserSerializer,
+    )
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def add_to_staging(request):
+    records = request.data["records"]
+
+    try:
+        for record in records:
+            # Always create a new archive instance
+            Archive.objects.create(
+                recid=record["recid"],
+                source=record["source"],
+                source_url=record["source_url"],
+                title=record["title"],
+                creator=request.user,
+                staged=True,
+            )
+        return Response({"status": 0, "errormsg": None})
+    except Exception as e:
+        return Response({"status": 1, "errormsg": e})
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -161,10 +175,39 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
-    @action(detail=False, url_name="get-staged-archives-paginated")
-    def get_staged_archives_paginated(self, request):
+    @action(detail=False, url_name="get-staging-area")
+    def get_staging_area(self, request, pk=None):
+        """
+        Returns the Staging area of the user
+        """
         archives = Archive.objects.filter(staged=True, creator=self.request.user)
-        return self.make_paginated_response(archives, ArchiveSerializer)
+        pagination = self.request.GET.get("paginated", "true")
+        print(pagination)
+        if pagination == "false":
+            return Response(ArchiveSerializer(archives, many=True).data)
+        else:
+            return self.make_paginated_response(archives, ArchiveSerializer)
+
+    @action(detail=False, url_name="add-to-staging-area")
+    def add_to_staging_area(self, request):
+        """
+        Add passed archives to the Staging area of the user
+        """
+        records = request.data["records"]
+        try:
+            for record in records:
+                # Always create a new archive instance
+                Archive.objects.create(
+                    recid=record["recid"],
+                    source=record["source"],
+                    source_url=record["source_url"],
+                    title=record["title"],
+                    creator=request.user,
+                    staged=True,
+                )
+            return Response({"status": 0, "errormsg": None})
+        except Exception as e:
+            return Response({"status": 1, "errormsg": e})
 
     @action(detail=True, url_name="archive-steps")
     def archive_steps(self, request, pk=None):
@@ -577,30 +620,6 @@ def create_archive(request, recid, source):
     return redirect(
         reverse("archive-detail", request=request, kwargs={"pk": archive.id})
     )
-
-
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def create_staged_archive(request):
-    """
-    Gets a source and the recid and creates a staged archive object
-    """
-    records = request.data["records"]
-
-    try:
-        for record in records:
-            # Always create a new archive instance
-            archive = Archive.objects.create(
-                recid=record["recid"],
-                source=record["source"],
-                source_url=record["source_url"],
-                title=record["title"],
-                creator=request.user,
-                staged=True,
-            )
-        return Response({"status": 0, "errormsg": None})
-    except Exception as e:
-        return Response({"status": 1, "errormsg": e})
 
 
 @api_view(["POST"])

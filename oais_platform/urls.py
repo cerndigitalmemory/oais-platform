@@ -78,11 +78,6 @@ urlpatterns = [
                     name="create-by-harvest",
                 ),
                 path(
-                    "archive/create/staged",
-                    views.create_staged_archive,
-                    name="create_staged_archive",
-                ),
-                path(
                     "archive/create/<str:recid>/<str:source>/",
                     views.create_archive,
                     name="create_archive",
@@ -124,13 +119,6 @@ urlpatterns = [
                     name="staged_archives",
                 ),
                 path(
-                    "staged-archives-paginated/",
-                    views.ArchiveViewSet.as_view(
-                        {"get": "get_staged_archives_paginated"}
-                    ),
-                    name="staged_archives_paginated",
-                ),
-                path(
                     "get-archive-information-labels/",
                     views.get_archive_information_labels,
                     name="get_archive_information_labels",
@@ -147,10 +135,10 @@ urlpatterns = [
                     name="search",
                 ),
                 path(
-                    # Returns all the archives that are in the staged phase (not in a collection, no step intitiallized)
-                    "users/<int:pk>/archives-staged/",
-                    views.UserViewSet.as_view({"get": "archives_staged"}),
-                    name="archives_staged",
+                    # Returns all the archives that are in the staged area
+                    "user/me/staging-area/",
+                    views.ArchiveViewSet.as_view({"get": "get_staging_area", "post": "add_to_staging_area"}),
+                    name="staging_area",
                 ),
                 path(
                     # Gives a list of archives and returns for each archive a list with all the collections and the duplicates this archive has
