@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 TESTING = False
 
-STATIC_ROOT = "oais-web/build/static"
+STATIC_ROOT = environ.get("DJANGO_STATIC_ROOT", "oais-web/build/static")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
