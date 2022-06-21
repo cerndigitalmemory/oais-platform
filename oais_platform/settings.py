@@ -15,9 +15,6 @@ from pathlib import Path
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
-# Import local settings
-import oais_platform.local_settings
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -251,3 +248,6 @@ FILES_URL = "https://oais.web.cern.ch/"
 AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
 # Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
+
+# Import local settings
+from oais_platform.local_settings import *  # noqa
