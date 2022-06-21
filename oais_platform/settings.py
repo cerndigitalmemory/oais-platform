@@ -27,12 +27,12 @@ from pathlib import Path
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
+## General Django settings
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 TESTING = False
-
-STATIC_ROOT = environ.get("DJANGO_STATIC_ROOT", "oais-web/build/static")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
@@ -45,14 +45,14 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-# Celery
-
+## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
 
+## Authentication
 # OpenID Connect
 OIDC_RP_CLIENT_ID = environ.get("OIDC_RP_CLIENT_ID")
 # SECURITY WARNING: the client secret must be kept secret!
@@ -73,7 +73,6 @@ OIDC_RP_SIGN_ALGO = "RS256"
 # Path to redirect to on successful login.
 # This is used to fetch the user information from the SPA.
 LOGIN_REDIRECT_URL = "/index.html#/login/callback"
-
 
 AUTHENTICATION_BACKENDS = [
     "oais_platform.oais.auth.CERNAuthenticationBackend",
@@ -133,8 +132,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "oais_platform.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/3.1/ref/settings/#databases
+## Database
 
 DATABASES = {
     "default": {
@@ -150,8 +148,7 @@ DATABASES = {
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
+##  Password validation
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -169,8 +166,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/3.1/topics/i18n/
+## Internationalization
 
 LANGUAGE_CODE = "en-us"
 
@@ -183,10 +179,18 @@ USE_L10N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.1/howto/static-files/
+# Static assets (CSS, JavaScript, Images)
 
+# This path is used to put the output of the "collectstatic" command,
+# used to export the static assets for the Django Admin interface and the
+# Swagger UI provided by Spectacular.
+STATIC_ROOT = environ.get("DJANGO_STATIC_ROOT", "oais-web/build/static")
+
+# URL path under which Django will serve the static assets
 STATIC_URL = "static/"
+
+
+## Django Rest Framework
 
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
