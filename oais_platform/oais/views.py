@@ -12,6 +12,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect
+from yaml import serialize
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
@@ -89,7 +90,7 @@ def user_get_set(request):
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
-    API endpoint that allows users to be viewed or edited.
+    API endpoint that allows Users to be viewed or edited.
     """
 
     queryset = User.objects.all().order_by("-date_joined")
@@ -99,42 +100,13 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=True, url_name="user-archives")
     def archives(self, request, pk=None):
         """
-        Gets all the archives for a specific user
+        Returns all Archives of a User
         """
         user = self.get_object()
         archives = filter_all_archives_user_has_access(
             user.archives.all(), request.user
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
-
-
-# Get (and set) the user staging area
-@extend_schema_view(
-    post=extend_schema(
-        description="Adds the passed archives to the user staging area",
-        request=[ArchiveSerializer],
-        responses=UserSerializer,
-    )
-)
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def add_to_staging(request):
-    records = request.data["records"]
-
-    try:
-        for record in records:
-            # Always create a new archive instance
-            Archive.objects.create(
-                recid=record["recid"],
-                source=record["source"],
-                source_url=record["source_url"],
-                title=record["title"],
-                creator=request.user,
-                staged=True,
-            )
-        return Response({"status": 0, "errormsg": None})
-    except Exception as e:
-        return Response({"status": 1, "errormsg": e})
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -175,7 +147,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
-    @action(detail=False, url_name="get-staging-area")
     def get_staging_area(self, request, pk=None):
         """
         Returns the Staging area of the user
@@ -188,7 +159,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         else:
             return self.make_paginated_response(archives, ArchiveSerializer)
 
-    @action(detail=False, url_name="add-to-staging-area")
     def add_to_staging_area(self, request):
         """
         Add passed archives to the Staging area of the user
@@ -300,22 +270,27 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(step)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["POST"], url_path="actions/approve")
+    @action(detail=True, methods=["POST"], url_path="approve")
     def approve(self, request, pk=None):
+        """
+        Approve an identified step
+        """
         return self.approve_or_reject(
             request, "oais.can_approve_archive", approved=True
         )
 
-    @action(detail=True, methods=["POST"], url_path="actions/reject")
+    @action(detail=True, methods=["POST"], url_path="reject")
     def reject(self, request, pk=None):
+        """
+        Reject an identified step
+        """
         return self.approve_or_reject(
             request, "oais.can_reject_archive", approved=False
         )
 
-
-class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
+class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
-    API endpoint that allows collections to be viewed or edited.
+    API endpoint that allows Tags to be viewed or edited
     """
 
     queryset = Collection.objects.all()
@@ -331,15 +306,54 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             return filter_collections_by_user_perms(
                 super().get_queryset(), self.request.user
             )
+  
+    @action(detail=False, methods=["POST"], url_path="create", url_name="create")
+    def create_tag(self, request):
+        """
+        Create a Tag with title, description and Archives
+        """
+        title = request.data["title"]
+        description = request.data["description"]
+        archives = request.data["archives"]
 
-    @action(detail=True, url_name="collection-archives")
-    def collection_archives(self, request, pk=None):
-        collection = self.get_object()
-        archives = collection.archives.all()
-        return self.make_paginated_response(collection, CollectionSerializer)
+        tag = Collection.objects.create(
+            title=title,
+            description=description,
+            creator=request.user,
+            internal=False,
+        )
+        if archives:
+            tag.archives.set(archives)
 
-    def add_or_remove(self, request, permission, add):
-        user = request.user
+        serializer = CollectionSerializer(tag, many=False)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
+    def delete_tag(self, request, pk=None):
+        """
+        Delete a Tag
+        """
+        # This is about deleting tags not archives, create new perm in permissions.py?
+        # user = request.user
+        # if not user.has_perm("oais.can_reject_archive"):
+        #     raise PermissionDenied()
+
+        with transaction.atomic():
+            tag = self.get_object()
+
+        tag.delete()
+        return Response()
+
+    @action(detail=True, url_path="archives")
+    def get_tagged_archives(self, request, pk=None):
+        """
+        Returns all Archives with a specific Tag
+        """
+        tag = self.get_object()
+        return self.make_paginated_response(tag, CollectionSerializer)
+
+    def add_or_remove_arch(self, request, permission, add):
+        # user = request.user
         # if not user.has_perm(permission):
         #     raise PermissionDenied()
 
@@ -349,58 +363,43 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = request.data["archives"]
 
         with transaction.atomic():
-            collection = self.get_object()
+            tag = self.get_object()
 
         if add:
             if isinstance(archives, list):
                 for archive in archives:
-                    collection.add_archive(archive)
+                    tag.add_archive(archive)
             else:
-                collection.add_archive(archives)
+                tag.add_archive(archives)
 
         else:
             if isinstance(archives, list):
                 for archive in archives:
                     if type(archive) == int:
-                        collection.remove_archive(archive)
+                        tag.remove_archive(archive)
                     else:
-                        collection.remove_archive(archive["id"])
+                        tag.remove_archive(archive["id"])
             else:
-                collection.remove_archive(archives)
+                tag.remove_archive(archives)
 
-        collection.set_modification_timestamp()
-        collection.save()
-        serializer = self.get_serializer(collection)
+        tag.set_modification_timestamp()
+        tag.save()
+        serializer = self.get_serializer(tag)
         return Response(serializer.data)
 
-    def delete_collection(self, request, permission):
-        user = request.user
-        # if not user.has_perm(permission):
-        #     raise PermissionDenied()
+    @action(detail=True, methods=["POST"], url_path="add")
+    def add_arch(self, request, pk=None):
+        """
+        Tag selected Archive(s)
+        """
+        return self.add_or_remove_arch(request, "oais.can_approve_archive", add=True)
 
-        with transaction.atomic():
-            collection = self.get_object()
-
-        collection.delete()
-
-        return Response()
-
-    @action(detail=True, methods=["POST"], url_path="actions/add")
-    def add(self, request, pk=None):
-        return self.add_or_remove(request, "oais.can_approve_archive", add=True)
-
-    @action(detail=True, methods=["POST"], url_path="actions/remove")
-    def remove(self, request, pk=None):
-        return self.add_or_remove(request, "oais.can_reject_archive", add=False)
-
-    @action(
-        detail=True,
-        methods=["POST"],
-        url_path="actions/delete",
-        url_name="collections_delete",
-    )
-    def delete(self, request, pk=None):
-        return self.delete_collection(request, "oais.can_reject_archive")
+    @action(detail=True, methods=["POST"], url_path="remove")
+    def remove_arch(self, request, pk=None):
+        """
+        Untag selected Archive(s)
+        """
+        return self.add_or_remove_arch(request, "oais.can_reject_archive", add=False)
 
 
 # called by /settings
@@ -455,22 +454,12 @@ def archive_details(self, id):
     serializer = ArchiveSerializer(archive, many=False)
     return Response(serializer.data)
 
-
-@api_view()
-@permission_classes([permissions.IsAuthenticated])
-def collection_details(self, id):
-
-    collection = Collection.objects.get(pk=id)
-    serializer = CollectionSerializer(collection, many=False)
-    return Response(serializer.data)
-
-
 @extend_schema(responses=CollectionSerializer)
 @api_view()
 @permission_classes([permissions.IsAuthenticated])
-def get_all_tags(request):
+def get_tags(request):
     """
-    Returns a list of all the Tags a User has created
+    Returns all Tags created by a User
     """
     try:
         user = request.user
@@ -480,27 +469,6 @@ def get_all_tags(request):
     collections = Collection.objects.filter(creator=user, internal=False)
     serializer = CollectionSerializer(collections, many=True)
     return Response(serializer.data)
-
-
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def create_collection(request):
-    title = request.data["title"]
-    description = request.data["description"]
-    archives = request.data["archives"]
-
-    collection = Collection.objects.create(
-        title=title,
-        description=description,
-        creator=request.user,
-        internal=False,
-    )
-    if archives:
-        collection.archives.set(archives)
-
-    serializer = CollectionSerializer(collection, many=False)
-    return Response(serializer.data)
-
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])

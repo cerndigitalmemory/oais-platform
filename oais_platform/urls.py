@@ -23,7 +23,7 @@ router.register(r"users", views.UserViewSet)
 router.register(r"groups", views.GroupViewSet)
 router.register(r"archives", views.ArchiveViewSet)
 router.register(r"steps", views.StepViewSet)
-router.register(r"collections", views.CollectionViewSet)
+router.register(r"tags", views.TagViewSet, basename="tags")
 
 
 # Wire up our API using automatic URL routing.
@@ -141,41 +141,11 @@ urlpatterns = [
                     views.get_detailed_archives,
                     name="get_detailed_archives",
                 ),
-                path(
-                    "collection/<int:id>",
-                    views.collection_details,
-                    name="collection_details",
-                ),
-                path("collections/all", views.get_all_tags, name="get_all_tags"),
+                path("user/me/tags", views.get_tags, name="get_tags"),
                 path(
                     "records/check",
                     views.check_archived_records,
                     name="check_archived_records",
-                ),
-                path(
-                    "collection/create",
-                    views.create_collection,
-                    name="create_collection",
-                ),
-                path(
-                    "collections/<int:pk>/actions/delete/",
-                    views.CollectionViewSet.as_view({"post": "delete"}),
-                    name="collections_delete",
-                ),
-                path(
-                    "collections/<int:pk>/actions/add/",
-                    views.CollectionViewSet.as_view({"post": "add"}),
-                    name="add_to_collection",
-                ),
-                path(
-                    "collections/<int:pk>/actions/remove/",
-                    views.CollectionViewSet.as_view({"post": "remove"}),
-                    name="remove_from_collection",
-                ),
-                path(
-                    "collections/",
-                    views.CollectionViewSet.as_view({"get": "get_queryset"}),
-                    name="get_collections",
                 ),
                 path(
                     "steps/status",

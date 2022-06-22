@@ -27,7 +27,7 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
+        url = reverse("tags-create")
         response = self.client.post(
             url,
             {"title": "test", "description": "test description", "archives": None},
@@ -44,8 +44,8 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
-        check_url = reverse("get_collections")
+        url = reverse("tags-create")
+        check_url = reverse("tags-list")
 
         response = self.client.post(
             url,
@@ -54,7 +54,7 @@ class CollectionTests(APITestCase):
         )
         response_collection_id = response.data["id"]
 
-        del_url = reverse("collections_delete", args=[response_collection_id])
+        del_url = reverse("tags-delete", args=[response_collection_id])
         response2 = self.client.post(del_url, format="json")
 
         results = self.client.get(check_url, format="json")
@@ -68,8 +68,8 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
-        check_url = reverse("get_collections")
+        url = reverse("tags-create")
+        check_url = reverse("tags-list")
         for i in range(10):
             response = self.client.post(
                 url,
@@ -93,8 +93,8 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
-        check_url = reverse("get_collections")
+        url = reverse("tags-create")
+        check_url = reverse("tags-list")
 
         response1 = self.client.post(
             url,
@@ -122,9 +122,8 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
-
-        check_url = reverse("get_collections")
+        url = reverse("tags-create")
+        check_url = reverse("tags-list")
 
         # Creates a collection
         response = self.client.post(
@@ -146,7 +145,7 @@ class CollectionTests(APITestCase):
         self.assertEqual(len(archives), 0)
 
         response_collection_id = response.data["id"]
-        add_archive = reverse("add_to_collection", args=[response_collection_id])
+        add_archive = reverse("tags-add-arch", args=[response_collection_id])
 
         add_archive_response = self.client.post(
             add_archive, {"archives": [self.archive1.id]}, format="json"
@@ -167,8 +166,8 @@ class CollectionTests(APITestCase):
         """
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("create_collection")
-        check_url = reverse("get_collections")
+        url = reverse("tags-create")
+        check_url = reverse("tags-list")
 
         # Creates a collection with an archive
         response = self.client.post(
@@ -192,7 +191,7 @@ class CollectionTests(APITestCase):
 
         # Remove the archive from the collection
         response_collection_id = response.data["id"]
-        rm_archive = reverse("remove_from_collection", args=[response_collection_id])
+        rm_archive = reverse("tags-remove-arch", args=[response_collection_id])
 
         rm_archive_response = self.client.post(
             rm_archive, {"archives": [self.archive1.id]}, format="json"
@@ -211,7 +210,7 @@ class CollectionTests(APITestCase):
     def test_collection_list_other_user(self):
         self.client.force_authenticate(user=self.other_user)
 
-        check_url = reverse("get_collections")
+        check_url = reverse("tags-list")
         results = self.client.get(check_url, format="json")
 
         self.assertEqual(results.status_code, status.HTTP_200_OK)
@@ -223,7 +222,7 @@ class CollectionTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        check_url = reverse("get_collections")
+        check_url = reverse("tags-list")
         results = self.client.get(check_url, format="json")
 
         self.assertEqual(results.status_code, status.HTTP_200_OK)
