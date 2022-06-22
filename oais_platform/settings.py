@@ -11,7 +11,7 @@ This file provides the base configuration values for the
 various components of the project.
 
 Some of them can be easily customised by setting
-environment variables, however, for a full control approach
+environment variables, however, for full control
 over this file (e.g. deployments), you can edit the
 `local_settings/__init__.py` file.
 
@@ -53,21 +53,24 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
 
 ## Authentication
+# See https://auth.docs.cern.ch/user-documentation/oidc/config/ for
+# further reference.
+
 # OpenID Connect
 OIDC_RP_CLIENT_ID = environ.get("OIDC_RP_CLIENT_ID")
 # SECURITY WARNING: the client secret must be kept secret!
 OIDC_RP_CLIENT_SECRET = environ.get("OIDC_RP_CLIENT_SECRET")
 OIDC_OP_AUTHORIZATION_ENDPOINT = (
-    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
+    "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/auth"
 )
 OIDC_OP_TOKEN_ENDPOINT = (
-    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/token"
+    "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/token"
 )
 OIDC_OP_USER_ENDPOINT = (
-    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
+    "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/userinfo"
 )
 OIDC_OP_JWKS_ENDPOINT = (
-    "https://keycloak-qa.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
+    "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
 )
 OIDC_RP_SIGN_ALGO = "RS256"
 # Path to redirect to on successful login.
