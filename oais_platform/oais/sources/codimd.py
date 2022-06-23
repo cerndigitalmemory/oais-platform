@@ -1,4 +1,5 @@
 import json
+from operator import itemgetter
 
 import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
@@ -46,12 +47,30 @@ class CodiMD(Source):
         page = int(page)
 
         records = self.get_records()
-        total_num_hits = len(records)
-
         results = []
-        for record in records:
-            results.append(self.parse_record(record))
 
+        # add all records if query is empty, filter otherwise
+        if not query:
+            results = list(map(self.parse_record, records))
+        else:
+            query = query.lower().split()
+            sorted_records = []
+
+            for record in records:
+                title = record["text"].lower()
+
+                record["score"] = 0
+                for word in query: 
+                    if word in title: record["score"] += 1
+            
+                if record["score"] > 0:
+                    sorted_records.append(record)
+
+            sorted_records.sort(key = itemgetter("score"), reverse = True)
+            results = list(map(self.parse_record, sorted_records))
+
+
+        total_num_hits = len(results)
         idx = 10 * (page - 1)
         return {"total_num_hits": total_num_hits, "results": results[idx:idx+size]}
 
