@@ -1,18 +1,12 @@
-"""oais_platform URL Configuration
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/3.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+OAIS Platform URL configuration
+
+This file provides the mapping between the paths we expose in the API
+and the views (or functions) handling them.
+
+Endpoints retrieving paginated querysets should be handled by Class-based views.
+"""
+
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import (
@@ -33,16 +27,16 @@ router.register(r"collections", views.CollectionViewSet)
 
 
 # Wire up our API using automatic URL routing.
-# Additionally, we include login URLs for the browsable API.
 urlpatterns = [
+    # Serve the Django Admin panel
     path("admin/", admin.site.urls),
-    # path("search/", include("oais_platform.search.urls")),
     path(
         # Set base path
         r"api/",
         include(
             [
-                # Serve the generated API schema (as a yaml file)
+                ## Spectacular DRF (API documentation)
+                # Serve the generated OpenAPI schema (as a YAML file)
                 path("schema/", SpectacularAPIView.as_view(), name="schema"),
                 # Serve the Swagger UI
                 path(
@@ -50,25 +44,37 @@ urlpatterns = [
                     SpectacularSwaggerView.as_view(url_name="schema"),
                     name="swagger-ui",
                 ),
+                # Serve Redoc
                 path(
                     "schema/redoc/",
                     SpectacularRedocView.as_view(url_name="schema"),
                     name="redoc",
                 ),
-                # Auth endpoint used by the browsable API of DRF
+                ## Authentication endpoints
+                # "Login" used by the browsable API of DRF
                 path(
                     "api-auth/",
                     include("rest_framework.urls", namespace="rest_framework"),
                 ),
-                # Auth endpoint used for CERN SSO using OpenID Connect
+                # CERN SSO through OpenID Connect
                 path("oidc/", include("mozilla_django_oidc.urls")),
-                # Auth endpoints used to login/logout (local accounts)
+                # Conventional login/logout ("local" accounts)
                 path("login/", views.login, name="login"),
                 path("logout/", views.logout, name="logout"),
                 # API
                 path("", include(router.urls)),
-                # Get or set user information
+                ## User
+                # Retrieve or set user information, including personal settings
                 path("user/me/", views.user_get_set, name="me"),
+                # Retrieve or add archives in the user staging area
+                path(
+                    "user/me/staging-area/",
+                    views.ArchiveViewSet.as_view({
+                        "get": "get_staging_area",
+                        "post": "add_to_staging_area"
+                    }),
+                    name="staging_area",
+                ),
                 # (Currently unused)
                 # Creates a new Archive given a Source and Record ID and triggers
                 #  the Harvest step on it
@@ -114,11 +120,6 @@ urlpatterns = [
                     name="archive_delete",
                 ),
                 path(
-                    "archives/staged",
-                    views.get_staged_archives,
-                    name="staged_archives",
-                ),
-                path(
                     "get-archive-information-labels/",
                     views.get_archive_information_labels,
                     name="get_archive_information_labels",
@@ -133,12 +134,6 @@ urlpatterns = [
                     "archive/<int:pk>/search/",
                     views.ArchiveViewSet.as_view({"get": "archive_search"}),
                     name="search",
-                ),
-                path(
-                    # Returns all the archives that are in the staged area
-                    "user/me/staging-area/",
-                    views.ArchiveViewSet.as_view({"get": "get_staging_area", "post": "add_to_staging_area"}),
-                    name="staging_area",
                 ),
                 path(
                     # Gives a list of archives and returns for each archive a list with all the collections and the duplicates this archive has
@@ -206,7 +201,3 @@ urlpatterns = [
         ),
     ),
 ]
-
-# Uncomment the following lines to serve the contents of the "static" folder in
-#  the root of the repository as static.
-# (This can be used during development to serve a build of `oais-web`)
