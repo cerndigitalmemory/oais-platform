@@ -31,6 +31,21 @@ Containers overview:
 - Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
   `docker-compose build`
 
+Settings:
+
+To show the complete list of configuration values (settings.py) Django is using, run
+
+```bash
+python manage.py diffsettings --all
+```
+
+The "priority" order of settings is:
+
+1. local_settings (if the file exists, e.g. we use it in OpenShift deployments)
+2. Environment variables
+3. Defaults in settings.py
+
+
 To reset your instance:
 
 ```bash
@@ -67,10 +82,3 @@ Celery:
 
 - Celery: set log level to "DEBUG" instead of "INFO" in the worker:
   `celery -A oais_platform.celery worker -l INFO` -> `celery -A oais_platform.celery worker -l DEBUG`
-
-OpenSearch:
-
-- Create indices
-  `python manage.py opensearch index create`
-- Populate indices
-  `python3 manage.py opensearch document index`
