@@ -7,8 +7,8 @@ import shutil
 import time
 import uuid
 from datetime import datetime, timedelta
-from logging import log
 from distutils.dir_util import copy_tree, mkpath
+from logging import log
 from urllib.parse import urljoin
 
 from amclient import AMClient
@@ -19,19 +19,19 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.settings import (
+    AIP_UPSTREAM_BASEPATH,
     AM_ABS_DIRECTORY,
     AM_API_KEY,
     AM_REL_DIRECTORY,
+    AM_SS_API_KEY,
+    AM_SS_URL,
+    AM_SS_USERNAME,
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
-    AM_SS_URL,
-    AM_SS_USERNAME,
-    AM_SS_API_KEY,
     BIC_UPLOAD_PATH,
+    FILES_URL,
     SIP_UPSTREAM_BASEPATH,
-    AIP_UPSTREAM_BASEPATH,
-    FILES_URL
 )
 from oais_utils.validate import validate_sip
 
@@ -153,16 +153,20 @@ def create_step(step_name, archive_id, input_step_id=None):
 
 def create_path_artifact(name, path):
     """
-    Given a step, the name and the path artifact and the description, 
+    Given a step, the name and the path artifact and the description,
     """
-    url = urljoin(FILES_URL, path)
+    # If the path starts with a slash (e.g. in case of /eos/.. paths)
+    #  remove it so we can join it without losing parts of the FILES_URL
+    if path[0] == "/":
+        non_abs_path = path[1:]
+
+    url = urljoin(FILES_URL, non_abs_path)
 
     return {
-        "artifact_name":name,
-        "artifact_path":path,
-        "artifact_url":url,
+        "artifact_name": name,
+        "artifact_path": path,
+        "artifact_url": url,
     }
-
 
 
 # Steps implementations
@@ -178,16 +182,16 @@ def process(self, archive_id, step_id, input_data=None):
 
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
-    
+
     api_token = None
-    if(archive.source == 'indico'):
+    if archive.source == "indico":
         try:
             user = archive.creator
             api_token = user.profile.indico_api_key
         except Exception as e:
             return {"status": 1, "errormsg": e}
 
-    try: 
+    try:
         bagit_result = bic.process(
             recid=archive.recid,
             source=archive.source,
@@ -208,12 +212,13 @@ def process(self, archive_id, step_id, input_data=None):
 
     if BIC_UPLOAD_PATH:
         sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
-        
+
     archive.set_path(sip_folder_name)
 
-
     # Create a SIP path artifact
-    output_artifact = create_path_artifact( "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name))
+    output_artifact = create_path_artifact(
+        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name)
+    )
 
     bagit_result["artifact"] = output_artifact
 
@@ -348,14 +353,14 @@ def archivematica(self, archive_id, step_id, input_data):
     try:
         # After 2 seconds check if the folder has been transfered to archivematica
         package = am.create_package()
-        if (package == 3):
+        if package == 3:
             """
-            In case there is an error in the request (Error 400, Error 404 etc), 
+            In case there is an error in the request (Error 400, Error 404 etc),
             archivematica returns as a result the number 3. By filtering the result in that way,
             we know if am.create_package was executed successfully
             """
             logger.error(
-            f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
             return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
@@ -409,14 +414,14 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
-        am_status = {'status':"PROCESSING",'microservice':"Waiting for upload"}
+        am_status = {"status": "PROCESSING", "microservice": "Waiting for upload"}
 
         try:
             am_status = am.get_unit_status(message["id"])
         except TypeError as e:
             if message == 1:
                 """
-                In case archivematica is not connected (Error 500, Error 502 etc), 
+                In case archivematica is not connected (Error 500, Error 502 etc),
                 archivematica returns as a result the number 1. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
@@ -427,7 +432,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
             if message == 3:
                 """
-                In case there is an error in the request (Error 400, Error 404 etc), 
+                In case there is an error in the request (Error 400, Error 404 etc),
                 archivematica returns as a result the number 3. By filtering the result in that way,
                 we know if am.get_unit_status was executed successfully
                 """
@@ -438,10 +443,18 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
             if step.status == Status.NOT_RUN:
                 # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
-                am_status = {'status':"PROCESSING",'microservice':"Waiting for upload",'path':'','directory':'', 'name': 'Pending...', 'uuid':'Pending...', 'message':'Waiting for upload to Archivematica' }
+                am_status = {
+                    "status": "PROCESSING",
+                    "microservice": "Waiting for upload",
+                    "path": "",
+                    "directory": "",
+                    "name": "Pending...",
+                    "uuid": "Pending...",
+                    "message": "Waiting for upload to Archivematica",
+                }
 
             logger.warning("Error while checking archivematica status: ", e)
-         
+
         status = am_status["status"]
         microservice = am_status["microservice"]
 
@@ -451,15 +464,15 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         if status == "COMPLETE" and microservice == "Remove the processing directory":
             """
             Archivematica does not return the uuid of a package AIP so in order to find the AIP details we need to look to all the AIPs and find
-            the one with the same name. This way we can get the uuid and the path which are needed to access the AIP file 
+            the one with the same name. This way we can get the uuid and the path which are needed to access the AIP file
             """
             # Changes the :: to __ because archivematica by default does this transformation and this is needed so we can read the correct file
-            transfer_name_with_underscores = transfer_name.replace("::","__")
+            transfer_name_with_underscores = transfer_name.replace("::", "__")
 
             aip_path = None
             aip_uuid = None
 
-            aip_list = am.aips() # Retrieves all the AIPs (needs AM_SS_* configuration)
+            aip_list = am.aips()  # Retrieves all the AIPs (needs AM_SS_* configuration)
             path_artifact = None
             for aip in aip_list:
                 # Looks for aips with the same transfer name
@@ -470,7 +483,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                     am_status["aip_uuid"] = aip_uuid
                     am_status["aip_path"] = aip_path
 
-                    path_artifact = create_path_artifact( "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path))
+                    path_artifact = create_path_artifact(
+                        "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path)
+                    )
 
             # If the path artifact is found return complete otherwise set in progress and try again
             if path_artifact:
