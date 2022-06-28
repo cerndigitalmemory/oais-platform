@@ -184,10 +184,18 @@ def process(self, archive_id, step_id, input_data=None):
     step.set_status(Status.IN_PROGRESS)
 
     api_token = None
+    
     if archive.source == "indico":
         try:
             user = archive.creator
             api_token = user.profile.indico_api_key
+        except Exception as e:
+            return {"status": 1, "errormsg": e}
+
+    if archive.source == "codimd":
+        try:
+            user = archive.creator
+            api_token = user.profile.codimd_api_key
         except Exception as e:
             return {"status": 1, "errormsg": e}
 
