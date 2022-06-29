@@ -31,6 +31,10 @@ Containers overview:
 - Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
   `docker-compose build`
 
+To keep in mind:
+
+- Modifications to tasks.py (and in general anything executed by Celery) may require a restart of the Celery runner
+
 Settings:
 
 To show the complete list of configuration values (settings.py) Django is using, run
