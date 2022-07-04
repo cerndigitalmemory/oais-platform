@@ -117,9 +117,18 @@ export SENTRY_DSN="Put here the Sentry SDK client key"
 
 ### InvenioRDM 
 
+<<<<<<< HEAD
 To be able to connect the platform with InvenioRDM, create a new API Token in your InvenioRDM instance (Log in - My Account - Applications - Personal access tokens - New token).
 
 ```bash
 export INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
 export INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
+=======
+To be able to connect the CERN Digital Memory Platform with InvenioRDM, create a new API Token in your InvenioRDM instance.
+- Log in - My Account - Applications - Personal access tokens - New token.
+
+```bash
+- INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
+- INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
+>>>>>>> 14c5170 (Update README.md)
 ```
