@@ -229,9 +229,10 @@ def invenio(self, archive_id, step_id, input_data=None):
             "title": archive.title,
         },
     }
-    # Create a record as a InvenioRDM draft
+    # Create a record as a InvenioRDM 
+    invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
     req = requests.post(
-        INVENIO_SERVER_URL, headers=headers, data=json.dumps(data), verify=False
+        invenio_endpoint, headers=headers, data=json.dumps(data), verify=False
     )
 
     data = json.loads(req.text)
@@ -242,12 +243,12 @@ def invenio(self, archive_id, step_id, input_data=None):
     output_invenio_artifact = {
         "artifact_name": "Invenio Link",
         "artifact_path": "test",
-        "artifact_url": f"{INVENIO_SERVER_AND_PORT}{relative_path}",
+        "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
     }
 
     # Publish the InvenioRDM draft
     requests.post(
-        f"{INVENIO_SERVER_URL}/{id_invenio}/draft/actions/publish",
+        f"{invenio_records_endpoint}/{id_invenio}/draft/actions/publish",
         headers=headers,
         verify=False,
     )
