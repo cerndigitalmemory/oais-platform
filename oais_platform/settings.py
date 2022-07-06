@@ -255,6 +255,11 @@ AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
 # Directory that Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
+# Invenio
+
+INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
+INVENIO_SERVER_URL = environ.get("INVENIO_SERVER_URL")
+
 
 # Bagit Create Settings
 

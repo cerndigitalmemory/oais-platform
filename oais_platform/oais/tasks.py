@@ -11,6 +11,7 @@ from distutils.dir_util import copy_tree, mkpath
 from logging import log
 from urllib.parse import urljoin
 
+import requests
 from amclient import AMClient
 from bagit_create import main as bic
 from celery import shared_task, states
@@ -31,6 +32,8 @@ from oais_platform.settings import (
     AM_USERNAME,
     BIC_UPLOAD_PATH,
     FILES_URL,
+    INVENIO_API_TOKEN,
+    INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
 )
 from oais_utils.validate import validate_sip
@@ -147,6 +150,8 @@ def create_step(step_name, archive_id, input_step_id=None):
         task = checksum.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.ARCHIVE:
         task = archivematica.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.INVENIO_RDM_PUSH:
+        task = invenio.delay(step.archive.id, step.id, step.input_data)
 
     return step
 
@@ -170,6 +175,86 @@ def create_path_artifact(name, path):
 
 
 # Steps implementations
+@shared_task(
+    name="processInvenio", bind=True, ignore_result=True, after_return=finalize
+)
+def invenio(self, archive_id, step_id, input_data=None):
+
+    logger.info(f"Starting the upload to InvenioRDM {archive_id}")
+
+    archive = Archive.objects.get(pk=archive_id)
+
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
+
+    headers = {
+        "Authorization": "Bearer " + INVENIO_API_TOKEN,
+        "Content-type": "application/json",
+    }
+
+    if archive.restricted is True:
+        access = "private"
+    else:
+        access = "public"
+
+    if not archive.creator.last_name:
+        last_name = "Lopez"
+    else:
+        last_name = archive.creator.last_name
+
+    if not archive.creator.first_name:
+        first_name = "Sergio"
+    else:
+        first_name = archive.creator.first_name
+
+    data = {
+        "access": {
+            "record": access,
+            "files": access,
+        },
+        # Metadata only
+        "files": {"enabled": False},
+        "metadata": {
+            "creators": [
+                {
+                    "person_or_org": {
+                        "family_name": last_name,
+                        "given_name": first_name,
+                        "type": "personal",
+                    }
+                }
+            ],
+            "publication_date": "2018/2020-09",
+            "resource_type": {"id": "image-photo"},
+            "title": archive.title,
+        },
+    }
+    # Create a record as a InvenioRDM draft
+    req = requests.post(
+        INVENIO_SERVER_URL, headers=headers, data=json.dumps(data), verify=False
+    )
+
+    data = json.loads(req.text)
+    id_invenio = data["id"]
+    relative_path = f"/records/{id_invenio}"
+
+    # Create a InvenioRDM path artifact
+    output_invenio_artifact = {
+        "artifact_name": "Invenio Link",
+        "artifact_path": "test",
+        "artifact_url": f"{INVENIO_SERVER_AND_PORT}{relative_path}",
+    }
+
+    # Publish the InvenioRDM draft
+    requests.post(
+        f"{INVENIO_SERVER_URL}/{id_invenio}/draft/actions/publish",
+        headers=headers,
+        verify=False,
+    )
+
+    return {"status": 0, "id": data["id"], "artifact": output_invenio_artifact}
+
+
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
 def process(self, archive_id, step_id, input_data=None):
     """
@@ -184,7 +269,7 @@ def process(self, archive_id, step_id, input_data=None):
     step.set_status(Status.IN_PROGRESS)
 
     api_token = None
-    
+
     if archive.source == "indico":
         try:
             user = archive.creator

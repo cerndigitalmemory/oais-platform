@@ -24,6 +24,7 @@ class Profile(models.Model):
             setattr(self, key, data[key])
         self.save()
 
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     # Every time a User is created (post_save), create an attached Profile, too
@@ -43,6 +44,7 @@ class Steps(models.IntegerChoices):
     CHECKSUM = 4
     ARCHIVE = 5
     EDIT_MANIFEST = 6
+    INVENIO_RDM_PUSH = 7
 
 
 class Status(models.IntegerChoices):

@@ -11,7 +11,7 @@ from django.contrib.auth.models import Group, User
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
@@ -49,8 +49,10 @@ from ..settings import (
     AM_URL,
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
+    INVENIO_API_TOKEN,
+    INVENIO_SERVER_URL,
 )
-from .tasks import create_step, process, run_next_step
+from .tasks import create_step, invenio, process, run_next_step
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -662,6 +664,8 @@ def get_settings(request):
         "git_hash": githash,
         "CELERY_BROKER_URL": CELERY_BROKER_URL,
         "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
+        "INVENIO_SERVER_URL": INVENIO_SERVER_URL,
+        "INVENIO_API_TOKEN": INVENIO_API_TOKEN,
     }
 
     return Response(data)
