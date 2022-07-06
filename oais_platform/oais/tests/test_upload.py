@@ -54,7 +54,6 @@ class UploadTests(APITestCase):
 
         f1.close()
 
-
     def test_upload_sip(self):
         with override_settings(BIC_UPLOAD_PATH=None):
             # Prepare a temp folder to save the results

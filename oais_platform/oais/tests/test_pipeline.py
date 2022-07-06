@@ -22,7 +22,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next_step")
+        url = reverse("archives-next-step", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.HARVEST},
@@ -40,7 +40,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next_step")
+        url = reverse("archives-next-step", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.VALIDATION},
@@ -58,7 +58,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next_step")
+        url = reverse("archives-next-step", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.CHECKSUM},
@@ -76,7 +76,7 @@ class PipelineTests(APITestCase):
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
-        url = reverse("next_step")
+        url = reverse("archives-next-step", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
             {"archive": self.dict_archive.data, "next_step": Steps.ARCHIVE},
@@ -94,10 +94,10 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(self.archive.manifest, None)
 
-        url = reverse("save_manifest", args=[self.archive.id])
+        url = reverse("archives-save-manifest", args=[self.archive.id])
         response = self.client.post(
             url,
-            {"manifest": {'test':'test'}},
+            {"manifest": {'test': 'test'}},
             format="json",
         )
 

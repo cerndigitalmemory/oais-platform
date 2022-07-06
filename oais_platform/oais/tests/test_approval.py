@@ -30,7 +30,7 @@ class ApprovalTests(APITestCase):
     def test_reject_not_authenticated(self):
         self.client.force_authenticate(user=None)
 
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.archive.refresh_from_db()
@@ -38,7 +38,7 @@ class ApprovalTests(APITestCase):
         self.assertEqual(self.step.status, Status.WAITING_APPROVAL)
 
     def test_reject_without_permission(self):
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.archive.refresh_from_db()
@@ -49,7 +49,7 @@ class ApprovalTests(APITestCase):
         self.creator.user_permissions.add(self.reject_permission)
         self.creator.save()
 
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -59,7 +59,7 @@ class ApprovalTests(APITestCase):
     def test_approve_not_authenticated(self):
         self.client.force_authenticate(user=None)
 
-        url = reverse("step-approve", args=[self.step.id])
+        url = reverse("steps-approve", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -67,7 +67,7 @@ class ApprovalTests(APITestCase):
         self.assertEqual(self.step.status, Status.WAITING_APPROVAL)
 
     def test_approve_without_permission(self):
-        url = reverse("step-approve", args=[self.step.id])
+        url = reverse("steps-approve", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -79,7 +79,7 @@ class ApprovalTests(APITestCase):
         self.creator.user_permissions.add(self.approve_permission)
         self.creator.save()
 
-        url = reverse("step-approve", args=[self.step.id])
+        url = reverse("steps-approve", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -91,7 +91,7 @@ class ApprovalTests(APITestCase):
         self.creator.user_permissions.add(self.reject_permission)
         self.creator.save()
 
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         for step_status in Status.values:
             if step_status == Status.WAITING_APPROVAL:
                 continue
@@ -115,7 +115,7 @@ class ApprovalTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -130,7 +130,7 @@ class ApprovalTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("step-approve", args=[self.step.id])
+        url = reverse("steps-approve", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -144,7 +144,7 @@ class ApprovalTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("step-reject", args=[self.step.id])
+        url = reverse("steps-reject", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()
@@ -157,7 +157,7 @@ class ApprovalTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("step-approve", args=[self.step.id])
+        url = reverse("steps-approve", args=[self.step.id])
         response = self.client.post(url, format="json")
 
         self.step.refresh_from_db()

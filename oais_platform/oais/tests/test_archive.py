@@ -1,6 +1,6 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Step, Steps, Status
+from oais_platform.oais.models import Archive, Step
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -31,7 +31,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_creator_public(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "public"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -40,7 +40,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_creator_private(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -49,7 +49,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_creator_owned(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -58,7 +58,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_other_user_private(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -67,7 +67,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_other_user_public(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "public"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -76,7 +76,7 @@ class ArchiveTests(APITestCase):
     def test_archive_list_other_user_owned(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -88,7 +88,7 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-list")
+        url = reverse("archives-list")
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -97,7 +97,7 @@ class ArchiveTests(APITestCase):
     def test_archive_details_creator(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-detail", args=[self.private_archive.id])
+        url = reverse("archives-sgl-details", args=[self.private_archive.id])
         response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -109,7 +109,7 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive-detail", args=[self.private_archive.id])
+        url = reverse("archives-sgl-details", args=[self.private_archive.id])
         response = self.client.get(url, {"filter": "owned"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -118,7 +118,7 @@ class ArchiveTests(APITestCase):
     def test_archive_details_other_user(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-detail", args=[self.private_archive.id])
+        url = reverse("archives-sgl-details", args=[self.private_archive.id])
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -129,7 +129,7 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archive-detail", args=[self.private_archive.id])
+        url = reverse("archives-sgl-details", args=[self.private_archive.id])
         response = self.client.get(url, {"filter": "private"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -138,7 +138,7 @@ class ArchiveTests(APITestCase):
     def test_get_archive_details(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("archive_details", args=[self.private_archive.id])
+        url = reverse("archives-sgl-details", args=[self.private_archive.id])
         response = self.client.get(
             url,
             format="json",
@@ -150,7 +150,7 @@ class ArchiveTests(APITestCase):
     def test_get_steps(self):
         self.client.force_authenticate(user=self.creator)
 
-        url = reverse("get_steps", args=[self.private_archive.id])
+        url = reverse("archives-steps", args=[self.private_archive.id])
         response = self.client.get(
             url,
             format="json",

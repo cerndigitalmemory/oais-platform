@@ -17,7 +17,7 @@ class HarvestTests(APITestCase):
 
     def test_wrong_source(self):
 
-        url = reverse("create_archive", args=["1", "wrong"])
+        url = reverse("archives-create", args=["1", "wrong"])
         response = self.client.post(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -30,7 +30,7 @@ class HarvestTests(APITestCase):
         source = TestSource()
         get_source.return_value = source
 
-        url = reverse("create_archive", args=["1", "test"])
+        url = reverse("archives-create", args=["1", "test"])
         response = self.client.post(url, format="json", follow=True)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
