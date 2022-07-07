@@ -67,6 +67,8 @@ services:
       - DB_NAME=oais_platform
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
+      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
     env_file:
       - ./.env.dev
 
@@ -98,6 +100,8 @@ services:
       - DB_NAME=oais_platform
       - DB_USER=postgres
       - DB_PASS=overwritethisinprod!
+      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
+      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 
 volumes:
   postgres:
