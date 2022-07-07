@@ -1185,7 +1185,7 @@ def login(request):
         user = auth.authenticate(username=username, password=password)
         if user is not None:
             auth.login(request, user)
-            return redirect(reverse("me", request=request))
+            return redirect(reverse("users-me", request=request))
         else:
             raise BadRequest("Cannot authenticate user")
 
