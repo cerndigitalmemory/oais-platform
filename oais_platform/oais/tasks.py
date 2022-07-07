@@ -180,7 +180,7 @@ def create_path_artifact(name, path):
 )
 def invenio(self, archive_id, step_id, input_data=None):
 
-    logger.info(f"Starting the upload to InvenioRDM {archive_id}")
+    logger.info(f"Starting the publishing to InvenioRDM of Archive {archive_id}")
 
     archive = Archive.objects.get(pk=archive_id)
 
@@ -232,7 +232,7 @@ def invenio(self, archive_id, step_id, input_data=None):
     # Create a record as a InvenioRDM 
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
     req = requests.post(
-        invenio_endpoint, headers=headers, data=json.dumps(data), verify=False
+        invenio_records_endpoint, headers=headers, data=json.dumps(data), verify=False
     )
 
     data = json.loads(req.text)
