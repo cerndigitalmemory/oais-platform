@@ -52,7 +52,7 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import create_step, invenio, process, run_next_step
+from .tasks import create_step, invenio, process, run_next_step, check_for_sips
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1197,3 +1197,18 @@ def login(request):
 def logout(request):
     auth.logout(request)
     return Response({"status": "success"})
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def announce(request):
+    announce_path = request.data["announce_path"]
+    announce_response = check_for_sips(announce_path, request.user)
+
+    if announce_response["status"] == 0:
+        return redirect(
+            reverse("archives-sgl-details", request=request, kwargs={"pk": announce_response["archive_id"]})
+        )
+    else:
+        raise BadRequest(
+            announce_response["errormsg"]
+        )

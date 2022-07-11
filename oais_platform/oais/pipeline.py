@@ -4,7 +4,7 @@ Example pipeline definition and resolver
 
 
 def get_next_steps(taskname):
-    if taskname == 2 or taskname == 1:
+    if taskname == 2 or taskname == 1 or taskname == 8:
         return [3]
     elif taskname == 3:
         return [4]

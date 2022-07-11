@@ -45,6 +45,7 @@ class Steps(models.IntegerChoices):
     ARCHIVE = 5
     EDIT_MANIFEST = 6
     INVENIO_RDM_PUSH = 7
+    ANNOUNCE = 8
 
 
 class Status(models.IntegerChoices):

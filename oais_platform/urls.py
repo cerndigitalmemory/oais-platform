@@ -105,6 +105,11 @@ urlpatterns = [
                     views.parse_url,
                     name="parse_url",
                 ),
+                path(
+                    "upload/announce/",
+                    views.announce,
+                    name="parse_url",
+                ),
             ]
         ),
     ),
