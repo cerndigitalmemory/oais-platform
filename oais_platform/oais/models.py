@@ -1,4 +1,5 @@
 import json
+import this
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -7,6 +8,9 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from . import pipeline
+from oais_platform.settings import (
+    INVENIO_SERVER_URL,
+)
 
 
 class Profile(models.Model):
@@ -84,6 +88,11 @@ class Archive(models.Model):
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
     restricted = models.BooleanField(default=False)
+    invenio_parent_id = models.CharField(max_length=20, default=" ")
+    invenio_parent_url = models.CharField(
+        max_length=150,
+        default=" ",
+    )
 
     class Meta:
         ordering = ["-id"]

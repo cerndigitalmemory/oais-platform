@@ -225,17 +225,18 @@ def invenio(self, archive_id, step_id, input_data=None):
                 }
             ],
             "publication_date": "2018/2020-09",
-            "resource_type": {"id": "image-photo"},
+            "resource_type": {"id": "publication"},
             "title": archive.title,
         },
     }
-    # Create a record as a InvenioRDM 
+    # Create a record as a InvenioRDM
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
     req = requests.post(
         invenio_records_endpoint, headers=headers, data=json.dumps(data), verify=False
     )
 
     data = json.loads(req.text)
+    print(data)
     id_invenio = data["id"]
     relative_path = f"/records/{id_invenio}"
 
@@ -247,13 +248,24 @@ def invenio(self, archive_id, step_id, input_data=None):
     }
 
     # Publish the InvenioRDM draft
-    requests.post(
+    req_publish_invenio = requests.post(
         f"{invenio_records_endpoint}/{id_invenio}/draft/actions/publish",
         headers=headers,
         verify=False,
     )
 
-    return {"status": 0, "id": data["id"], "artifact": output_invenio_artifact}
+    # Get the parent ID:
+    data_publish = json.loads(req_publish_invenio.text)
+    invenio_parent_id = data_publish["parent"]["id"]
+    archive.invenio_parent_id = invenio_parent_id
+
+    # Create the invenio parent url
+    archive.invenio_parent_url = (
+        f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}"
+    )
+    archive.save()
+
+    return {"status": 0, "id": id_invenio, "artifact": output_invenio_artifact}
 
 
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
