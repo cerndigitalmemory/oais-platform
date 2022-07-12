@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import uuid
+import filecmp
 from datetime import datetime, timedelta
 from distutils.dir_util import copy_tree, mkpath
 from logging import log
@@ -646,7 +647,7 @@ def check_for_sips(announce_path, creator):
 
     if valid:
         try:
-            sip_json = get_manifest(os.path.join(announce_path))
+            sip_json = get_manifest(announce_path)
             source = sip_json["source"]
             recid = sip_json["recid"]
 
@@ -654,6 +655,39 @@ def check_for_sips(announce_path, creator):
         except:
             return {"status": 1, "errormsg": "Error while reading sip.json"}
 
+        # Check if folder exists
+        if BIC_UPLOAD_PATH:
+            target_path = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
+        else:
+            target_path = sip_folder_name
+
+        n = 1
+        sip_exists = os.path.isdir(target_path) 
+
+        while sip_exists:
+            # Check if directory found is a valid sip
+            target_is_sip = validate_sip(target_path)
+            if target_is_sip:
+                # Compares the contents of the target and the announce path
+                files_to_check = ['manifest-md5.txt', 'data/meta/sip.json', 'bagit.txt', 'bag-info.txt']
+                match, mismatch, errors = filecmp.cmpfiles(target_path, announce_path, files_to_check)
+                if len(match) != len(files_to_check):
+                    # In that case the sip is not the same one so creates a new one with a suffix in the end
+                    # Appends the _n as a suffix so the new archive creation does not collide with the existing ones 
+                    target_path = target_path + '_' + str(n)
+                    sip_folder_name = sip_folder_name + '_' + str(n)
+                else:
+                    # In that case the user tries to upload the exact same folder so the execution is stoped
+                    return {"status": 1, "errormsg": "SIP has already been uploaded."}
+            else: 
+                #If the target is not a valid sip then a new archive is created
+                target_path = target_path + '_' + str(n)
+                sip_folder_name = sip_folder_name + '_' + str(n)
+            # Checks if the name with the _n suffix exists, if returns false then the archive creation starts
+            sip_exists = os.path.isdir(target_path)
+            n += 1
+
+            
         # Create a new Archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -686,7 +720,7 @@ def announce(self, archive_id, step_id, input_data):
     try:
         directory = os.mkdir(target_path)
     except FileExistsError as e:
-        return {"status": 1, "errormsg": e}
+        return {"status": 1, "errormsg": "Folder already exists"}
     try:
         for (dirpath, dirnames, filenames) in os.walk(announce_path, followlinks=False):
             if announce_path == dirpath:
