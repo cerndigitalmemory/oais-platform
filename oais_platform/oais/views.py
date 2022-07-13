@@ -354,7 +354,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
             )
 
-        return Response(archives)
+        serializer = CollectionSerializer(
+            job_tag,
+            many=False,
+        )
+        return Response(serializer.data)
 
     # no @action to have recid and source variables in the url
     def archive_create(self, request, recid, source):
