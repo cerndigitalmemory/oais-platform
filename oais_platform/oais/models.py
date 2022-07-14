@@ -88,10 +88,10 @@ class Archive(models.Model):
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
     restricted = models.BooleanField(default=False)
-    invenio_parent_id = models.CharField(max_length=20, default=" ")
+    invenio_parent_id = models.CharField(max_length=20, default="")
     invenio_parent_url = models.CharField(
         max_length=150,
-        default=" ",
+        default="",
     )
 
     class Meta:

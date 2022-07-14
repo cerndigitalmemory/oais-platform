@@ -1,4 +1,6 @@
 import ast
+
+# from importlib.metadata import metadata
 import json
 import logging
 import ntpath
@@ -10,6 +12,7 @@ from datetime import datetime, timedelta
 from distutils.dir_util import copy_tree, mkpath
 from logging import log
 from urllib.parse import urljoin
+from importlib_metadata import metadata
 
 import requests
 from amclient import AMClient
@@ -198,12 +201,12 @@ def invenio(self, archive_id, step_id, input_data=None):
         access = "public"
 
     if not archive.creator.last_name:
-        last_name = "Lopez"
+        last_name = "Smith"
     else:
         last_name = archive.creator.last_name
 
     if not archive.creator.first_name:
-        first_name = "Sergio"
+        first_name = "David"
     else:
         first_name = archive.creator.first_name
 
@@ -224,48 +227,148 @@ def invenio(self, archive_id, step_id, input_data=None):
                     }
                 }
             ],
-            "publication_date": "2018/2020-09",
+            "publication_date": archive.timestamp.date().isoformat(),
             "resource_type": {"id": "publication"},
             "title": archive.title,
         },
     }
-    # Create a record as a InvenioRDM
+
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
-    req = requests.post(
-        invenio_records_endpoint, headers=headers, data=json.dumps(data), verify=False
+    invenio_id = None
+
+    # Query to check if there is another record of the same archive but diferent archive.id
+    archive_already_recorded = (
+        Archive.objects.filter(recid=archive.recid, source=archive.source)
+        .exclude(timestamp=archive.timestamp)
+        .last()
     )
 
-    data = json.loads(req.text)
-    print(data)
-    id_invenio = data["id"]
-    relative_path = f"/records/{id_invenio}"
+    # First time it is published on InvenioRDM
+    if (archive.invenio_parent_id == "") and (archive_already_recorded is None):
 
-    # Create a InvenioRDM path artifact
-    output_invenio_artifact = {
-        "artifact_name": "Invenio Link",
-        "artifact_path": "test",
-        "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
-    }
+        # Create a record as a InvenioRDM draft
+        req = requests.post(
+            invenio_records_endpoint,
+            headers=headers,
+            data=json.dumps(data),
+            verify=False,
+        )
 
-    # Publish the InvenioRDM draft
-    req_publish_invenio = requests.post(
-        f"{invenio_records_endpoint}/{id_invenio}/draft/actions/publish",
-        headers=headers,
-        verify=False,
-    )
+        data_loaded = json.loads(req.text)
+        invenio_id = data_loaded["id"]
+        relative_path = f"/records/{invenio_id}"
 
-    # Get the parent ID:
-    data_publish = json.loads(req_publish_invenio.text)
-    invenio_parent_id = data_publish["parent"]["id"]
-    archive.invenio_parent_id = invenio_parent_id
+        # Create a InvenioRDM path artifact
+        output_invenio_artifact = {
+            "artifact_name": "Invenio Link",
+            "artifact_path": "test",
+            "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
+        }
 
-    # Create the invenio parent url
-    archive.invenio_parent_url = (
-        f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}"
-    )
-    archive.save()
+        # Publish the InvenioRDM draft
+        req_publish_invenio = requests.post(
+            f"{invenio_records_endpoint}/{invenio_id}/draft/actions/publish",
+            headers=headers,
+            verify=False,
+        )
 
-    return {"status": 0, "id": id_invenio, "artifact": output_invenio_artifact}
+        # Get the parent ID:
+        data_published = json.loads(req_publish_invenio.text)
+        invenio_parent_id = data_published["parent"]["id"]
+        archive.invenio_parent_id = invenio_parent_id
+
+        # Create the invenio parent url
+        archive.invenio_parent_url = (
+            f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}"
+        )
+        archive.save()
+
+    # Create a new InvenioRDM version of the already published record
+    else:
+
+        # Different pipeline but same archive.recid
+        if archive_already_recorded is not None:
+
+            object = Step.objects.filter(
+                name=Steps.INVENIO_RDM_PUSH, archive=archive_already_recorded
+            ).latest("start_date")
+
+        else:
+
+            # Same pipeline
+            object = Step.objects.filter(
+                name=Steps.INVENIO_RDM_PUSH, archive=archive
+            ).latest("start_date")
+
+        # The field that I want get the value of
+        field_object = Step._meta.get_field("input_data")
+        # Get the value
+        field_value = field_object.value_from_object(object)
+
+        # Invenio id of the last version record created of this file
+        output = json.loads(field_value)
+        invenio_id = output["id"]
+        print("ID DE LA VERSION MÁS ACTUAL HASTA LA FECHA")
+        print(invenio_id)
+
+        # Create the draft of the new version
+        req_invenio_draft_new_version = requests.post(
+            f"{INVENIO_SERVER_URL}/api/records/{invenio_id}/versions",
+            headers=headers,
+            verify=False,
+        )
+
+        # Id of the new version draft
+        data_new_version = json.loads(req_invenio_draft_new_version.text)
+        new_version_invenio_id = data_new_version["id"]
+
+        data_modified = {
+            "access": {
+                "record": access,
+                "files": access,
+            },
+            # Metadata only
+            "files": {"enabled": False},
+            "metadata": {
+                "creators": [
+                    {
+                        "person_or_org": {
+                            "family_name": last_name,
+                            "given_name": first_name,
+                            "type": "personal",
+                        }
+                    }
+                ],
+                "publication_date": archive.timestamp.date().isoformat(),
+                "resource_type": {"id": "publication"},
+                "title": archive.title,
+            },
+        }
+
+        # Modify the draft to fill all the required fields
+        requests.put(
+            f"{invenio_records_endpoint}/{new_version_invenio_id}/draft",
+            headers=headers,
+            data=json.dumps(data_modified),
+            verify=False,
+        )
+
+        # Publish the new Invenio RDM version draft
+        requests.post(
+            f"{invenio_records_endpoint}/{new_version_invenio_id}/draft/actions/publish",
+            headers=headers,
+            verify=False,
+        )
+
+        # Create a InvenioRDM path artifact to the new version
+        relative_path = f"/records/{new_version_invenio_id}"
+        output_invenio_artifact = {
+            "artifact_name": "Invenio Link",
+            "artifact_path": "test",
+            "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
+        }
+
+    return {"status": 0, "id": invenio_id, "artifact": output_invenio_artifact}
 
 
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
