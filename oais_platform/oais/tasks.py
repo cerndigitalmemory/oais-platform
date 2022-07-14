@@ -293,33 +293,44 @@ def invenio(self, archive_id, step_id, input_data=None):
                 name=Steps.INVENIO_RDM_PUSH, archive=archive_already_recorded
             ).latest("start_date")
 
+            print(object)
+
+            archive.invenio_parent_id = archive_already_recorded.invenio_parent_id
+            archive.invenio_parent_url = archive_already_recorded.invenio_parent_url
+
         else:
 
-            # Same pipeline
-            object = Step.objects.filter(
-                name=Steps.INVENIO_RDM_PUSH, archive=archive
-            ).latest("start_date")
+            # The object that I am looking for
+            object = Step.objects.filter(name=7, archive=archive).latest("start_date")
 
         # The field that I want get the value of
         field_object = Step._meta.get_field("input_data")
         # Get the value
         field_value = field_object.value_from_object(object)
+        print(field_value)
 
-        # Invenio id of the last version record created of this file
+        # Now I have the invenio id of the first ever record created of this file
         output = json.loads(field_value)
+        print(output)
         invenio_id = output["id"]
-        print("ID DE LA VERSION MÁS ACTUAL HASTA LA FECHA")
+
+        print("INVENIO ORIGINAL ID OF THE V1 RECORD PUBLISHED")
         print(invenio_id)
 
-        # Create the draft of the new version
+        # With that ID I create the draft of the new version
+        # POST /api/records/{id}/versions HTTP/1.1
         req_invenio_draft_new_version = requests.post(
             f"{INVENIO_SERVER_URL}/api/records/{invenio_id}/versions",
             headers=headers,
             verify=False,
         )
 
-        # Id of the new version draft
+        # Print response to check if everything has gone right
         data_new_version = json.loads(req_invenio_draft_new_version.text)
+        print("INVENIO NEW VERSION DRAFT CREATED")
+        print(data_new_version)
+
+        # I get the id of the new version draft
         new_version_invenio_id = data_new_version["id"]
 
         data_modified = {
