@@ -185,7 +185,6 @@ def invenio(self, archive_id, step_id, input_data=None):
 
     archive = Archive.objects.get(pk=archive_id)
 
-    print("LLego hasta aqui")
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
