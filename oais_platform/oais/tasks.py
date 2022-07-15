@@ -1,6 +1,4 @@
 import ast
-
-# from importlib.metadata import metadata
 import json
 import logging
 import ntpath
@@ -187,6 +185,7 @@ def invenio(self, archive_id, step_id, input_data=None):
 
     archive = Archive.objects.get(pk=archive_id)
 
+    print("LLego hasta aqui")
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
@@ -227,6 +226,7 @@ def invenio(self, archive_id, step_id, input_data=None):
                     }
                 }
             ],
+            # Set publication_date to the moment we trigger a publish
             "publication_date": archive.timestamp.date().isoformat(),
             "resource_type": {"id": "publication"},
             "title": archive.title,
@@ -236,12 +236,14 @@ def invenio(self, archive_id, step_id, input_data=None):
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
     invenio_id = None
 
-    # Query to check if there is another record of the same archive but diferent archive.id
+    # Query to check if there is another record of the same archive.recid but diferent archive.id
     archive_already_recorded = (
         Archive.objects.filter(recid=archive.recid, source=archive.source)
-        .exclude(timestamp=archive.timestamp)
+        .exclude(id=archive.id)
         .last()
     )
+
+    print(archive_already_recorded)
 
     # First time it is published on InvenioRDM
     if (archive.invenio_parent_id == "") and (archive_already_recorded is None):
@@ -293,29 +295,23 @@ def invenio(self, archive_id, step_id, input_data=None):
                 name=Steps.INVENIO_RDM_PUSH, archive=archive_already_recorded
             ).latest("start_date")
 
-            print(object)
-
             archive.invenio_parent_id = archive_already_recorded.invenio_parent_id
             archive.invenio_parent_url = archive_already_recorded.invenio_parent_url
+            archive.save()
 
         else:
-
             # The object that I am looking for
             object = Step.objects.filter(name=7, archive=archive).latest("start_date")
 
         # The field that I want get the value of
         field_object = Step._meta.get_field("input_data")
+
         # Get the value
         field_value = field_object.value_from_object(object)
-        print(field_value)
 
         # Now I have the invenio id of the first ever record created of this file
         output = json.loads(field_value)
-        print(output)
         invenio_id = output["id"]
-
-        print("INVENIO ORIGINAL ID OF THE V1 RECORD PUBLISHED")
-        print(invenio_id)
 
         # With that ID I create the draft of the new version
         # POST /api/records/{id}/versions HTTP/1.1
@@ -327,8 +323,6 @@ def invenio(self, archive_id, step_id, input_data=None):
 
         # Print response to check if everything has gone right
         data_new_version = json.loads(req_invenio_draft_new_version.text)
-        print("INVENIO NEW VERSION DRAFT CREATED")
-        print(data_new_version)
 
         # I get the id of the new version draft
         new_version_invenio_id = data_new_version["id"]
@@ -350,6 +344,7 @@ def invenio(self, archive_id, step_id, input_data=None):
                         }
                     }
                 ],
+                # Set publication_date to the moment we trigger a publish
                 "publication_date": archive.timestamp.date().isoformat(),
                 "resource_type": {"id": "publication"},
                 "title": archive.title,

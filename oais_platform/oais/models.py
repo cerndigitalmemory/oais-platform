@@ -8,9 +8,6 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from . import pipeline
-from oais_platform.settings import (
-    INVENIO_SERVER_URL,
-)
 
 
 class Profile(models.Model):
