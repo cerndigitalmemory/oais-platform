@@ -229,6 +229,7 @@ def invenio(self, archive_id, step_id, input_data=None):
             "publication_date": archive.timestamp.date().isoformat(),
             "resource_type": {"id": "publication"},
             "title": archive.title,
+            "description": f"Source:{archive.source}",
         },
     }
 
@@ -347,6 +348,7 @@ def invenio(self, archive_id, step_id, input_data=None):
                 "publication_date": archive.timestamp.date().isoformat(),
                 "resource_type": {"id": "publication"},
                 "title": archive.title,
+                "description": f"Source: {archive.source}",
             },
         }
 
