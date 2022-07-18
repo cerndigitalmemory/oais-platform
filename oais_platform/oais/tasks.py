@@ -183,16 +183,27 @@ def invenio(self, archive_id, step_id, input_data=None):
 
     logger.info(f"Starting the publishing to InvenioRDM of Archive {archive_id}")
 
+    # Initialize the main values
     archive = Archive.objects.get(pk=archive_id)
-
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
+    invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
+    invenio_id = None
 
+    # Query to check if there is another record of the same archive.recid but diferent archive.id
+    archive_already_recorded = (
+        Archive.objects.filter(recid=archive.recid, source=archive.source)
+        .exclude(id=archive.id)
+        .last()
+    )
+
+    # Headers of the request with authentication
     headers = {
         "Authorization": "Bearer " + INVENIO_API_TOKEN,
         "Content-type": "application/json",
     }
 
+    # Initialize the variables that are going to be send in the request as part of the data
     if archive.restricted is True:
         access = "private"
     else:
@@ -208,45 +219,36 @@ def invenio(self, archive_id, step_id, input_data=None):
     else:
         first_name = archive.creator.first_name
 
-    data = {
-        "access": {
-            "record": access,
-            "files": access,
-        },
-        # Metadata only
-        "files": {"enabled": False},
-        "metadata": {
-            "creators": [
-                {
-                    "person_or_org": {
-                        "family_name": last_name,
-                        "given_name": first_name,
-                        "type": "personal",
-                    }
-                }
-            ],
-            # Set publication_date to the moment we trigger a publish
-            "publication_date": archive.timestamp.date().isoformat(),
-            "resource_type": {"id": "publication"},
-            "title": archive.title,
-            "description": f"Source:{archive.source}",
-        },
-    }
-
-    invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
-    invenio_id = None
-
-    # Query to check if there is another record of the same archive.recid but diferent archive.id
-    archive_already_recorded = (
-        Archive.objects.filter(recid=archive.recid, source=archive.source)
-        .exclude(id=archive.id)
-        .last()
-    )
-
-    print(archive_already_recorded)
-
-    # First time it is published on InvenioRDM
+    # If it is the first time the record is published on InvenioRDM
     if (archive.invenio_parent_id == "") and (archive_already_recorded is None):
+
+        archive.version = 1
+        archive.save()
+        data = {
+            "access": {
+                "record": access,
+                "files": access,
+            },
+            # Metadata only
+            "files": {"enabled": False},
+            "metadata": {
+                "creators": [
+                    {
+                        "person_or_org": {
+                            "family_name": last_name,
+                            "given_name": first_name,
+                            "type": "personal",
+                        }
+                    }
+                ],
+                # Set publication_date to the moment we trigger a publish
+                "publication_date": archive.timestamp.date().isoformat(),
+                "resource_type": {"id": "publication"},
+                "title": archive.title,
+                "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
+                "version": f"{archive.version}, Archive {archive.id}",
+            },
+        }
 
         # Create a record as a InvenioRDM draft
         req = requests.post(
@@ -299,6 +301,7 @@ def invenio(self, archive_id, step_id, input_data=None):
             archive.invenio_parent_url = archive_already_recorded.invenio_parent_url
             archive.save()
 
+        # Same archive.id but different version
         else:
             # The object that I am looking for
             object = Step.objects.filter(name=7, archive=archive).latest("start_date")
@@ -327,6 +330,9 @@ def invenio(self, archive_id, step_id, input_data=None):
         # I get the id of the new version draft
         new_version_invenio_id = data_new_version["id"]
 
+        # Increment the version
+        archive.version = archive.version + 1
+        archive.save()
         data_modified = {
             "access": {
                 "record": access,
@@ -348,7 +354,8 @@ def invenio(self, archive_id, step_id, input_data=None):
                 "publication_date": archive.timestamp.date().isoformat(),
                 "resource_type": {"id": "publication"},
                 "title": archive.title,
-                "description": f"Source: {archive.source}",
+                "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
+                "version": f"{archive.version}, Archive {archive.id}",
             },
         }
 
@@ -504,7 +511,7 @@ def checksum(self, archive_id, step_id, input_data):
                 else:
                     return {"status": 1}
 
-    logger.info(f"Checksum completed!")
+    logger.info("Checksum completed!")
 
     return {"status": 0, "errormsg": None, "foldername": path_to_sip}
 
