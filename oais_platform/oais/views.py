@@ -655,7 +655,9 @@ def get_settings(request):
         githash = "n/a"
 
     user = request.user
-    UserSerializer(user)
+    if not user.has_perm("can_view_system_settings"):
+        raise PermissionDenied()
+    serializer = UserSerializer(user)
 
     data = {
         "am_url": AM_URL,

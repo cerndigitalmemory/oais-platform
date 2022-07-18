@@ -19,6 +19,11 @@ class Profile(models.Model):
     codimd_api_key = models.TextField(max_length=500, blank=True)
     sso_comp_token = models.TextField(max_length=500, blank=True)
 
+    class Meta:
+        permissions = [
+            ("can_view_system_settings", "Can view System Settings"),
+        ]
+
     def update(self, data):
         for key in data:
             setattr(self, key, data[key])
