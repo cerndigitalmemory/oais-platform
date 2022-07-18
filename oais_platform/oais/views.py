@@ -1,9 +1,12 @@
+import time
 import os
 import subprocess
 import time
 import zipfile
+import tempfile
 from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
+from click import pass_context
 
 from django.conf import settings
 from django.contrib import auth
@@ -42,6 +45,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from bagit_create import main as bic
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -756,9 +760,110 @@ def get_archive_information_labels(request):
     )
 
 
+@extend_schema_view(
+    post=extend_schema(
+        description="""Creates an Archive given a list of UploadedFile objects by
+        reconstructing their directory tree and packaging it as SIP with bagit_create""")
+)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
-def upload(request):
+def upload_folder(request):
+    files = request.FILES
+    step = None
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if settings.BIC_UPLOAD_PATH:
+                base_path = settings.BIC_UPLOAD_PATH
+            else:
+                base_path = os.getcwd()
+
+            # Get root directory name
+            dir_name = iter(files.keys()).__next__().split("/")[0]
+            tmp_location = os.path.join(tmpdir, dir_name)
+
+            # Upload file by file
+            for file_path, file in files.items():
+                # Reconstruct the the directory tree
+                dir_path = os.path.join(tmpdir, os.path.dirname(file_path))
+                if not os.path.exists(dir_path):
+                    os.makedirs(dir_path)
+
+                destination = open(os.path.join(tmpdir, file_path), "wb+")
+                for chunk in file.chunks():
+                    destination.write(chunk)
+                destination.close()
+
+            # Create the SIP with bagit_create
+            result = bic.process(
+                recid=None,
+                source="local",
+                loglevel=0,
+                target=base_path,
+                source_path=tmp_location,
+                author=str(request.user.id)
+            )
+
+            if result["status"] != 0:
+                raise BadRequest({
+                    "status": 1,
+                    "msg": "bagit_create failed creating the SIP: " + result["errormsg"]
+                })
+
+            # Create a new Archive
+            sip_name = result["foldername"]
+            sip_location = os.path.join(base_path, sip_name)
+            sip_json = get_manifest(sip_location)
+
+            source = sip_json["source"]
+            recid = sip_json["recid"]
+            url = get_source(source).get_record_url(recid)
+            archive = Archive.objects.create(
+                recid=recid,
+                source=source,
+                source_url=url,
+                creator=request.user
+            )
+
+            step = Step.objects.create(
+                archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+            )
+            archive.set_step(step)
+
+            # Uploading completed
+            step.set_status(Status.COMPLETED)
+            step.set_finish_date()
+
+            # Save path and change status of the archive
+            archive.path_to_sip = sip_location
+            archive.update_next_steps(step.name)
+            archive.save()
+
+            run_next_step(archive.id, step.id)
+
+            return Response(
+                {
+                    "status": 0,
+                    "archive": archive.id,
+                    "msg": "SIP uploaded, see Archives page"
+                }
+            )
+    except TypeError:
+        raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
+    except Exception as e:
+        if step:
+            step.set_status(Status.FAILED)
+        raise BadRequest({"status": 1, "msg": e})
+
+
+@extend_schema_view(
+    post=extend_schema(
+        description="""Creates an Archive given an UploadedFile
+        representing a zipped SIP""")
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def upload_sip(request):
     file = request.FILES.getlist("file")[0]
     step = None
 
@@ -788,7 +893,6 @@ def upload(request):
 
         source = sip_json["source"]
         recid = sip_json["recid"]
-
         url = get_source(source).get_record_url(recid)
 
         # Create a new Archive instance
@@ -820,7 +924,7 @@ def upload(request):
             {
                 "status": 0,
                 "archive": archive.id,
-                "msg": "SIP uploading started, see Archives page",
+                "msg": "SIP uploaded, see Archives page",
             }
         )
     except zipfile.BadZipFile:

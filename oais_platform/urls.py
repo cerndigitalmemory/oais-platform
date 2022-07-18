@@ -91,7 +91,8 @@ urlpatterns = [
                     name="check_archived_records",
                 ),
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
-                path("upload/", views.upload, name="upload"),
+                path("upload/folder", views.upload_folder, name="upload-folder"),
+                path("upload/sip", views.upload_sip, name="upload-sip"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
                     "search/<str:source>/<str:recid>/",
