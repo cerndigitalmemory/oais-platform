@@ -1,5 +1,4 @@
 import json
-import this
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -85,7 +84,9 @@ class Archive(models.Model):
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
     restricted = models.BooleanField(default=False)
-    version = models.IntegerField(default=0)
+    # A number we'll increment every time we need to publish a new version on InvenioRDM
+    invenio_version = models.IntegerField(default=0)
+    # The InvenioRDM parent "ID" allows us to query every version of a record
     invenio_parent_id = models.CharField(max_length=20, default="")
     invenio_parent_url = models.CharField(
         max_length=150,
