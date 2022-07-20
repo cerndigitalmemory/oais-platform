@@ -1,8 +1,7 @@
 # OAIS platform
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Python 3.7](https://img.shields.io/badge/python-3.7-blue.svg)](https://www.python.org/downloads/release/python-370/) 
-
+[![Python 3.7](https://img.shields.io/badge/python-3.7-blue.svg)](https://www.python.org/downloads/release/python-370/)
 
 Web API, built on Django, managing workflows for the CERN Digital Memory OAIS platform.
 
@@ -73,10 +72,6 @@ python manage.py migrate
 DJANGO_SUPERUSER_PASSWORD=root DJANGO_SUPERUSER_USERNAME=root DJANGO_SUPERUSER_EMAIL=root@root.com python3 manage.py createsuperuser --noinput
 # Run the application
 python manage.py runserver
-# (OpenSearch) create indices
-python manage.py opensearch index create
-# (OpenSearch) populate indices
-python manage.py opensearch document index
 ```
 
 ### Run tests
@@ -115,7 +110,7 @@ To set up Sentry, set the endpoint with the `SENTRY_DSN` environment variable. T
 export SENTRY_DSN="Put here the Sentry SDK client key"
 ```
 
-### InvenioRDM 
+### InvenioRDM
 
 To be able to connect the platform with InvenioRDM, create a new API Token in your InvenioRDM instance (Log in - My Account - Applications - Personal access tokens - New token).
 
