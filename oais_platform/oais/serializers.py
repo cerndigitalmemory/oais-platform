@@ -81,6 +81,9 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "staged",
             "title",
             "restricted",
+            "invenio_parent_id",
+            "invenio_parent_url",
+            "invenio_version",
         ]
 
     def get_last_step(self, instance):

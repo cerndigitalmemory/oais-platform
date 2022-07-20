@@ -64,7 +64,7 @@ docker exec -e DJANGO_SUPERUSER_PASSWORD=admin oais_django python3 manage.py cre
 
 Django:
 
-If you need to create migrations, create a local virtual env to run `manage.py`:
+If you need to create migrations but you can't get django up through docker (e.g. failing because of model changes), create a local virtual env to run `manage.py`:
 
 ```bash
 python -m venv env
