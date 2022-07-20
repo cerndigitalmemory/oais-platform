@@ -18,7 +18,6 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from importlib_metadata import metadata
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
@@ -213,6 +212,7 @@ def invenio(self, archive_id, step_id, input_data=None):
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
 
     # Start populating some data for the Invenio record we will create
+    # TODO: Decide on the defaults here?
     if archive.restricted is True:
         access = "private"
     else:
@@ -297,7 +297,7 @@ def invenio(self, archive_id, step_id, input_data=None):
 
         # Generate the link to show every version of a Record using the parent id
         archive.invenio_parent_url = (
-            f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}"
+            f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}&f=allversions:true"
         )
         archive.save()
 
@@ -305,51 +305,48 @@ def invenio(self, archive_id, step_id, input_data=None):
     else:
 
         # If the same upstream (Source, Record ID) was already published from another Archive
-        # fetch from it the InvenioRDM parent ID and related link
+        # fetch from it the InvenioRDM parent ID and related link and copy them in the current
+        # Archive
         if archive_already_recorded is not None:
 
-            object = Step.objects.filter(
+            invenio_step = Step.objects.filter(
                 name=Steps.INVENIO_RDM_PUSH, archive=archive_already_recorded
             ).latest("start_date")
-
+            logging.info(f"Upstream resource was already published, getting Invenio data from Step {invenio_step.id}")
             archive.invenio_parent_id = archive_already_recorded.invenio_parent_id
             archive.invenio_parent_url = archive_already_recorded.invenio_parent_url
             archive.save()
 
-        # otherwise, we're already in the Archive originally published that upstream resource
+        # otherwise, we're already in the Archive that originally published that upstream resource
         else:
             # The object that I am looking for
-            object = Step.objects.filter(name=7, archive=archive).latest("start_date")
+            invenio_step = Step.objects.filter(name=Steps.INVENIO_RDM_PUSH, archive=archive).latest("start_date")
+            logging.info(f"This archive was already published, getting Invenio data from Step {invenio_step.id}")
 
-        # 
-        # The field that I want get the value of
+        # Let's get the ID of the Invenio record against which we will create a new version,
+        # from the "input data" from the found Invenio Step
         field_object = Step._meta.get_field("input_data")
+        field_value = field_object.value_from_object(invenio_step)
+        logging.info(invenio_step.id)
 
-        # Get the value
-        field_value = field_object.value_from_object(object)
-
-        # Now I have the invenio id of the first ever record created of this file
         output = json.loads(field_value)
         invenio_id = output["id"]
 
-        # With that ID I create the draft of the new version
-        # POST /api/records/{id}/versions HTTP/1.1
+        # Create new version as draft
         req_invenio_draft_new_version = requests.post(
             f"{INVENIO_SERVER_URL}/api/records/{invenio_id}/versions",
             headers=headers,
             verify=False,
         )
 
-        # Print response to check if everything has gone right
-        data_new_version = json.loads(req_invenio_draft_new_version.text)
-
-        # I get the id of the new version draft
-        new_version_invenio_id = data_new_version["id"]
+        # Get the ID of the draft we just created
+        new_version_invenio_id = json.loads(req_invenio_draft_new_version.text)["id"]
 
         # Increment the version
         archive.invenio_version += 1
-        archive.save() 
-        data_modified = {
+        archive.save()
+
+        new_version_data = {
             "access": {
                 "record": access,
                 "files": access,
@@ -375,11 +372,11 @@ def invenio(self, archive_id, step_id, input_data=None):
             },
         }
 
-        # Modify the draft to fill all the required fields
+        # Update draft with the new adata
         requests.put(
             f"{invenio_records_endpoint}/{new_version_invenio_id}/draft",
             headers=headers,
-            data=json.dumps(data_modified),
+            data=json.dumps(new_version_data),
             verify=False,
         )
 
@@ -390,7 +387,7 @@ def invenio(self, archive_id, step_id, input_data=None):
             verify=False,
         )
 
-        # Create a InvenioRDM path artifact to the new version
+        # Create a InvenioRDM path artifact with a link to the new version
         relative_path = f"/records/{new_version_invenio_id}"
         output_invenio_artifact = {
             "artifact_name": "Invenio Link",
