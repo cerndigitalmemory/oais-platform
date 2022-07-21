@@ -28,7 +28,7 @@ class UploadTests(APITestCase):
         f1 = tempfile.NamedTemporaryFile("w+t")
         f1.seek(0)
 
-        url = reverse("upload")
+        url = reverse("upload-sip")
 
         file = TemporaryUploadedFile(
             name=f1.name, content_type="text/plain", size=0, charset="utf8"
@@ -44,7 +44,7 @@ class UploadTests(APITestCase):
         )
         f1.seek(0)
 
-        url = reverse("upload")
+        url = reverse("upload-sip")
 
         file = TemporaryUploadedFile(
             name=f1.name, content_type="text/plain", size=0, charset="utf8"
@@ -86,7 +86,7 @@ class UploadTests(APITestCase):
 
                 with open("test.zip", mode="rb") as myzip:
 
-                    url = reverse("upload")
+                    url = reverse("upload-sip")
                     response = self.client.post(url, {"file": myzip})
                 
                 os.remove("test.zip")
@@ -94,4 +94,4 @@ class UploadTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 
                 self.assertEqual(response.data["status"], 0)
-                self.assertEqual(response.data["msg"], 'SIP uploading started, see Archives page')
+                self.assertEqual(response.data["msg"], 'SIP uploaded, see Archives page')
