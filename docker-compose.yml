@@ -71,6 +71,9 @@ services:
       - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
     env_file:
       - ./.env.dev
+    depends_on:
+      db:
+        condition: service_healthy
 
   # Redis
   redis:
