@@ -34,6 +34,11 @@ Containers overview:
 To keep in mind:
 
 - Modifications to tasks.py (and in general anything executed by Celery) may require a restart of the Celery runner
+  `docker restart oais_celery`
+- Some changes (e.g. the change of a requirement) require the oais_django image to be rebuilt.
+  `docker-compose build`
+- Sometimes, the oais_django container may start before the database is ready. If it can't be started because of a failed connection to postgres, restart it manually:
+  `docker start oais_django`
 
 Settings:
 
@@ -48,7 +53,6 @@ The "priority" order of settings is:
 1. local_settings (if the file exists, e.g. we use it in OpenShift deployments)
 2. Environment variables
 3. Defaults in settings.py
-
 
 To reset your instance:
 
