@@ -1,3 +1,4 @@
+from imp import source_from_cache
 import json
 
 from django.contrib.auth.models import User
@@ -5,6 +6,8 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
+
+from oais_platform.settings import INVENIO_SERVER_URL
 
 from . import pipeline
 
@@ -189,6 +192,53 @@ class Step(models.Model):
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
+        self.save()
+
+
+class Resource(models.Model):
+    """
+    A group of resources that have in common all the Archives that have the same PK
+    Used for versioning InvenioRDM
+    Resource will be attached to the archives with the same PK
+    PK = Source + RecordID(recid)
+    """
+
+    # Permissions for this model
+    Permissions = [
+        ("can_access_all_archives"),
+    ]
+
+    # Source and recid creates the Primary Key
+    source = models.CharField(max_length=50)
+    recid = models.CharField(max_length=50)
+
+    # Invenio parameters of the first archive that creates a version
+    # Parameters needed for creating new versions
+    invenio_id = models.CharField(max_length=50)
+    invenio_parent_id = models.CharField(
+        max_length=150, default=None, blank=True, null=True
+    )
+    invenio_parent_url = models.CharField(
+        max_length=150, default=None, blank=True, null=True
+    )
+
+    # Methods to set values
+    def set_source(self, source):
+        self.source = source
+        self.save()
+
+    def set_recid(self, recid):
+        self.recid = recid
+        self.save()
+
+    def set_invenio_id(self, invenio_id):
+        self.invenio_id = invenio_id
+        self.save()
+
+    # Set the values for both fields that need the invenio_parent_id
+    def set_invenio_parent_fields(self, invenio_parent_id):
+        self.invenio_parent_id = invenio_parent_id
+        self.invenio_parent_url = f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}&f=allversions:true"
         self.save()
 
 
