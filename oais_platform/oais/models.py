@@ -197,10 +197,10 @@ class Step(models.Model):
 
 class Resource(models.Model):
     """
-    A group of resources that have in common all the Archives that have the same PK
+    A group of resources that have in common all the Archives that have the same source+ recid pair
     Used for versioning InvenioRDM
-    Resource will be attached to the archives with the same PK
-    PK = Source + RecordID(recid)
+    Resource will be attached to the archives with the same Source + recid pair
+    Unique: Source + RecordID(recid)
     """
 
     # Permissions for this model
@@ -208,7 +208,9 @@ class Resource(models.Model):
         ("can_access_all_archives"),
     ]
 
-    # Source and recid creates the Primary Key
+    id = models.AutoField(primary_key=True)
+
+    # Source and recid (unique pair)
     source = models.CharField(max_length=50)
     recid = models.CharField(max_length=50)
 
