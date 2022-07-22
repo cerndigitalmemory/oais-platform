@@ -72,14 +72,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = self.get_object()
         archives = filter_all_archives_user_has_access(
             # user.archives.all() returns every Archive the User has created
-            user.archives.all(), request.user
+            user.archives.all(),
+            request.user,
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
     @action(detail=False, methods=["GET", "POST"], url_path="me", url_name="me")
     def get_set_me(self, request):
         """
-        Returns information and settings about the User or, 
+        Returns information and settings about the User or,
         updates its profile using the passed values to overwrite
         """
         if request.method == "POST":
@@ -195,7 +196,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns details of an identified Archive
         """
         archives = filter_all_archives_user_has_access(
-            super().get_queryset(), request.user)
+            super().get_queryset(), request.user
+        )
         archive = get_object_or_404(archives, pk=pk)
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
@@ -260,8 +262,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return self.make_paginated_response(collections, CollectionSerializer)
 
-    @action(detail=True, methods=["POST"],
-            url_path="save-manifest", url_name="save-manifest")
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="save-manifest",
+        url_name="save-manifest",
+    )
     def archive_save_manifest(self, request, pk=None):
         """
         Update the manifest for the specified Archive with the given content
@@ -315,8 +321,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = None
             return Response()
 
-    @action(detail=True, methods=["POST"],
-            url_path="unstage", url_name="sgl-unstage")
+    @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
         Unstages the passed Archive
@@ -331,8 +336,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(serializer.data)
 
     @extend_schema(operation_id="mlt-unstage")
-    @action(detail=False, methods=["POST"],
-            url_path="unstage", url_name="mlt-unstage")
+    @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
         Unstages passed Archives, creates a job Tag for all of them
@@ -379,8 +383,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
 
     @extend_schema(request=SourceRecordSerializer, responses=ArchiveSerializer)
-    @action(detail=False, methods=["POST"],
-            url_path="create/harvest", url_name="create-harvest")
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="create/harvest",
+        url_name="create-harvest",
+    )
     def archive_create_by_harvest(self, request):
         """
         Creates an Archive triggering its own harvesting, given the Source and Record ID
@@ -787,7 +795,10 @@ def upload(request):
         source = sip_json["source"]
         recid = sip_json["recid"]
 
-        url = get_source(source).get_record_url(recid)
+        if source != "local":
+            url = get_source(source).get_record_url(recid)
+        else:
+            url = " "
 
         # Create a new Archive instance
         archive = Archive.objects.create(
@@ -1198,6 +1209,7 @@ def logout(request):
     auth.logout(request)
     return Response({"status": "success"})
 
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def announce(request):
@@ -1206,9 +1218,11 @@ def announce(request):
 
     if announce_response["status"] == 0:
         return redirect(
-            reverse("archives-sgl-details", request=request, kwargs={"pk": announce_response["archive_id"]})
+            reverse(
+                "archives-sgl-details",
+                request=request,
+                kwargs={"pk": announce_response["archive_id"]},
+            )
         )
     else:
-        raise BadRequest(
-            announce_response["errormsg"]
-        )
+        raise BadRequest(announce_response["errormsg"])

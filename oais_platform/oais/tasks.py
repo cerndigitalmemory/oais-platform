@@ -231,7 +231,7 @@ def invenio(self, archive_id, step_id, input_data=None):
             "title": archive.title,
         },
     }
-    # Create a record as a InvenioRDM 
+    # Create a record as a InvenioRDM
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
     req = requests.post(
         invenio_records_endpoint, headers=headers, data=json.dumps(data), verify=False
@@ -625,6 +625,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         periodic_task.delete()
         step.set_status(Status.FAILED)
 
+
 def check_for_sips(announce_path, creator):
     """
     Run the OAIS validation tool on a shared folder on eos to find all the
@@ -633,11 +634,11 @@ def check_for_sips(announce_path, creator):
     logger.info(f"Starting announce of {announce_path}")
     logger.info(f"Looking for SIPs in given path.")
 
-    #Check if there is access to the folder
+    # Check if there is access to the folder
     folder_exists = os.path.exists(announce_path)
     if not folder_exists:
         return {"status": 1, "errormsg": "OAIS has no access to that folder"}
-    
+
     sip_folder_name = ntpath.basename(announce_path)
 
     try:
@@ -650,8 +651,10 @@ def check_for_sips(announce_path, creator):
             sip_json = get_manifest(announce_path)
             source = sip_json["source"]
             recid = sip_json["recid"]
-
-            url = get_source(source).get_record_url(recid)
+            if source != "local":
+                url = get_source(source).get_record_url(recid)
+            else:
+                url = " "
         except:
             return {"status": 1, "errormsg": "Error while reading sip.json"}
 
@@ -662,32 +665,38 @@ def check_for_sips(announce_path, creator):
             target_path = sip_folder_name
 
         n = 1
-        sip_exists = os.path.isdir(target_path) 
+        sip_exists = os.path.isdir(target_path)
 
         while sip_exists:
             # Check if directory found is a valid sip
             target_is_sip = validate_sip(target_path)
             if target_is_sip:
                 # Compares the contents of the target and the announce path
-                files_to_check = ['manifest-md5.txt', 'data/meta/sip.json', 'bagit.txt', 'bag-info.txt']
-                match, mismatch, errors = filecmp.cmpfiles(target_path, announce_path, files_to_check)
+                files_to_check = [
+                    "manifest-md5.txt",
+                    "data/meta/sip.json",
+                    "bagit.txt",
+                    "bag-info.txt",
+                ]
+                match, mismatch, errors = filecmp.cmpfiles(
+                    target_path, announce_path, files_to_check
+                )
                 if len(match) != len(files_to_check):
                     # In that case the sip is not the same one so creates a new one with a suffix in the end
-                    # Appends the _n as a suffix so the new archive creation does not collide with the existing ones 
-                    target_path = target_path + '_' + str(n)
-                    sip_folder_name = sip_folder_name + '_' + str(n)
+                    # Appends the _n as a suffix so the new archive creation does not collide with the existing ones
+                    target_path = target_path + "_" + str(n)
+                    sip_folder_name = sip_folder_name + "_" + str(n)
                 else:
                     # In that case the user tries to upload the exact same folder so the execution is stoped
                     return {"status": 1, "errormsg": "SIP has already been uploaded."}
-            else: 
-                #If the target is not a valid sip then a new archive is created
-                target_path = target_path + '_' + str(n)
-                sip_folder_name = sip_folder_name + '_' + str(n)
+            else:
+                # If the target is not a valid sip then a new archive is created
+                target_path = target_path + "_" + str(n)
+                sip_folder_name = sip_folder_name + "_" + str(n)
             # Checks if the name with the _n suffix exists, if returns false then the archive creation starts
             sip_exists = os.path.isdir(target_path)
             n += 1
 
-            
         # Create a new Archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -700,13 +709,14 @@ def check_for_sips(announce_path, creator):
             archive=archive, name=Steps.ANNOUNCE, status=Status.IN_PROGRESS
         )
 
-        output_data = {'foldername':sip_folder_name, 'announce_path':announce_path}
+        output_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
         announce.delay(archive.id, step.id, output_data)
         return {"status": 0, "archive_id": archive.id}
 
     else:
-        return {"status": 1, "errormsg": 'Given folder is not a valid SIP'}
+        return {"status": 1, "errormsg": "Given folder is not a valid SIP"}
+
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
 def announce(self, archive_id, step_id, input_data):
@@ -727,20 +737,19 @@ def announce(self, archive_id, step_id, input_data):
                 target = target_path
             else:
                 dest_relpath = dirpath[len(announce_path) + 1 :]
-                target = os.path.join(target_path,dest_relpath)
+                target = os.path.join(target_path, dest_relpath)
                 os.mkdir(target)
             for file in filenames:
                 shutil.copy(f"{os.path.abspath(dirpath)}/{file}", target)
 
         logger.info(f"Copy completed!")
         archive = Archive.objects.get(pk=archive_id)
-        
+
         archive.set_path(target_path)
 
         return {"status": 0, "errormsg": None, "foldername": foldername}
 
     except Exception as e:
         # In case of exception delete the target folder
-        shutil.rmtree(target_path) 
+        shutil.rmtree(target_path)
         return {"status": 1, "errormsg": e}
-    
