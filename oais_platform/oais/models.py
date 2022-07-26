@@ -1,6 +1,6 @@
-from imp import source_from_cache
+from hashlib import new
 import json
-
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
@@ -94,12 +94,8 @@ class Archive(models.Model):
     restricted = models.BooleanField(default=False)
     # A number we'll increment every time we need to publish a new version on InvenioRDM
     invenio_version = models.IntegerField(default=0)
-    # The InvenioRDM parent "ID" allows us to query every version of a record
-    invenio_parent_id = models.CharField(max_length=20, default="")
-    invenio_parent_url = models.CharField(
-        max_length=150,
-        default="",
-    )
+    # Resource attached to the archive
+    resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
 
     class Meta:
         ordering = ["-id"]
@@ -141,6 +137,29 @@ class Archive(models.Model):
     def set_path(self, new_path):
         self.path_to_sip = new_path
         self.save()
+
+    def save(self, *args, **kwargs):
+
+        # It is only executed on the object creation
+        if not self.pk:
+            # This code only happens if the objects is
+            # not in the database yet. Otherwise it would
+            # have pk
+
+            # Look to see if there is a resource with the same source+recid
+            try:
+                resource = Resource.objects.get(source=self.source, recid=self.recid)
+            except ObjectDoesNotExist:
+                resource = None
+            # The resource exists, so I attach it to the archive
+            if resource is None:
+                resource = Resource.objects.create(source=self.source, recid=self.recid)
+                resource.save()
+
+            self.resource = resource
+
+        # Normal logic of the save method
+        super(Archive, self).save(*args, **kwargs)
 
 
 class Step(models.Model):
@@ -203,11 +222,6 @@ class Resource(models.Model):
     Unique: Source + RecordID(recid)
     """
 
-    # Permissions for this model
-    Permissions = [
-        ("can_access_all_archives"),
-    ]
-
     id = models.AutoField(primary_key=True)
 
     # Source and recid (unique pair)
@@ -224,15 +238,7 @@ class Resource(models.Model):
         max_length=150, default=None, blank=True, null=True
     )
 
-    # Methods to set values
-    def set_source(self, source):
-        self.source = source
-        self.save()
-
-    def set_recid(self, recid):
-        self.recid = recid
-        self.save()
-
+    # Set invenio_id of the first archive that pushes a version to InvenioRDM
     def set_invenio_id(self, invenio_id):
         self.invenio_id = invenio_id
         self.save()
