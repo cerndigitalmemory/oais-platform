@@ -151,6 +151,10 @@ DATABASES = {
 }
 
 
+## File Uploads
+# set to 0 to avoid files being uploaded in memory
+FILE_UPLOAD_MAX_MEMORY_SIZE = 0
+
 ##  Password validation
 
 AUTH_PASSWORD_VALIDATORS = [
