@@ -100,7 +100,10 @@ class Archive(models.Model):
 
     class Meta:
         ordering = ["-id"]
-        permissions = (("grant_view_right", "Grant view right"),)
+        permissions = (
+            ("grant_view_right", "Grant view right"),
+            ("can_change_permissions", "Can change the access permissions"),
+        )
 
     def set_step(self, step_id):
         """
@@ -137,6 +140,10 @@ class Archive(models.Model):
 
     def set_path(self, new_path):
         self.path_to_sip = new_path
+        self.save()
+
+    def set_restricted(self, is_restricted):
+        self.restricted = is_restricted
         self.save()
 
 
