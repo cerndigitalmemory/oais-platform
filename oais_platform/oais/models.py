@@ -1,4 +1,3 @@
-from hashlib import new
 import json
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.models import User
@@ -151,11 +150,13 @@ class Archive(models.Model):
                 resource = Resource.objects.get(source=self.source, recid=self.recid)
             except ObjectDoesNotExist:
                 resource = None
-            # The resource exists, so I attach it to the archive
+
+            # If the resource does not exists we create it
             if resource is None:
                 resource = Resource.objects.create(source=self.source, recid=self.recid)
                 resource.save()
 
+            # The resource now exists, so I attach it to the archive
             self.resource = resource
 
         # Normal logic of the save method
@@ -216,10 +217,8 @@ class Step(models.Model):
 
 class Resource(models.Model):
     """
-    A group of resources that have in common all the Archives that have the same source+ recid pair
-    Used for versioning InvenioRDM
-    Resource will be attached to the archives with the same Source + recid pair
-    Unique: Source + RecordID(recid)
+    A group of attributes that have in common all the Archives that have the same source+ recid pair
+    Different Archives refferring to the same upstream source will refer to the same Resource
     """
 
     id = models.AutoField(primary_key=True)

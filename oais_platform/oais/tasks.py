@@ -676,9 +676,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
 
 def initialize_data(archive):
-
-    # Start populating some data for the Invenio record we will create
-    # TODO: Decide on the defaults here?
+    """
+    Called from Invenio step to populate some data for the Invenio record we will create
+    """
     if archive.restricted is True:
         access = "private"
     else:
