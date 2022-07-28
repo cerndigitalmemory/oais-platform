@@ -1,16 +1,16 @@
-from threading import local
-import time
+import json
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import zipfile
-import tempfile
-import json
-import shutil
 from pathlib import PurePosixPath
+from threading import local
 from urllib.parse import unquote, urlparse
-from click import pass_context
 
+from bagit_create import main as bic
+from click import pass_context
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
@@ -21,7 +21,14 @@ from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps, UploadJob
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Status,
+    Step,
+    Steps,
+    UploadJob,
+)
 from oais_platform.oais.permissions import (
     filter_all_archives_user_has_access,
     filter_archives_by_user_creator,
@@ -48,7 +55,6 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from bagit_create import main as bic
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -797,8 +803,6 @@ def get_settings(request):
         githash = "n/a"
 
     user = request.user
-    if not user.has_perm("can_view_system_settings"):
-        raise PermissionDenied()
     serializer = UserSerializer(user)
 
     data = {
