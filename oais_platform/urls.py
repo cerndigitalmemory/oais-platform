@@ -24,6 +24,7 @@ router.register(r"groups", views.GroupViewSet, basename="groups")
 router.register(r"archives", views.ArchiveViewSet, basename="archives")
 router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
+router.register(r"upload/jobs", views.UploadJobViewSet, basename="upload")
 
 
 # Wire up our API using automatic URL routing.
@@ -91,7 +92,6 @@ urlpatterns = [
                     name="check_archived_records",
                 ),
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
-                path("upload/folder", views.upload_folder, name="upload-folder"),
                 path("upload/sip", views.upload_sip, name="upload-sip"),
                 path("search/<str:source>/", views.search, name="search"),
                 path(
