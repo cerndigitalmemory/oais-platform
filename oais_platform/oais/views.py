@@ -764,6 +764,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
+            archive.set_archive_manifest( sip_json["audit"])
             archive.update_next_steps(step.name)
             archive.save()
             run_next_step(archive.id, step.id)
