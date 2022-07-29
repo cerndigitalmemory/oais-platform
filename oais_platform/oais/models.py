@@ -1,11 +1,11 @@
 import json
-from django.core.exceptions import ObjectDoesNotExist
+
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
-
 from oais_platform.settings import INVENIO_SERVER_URL
 
 from . import pipeline
@@ -304,8 +304,8 @@ class UploadJob(models.Model):
     creator = models.ForeignKey(
         User, on_delete=models.PROTECT, null=True, related_name="uploadjobs")
     timestamp = models.DateTimeField(default=timezone.now)
-    tmp_dir = models.CharField(max_length=100)
-    sip_dir = models.CharField(max_length=100)
+    tmp_dir = models.CharField(max_length=1000)
+    sip_dir = models.CharField(max_length=1000)
     files = models.JSONField()
 
     class Meta:
