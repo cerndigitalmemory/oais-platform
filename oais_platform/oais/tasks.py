@@ -1,6 +1,5 @@
 import ast
 import json
-from lib2to3.pgen2.token import RPAR
 import logging
 import ntpath
 import os
@@ -9,6 +8,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from distutils.dir_util import copy_tree, mkpath
+from lib2to3.pgen2.token import RPAR
 from logging import log
 from urllib.parse import urljoin
 
@@ -677,8 +677,15 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
 def initialize_data(archive):
     """
-    Called from Invenio step to populate some data for the Invenio record we will create
+    From the Archive, prepare some metadata to create the Invenio Record
     """
+
+    # If there's no title, put the source and the record ID
+    if archive.title == "":
+        title = f"{archive.source} : {archive.recid}"
+    else:
+        title = archive.title
+
     if archive.restricted is True:
         access = "private"
     else:
@@ -714,10 +721,11 @@ def initialize_data(archive):
             # Set publication_date to the moment we trigger a publish
             "publication_date": archive.timestamp.date().isoformat(),
             "resource_type": {"id": "publication"},
-            "title": archive.title,
+            "title": title,
             "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
             # The first time we publish to InvenioRDM we call the version '1'
             "version": f"{archive.invenio_version}, Archive {archive.id}",
         },
     }
+
     return data
