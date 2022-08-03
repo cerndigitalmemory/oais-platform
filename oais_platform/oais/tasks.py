@@ -7,7 +7,7 @@ import os
 import shutil
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from distutils.dir_util import copy_tree, mkpath
 from logging import log
 from urllib.parse import urljoin
@@ -211,7 +211,6 @@ def invenio(self, archive_id, step_id, input_data=None):
         data = initialize_data(archive)
 
         try:
-
             # Create a record as a InvenioRDM draft
             req = requests.post(
                 invenio_records_endpoint,
@@ -679,11 +678,15 @@ def initialize_data(archive):
     """
     Called from Invenio step to populate some data for the Invenio record we will create
     """
+    # Set title in case it is a Local Upload
+    if archive.title == "":
+        title = "Local Upload"
+    else:
+        title = archive.title
     if archive.restricted is True:
         access = "private"
     else:
         access = "public"
-
     if not archive.creator.last_name:
         last_name = "Smith"
     else:
@@ -714,10 +717,13 @@ def initialize_data(archive):
             # Set publication_date to the moment we trigger a publish
             "publication_date": archive.timestamp.date().isoformat(),
             "resource_type": {"id": "publication"},
-            "title": archive.title,
+            "title": title,
             "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
             # The first time we publish to InvenioRDM we call the version '1'
             "version": f"{archive.invenio_version}, Archive {archive.id}",
         },
     }
+
+    print("IMPRIMO EL TÍTULO QUE SE VA A ESCRIBIR EN INVEINOrdm")
+    print(archive.title)
     return data
