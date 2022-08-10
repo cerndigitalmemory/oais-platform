@@ -5,6 +5,7 @@ import logging
 import ntpath
 import os
 import shutil
+import zipfile
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -92,8 +93,14 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                         ##TODO: Decide which part of the sip.json will go here
                         json_audit = sip_json["audit"]
                         archive.set_archive_manifest(json_audit)
-                        logging.info(f"Sip.json audit saved at manifest field")
-                except:
+                        logging.info("Sip.json audit saved at manifest field")
+
+                        # If the source is local, update the recid of the Archive (gets created with the SIP)
+                        if archive.source == "local":
+                            archive.recid = sip_json["recid"]
+                            archive.save(update_fields=["recid"])
+
+                except Exception:
                     logging.info(f"Sip.json was not found inside {sip_location}")
 
             # Update the next possible steps
@@ -101,6 +108,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
             if len(next_steps) == 1:
                 create_step(next_steps[0], archive_id, step_id)
+
         else:
             step.set_status(Status.FAILED)
             step.set_output_data(retval)
@@ -307,12 +315,91 @@ def invenio(self, archive_id, step_id, input_data=None):
     return {"status": 0, "id": invenio_id, "artifact": output_invenio_artifact}
 
 
-@shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
-def process(self, archive_id, step_id, input_data=None):
+def build_sip(archive, input_data, target_dir):
     """
-    Run BagIt-Create to harvest data from upstream, preparing a
-    Submission Package (SIP)
+    Builds an SIP of the data in the given directory. \n
+    The SIP is stored in target_dir
     """
+    api_token = None
+
+    if archive.source == "indico":
+        user = archive.creator
+        api_token = user.profile.indico_api_key
+
+    if archive.source == "codimd":
+        user = archive.creator
+        api_token = user.profile.codimd_api_key
+
+    #   creating the SIP   #
+    bagit_result = bic.process(
+        recid=archive.recid,
+        source=archive.source,
+        loglevel=2,
+        target=target_dir,
+        source_path=input_data,
+        author=str(archive.creator),
+        token=api_token
+    )
+
+    logger.info(bagit_result)
+
+    # If bagit returns an error return the error message
+    if bagit_result["status"] == 1:
+        raise Exception(bagit_result["errormsg"])
+
+    sip_folder_name = bagit_result["foldername"]
+    retval = bagit_result
+
+    return (sip_folder_name, retval)
+
+
+def uncompress(input_data, target_dir):
+    """
+    Given a directory with a single zip inside, uncompresses and moves the data to target_dir. \n
+    Also deletes the zip
+    """
+
+    compressed_sip = os.listdir(input_data)[0]
+    path_to_compressed = os.path.join(input_data, compressed_sip)
+
+    # extract it in place
+    with zipfile.ZipFile(path_to_compressed, "r") as compressed:
+        compressed.extractall(input_data)
+
+    # delete the compressed file and keep the uncompressed SIP
+    os.remove(path_to_compressed)
+
+    # move the SIP from the tmp dir to target_dir
+    sip_folder_name = os.listdir(input_data)[0]
+    path_to_sip = os.path.join(input_data, sip_folder_name)
+
+    # check the SIP is not duplicated (skip the common actions if true)
+    if sip_folder_name in os.listdir(target_dir):
+        logger.info("Duplicated SIP. Aborting upload")
+        raise Exception("Duplicated SIP")
+
+    shutil.move(path_to_sip, target_dir)
+
+    # recreate a bagit_result that gets passed to finalize()
+    retval = {
+        "status": 0,
+        "errormsg": None,
+        "foldername": sip_folder_name
+    }
+
+    return (sip_folder_name, retval)
+
+
+@shared_task(name="new_process", bind=True, ignore_result=True, after_return=finalize)
+def process(self, archive_id, step_id, input_data=None, create_sip=True):
+    """
+    Processes data submission to the platform:
+        - Builds or uncompresses and moves an SIP (depending on create_sip) in/to BIC_UPLOAD_PATH.
+        - Handles the archiving of such SIP: sets and updates the corresponding Archive and Step fields.
+
+    Returns the status of the operation, the name of the final SIP and its corresponding artifact.
+    """
+
     logger.info(f"Starting harvest of archive {archive_id}")
 
     archive = Archive.objects.get(pk=archive_id)
@@ -320,54 +407,44 @@ def process(self, archive_id, step_id, input_data=None):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    api_token = None
-
-    if archive.source == "indico":
-        try:
-            user = archive.creator
-            api_token = user.profile.indico_api_key
-        except Exception as e:
-            return {"status": 1, "errormsg": e}
-
-    if archive.source == "codimd":
-        try:
-            user = archive.creator
-            api_token = user.profile.codimd_api_key
-        except Exception as e:
-            return {"status": 1, "errormsg": e}
-
     try:
-        bagit_result = bic.process(
-            recid=archive.recid,
-            source=archive.source,
-            loglevel=2,
-            target=BIC_UPLOAD_PATH,
-            token=api_token,
-        )
+        if create_sip:
+            (sip_folder_name, retval) = build_sip(archive, input_data, BIC_UPLOAD_PATH)
+        else:
+            (sip_folder_name, retval) = uncompress(input_data, BIC_UPLOAD_PATH)
+
+    except zipfile.BadZipFile:
+        if os.path.exists(input_data):
+            shutil.rmtree(input_data)
+        return {"status": 1, "msg": "Check the zip file for errors"}
+
+    except TypeError:
+        if os.path.exists(input_data):
+            os.remove(input_data)
+        return {"status": 1, "msg": "Check your SIP structure"}
+
     except Exception as e:
-        return {"status": 1, "errormsg": e}
+        if os.path.exists(input_data):
+            shutil.rmtree(input_data)
+        return {"status": 1, "errormsg": str(e)}
 
-    logger.info(bagit_result)
+    # SIP now created or moved, delete the data used to create it
+    if os.path.exists(input_data):
+        shutil.rmtree(input_data)
 
-    # If bagit returns an error return the error message
-    if bagit_result["status"] == 1:
-        return {"status": 1, "errormsg": bagit_result["errormsg"]}
-
-    sip_folder_name = bagit_result["foldername"]
-
+    # udpate the path to the SIP
     if BIC_UPLOAD_PATH:
         sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
-
     archive.set_path(sip_folder_name)
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
         "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name)
     )
+    retval["artifact"] = output_artifact
 
-    bagit_result["artifact"] = output_artifact
-
-    return bagit_result
+    logger.info(retval)
+    return retval
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)

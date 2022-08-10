@@ -1,22 +1,20 @@
-from cmath import log
-import ntpath
-from unittest import mock
-from unittest.mock import patch
+from sre_constants import SUCCESS
+import tempfile
+import os
+import json
+import shutil
+import zipfile
 
-from django.contrib.auth.models import User
-from django.test import override_settings
 from django.urls import reverse
-from django.core.files.uploadedfile import TemporaryUploadedFile, SimpleUploadedFile
-from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tests.utils import TestSource
+from django.test import override_settings
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
+from unittest.mock import patch
 from bagit_create import main as bic
 
-import json, tempfile, os
-import zipfile
 from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_platform.oais.models import User, UploadJob, Archive, Step, Steps, Status
+from oais_platform.oais.tasks import build_sip, uncompress, process
 
 
 class UploadTests(APITestCase):
@@ -24,74 +22,111 @@ class UploadTests(APITestCase):
         self.user = User.objects.create_user("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
-    def test_harvest_wrong_file_format(self):
-        f1 = tempfile.NamedTemporaryFile("w+t")
-        f1.seek(0)
+        # set up a tmp directory
+        tmp_dir = "/oais_platform/tmp/test"
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir)
+        os.makedirs(tmp_dir)
 
-        url = reverse("upload-sip")
-
-        file = TemporaryUploadedFile(
-            name=f1.name, content_type="text/plain", size=0, charset="utf8"
+        # create a dummy UploadJob, Archive and Step
+        self.uj = UploadJob.objects.create(
+            creator=self.user,
+            tmp_dir=tmp_dir,
+            files=json.dumps({})
         )
-        response = self.client.post(url, {"file": file})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-        f1.close()
-
-    def test_harvest_wrong_source(self):
-        f1 = tempfile.NamedTemporaryFile(
-            "w+t", suffix=".randomfile", prefix="cds::test::"
+        self.archive = Archive.objects.create(
+            recid="", source="local", source_url="", creator=self.user
         )
-        f1.seek(0)
 
-        url = reverse("upload-sip")
-
-        file = TemporaryUploadedFile(
-            name=f1.name, content_type="text/plain", size=0, charset="utf8"
+        self.step = Step.objects.create(
+            archive=self.archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
-        response = self.client.post(url, {"file": file})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-        f1.close()
+    def test_create_job(self):
+        """
+        Asserts that the a new entry in the UploadJob table gets inserted \n
+        and that its corresponding tmp dir exists
+        """
+        num_jobs = UploadJob.objects.count()
 
-    def test_upload_sip(self):
-        with override_settings(BIC_UPLOAD_PATH=None):
-            # Prepare a temp folder to save the results
-            with tempfile.TemporaryDirectory() as tmpdir2:
+        url = reverse("upload-create-job")
+        response = self.client.post(url)
 
-                # Run Bagit Create with the following parameters:
-                # Save the results to tmpdir2
-                res = bic.process(
-                    recid="2728246",
-                    source="cds",
-                    target=tmpdir2,
-                    loglevel=0,
-                )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(UploadJob.objects.count(), num_jobs + 1)
 
-                foldername = res["foldername"]
+        uj = UploadJob.objects.get(pk=response.data["uploadJobId"])
+        self.assertEqual(os.path.exists(uj.tmp_dir), True)
 
-                path_to_sip = os.path.join(tmpdir2, foldername)
-                path_to_zip = path_to_sip + ".zip"
+        # delete the tmp dir and the UploadJob
+        shutil.rmtree(uj.tmp_dir)
+        uj.delete()
 
-                # create a ZipFile object
-                with zipfile.ZipFile("test.zip", 'w') as zipf:
-                    # Iterate over all the files in directory
-                    len_dir_path = len(tmpdir2)
-                    for root, _, files in os.walk(tmpdir2):
+    def test_add_file(self):
+        """
+        Asserts a file got added to the mock UploadJob: the file is under "/oais_platform/tmp/test"
+        and its name is in the files data field of the mock UploadJob entry.
+        """
+        with tempfile.NamedTemporaryFile() as tf:
+            tf_name = os.path.basename(tf.name)
+
+            url = reverse("upload-add-file", args=[self.uj.id])
+            response = self.client.post(url, data={tf_name: tf})
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(len(os.listdir(self.uj.tmp_dir)), 1)
+
+            # assert the data field files gets updated correctly
+            self.uj.add_file(os.path.join(self.uj.tmp_dir, tf_name), tf_name)
+            name_in_db = self.uj.get_files().values().__iter__().__next__()
+            self.assertEqual(name_in_db, os.path.basename(tf.name))
+
+    def test_build_sip(self):
+        """
+        Asserts SIPs get built correctly
+        """
+        with tempfile.TemporaryDirectory() as td:
+            with tempfile.NamedTemporaryFile(dir=td):
+                try:
+                    res = build_sip(self.archive, td, td)
+                except Exception as e:
+                    self.fail(f"build_sip() raised an exception: {str(e)}")
+
+                self.assertEqual(res[0] in os.listdir(td), True)
+
+    def test_uncompress(self):
+        """
+        Asserts SIPs get uncompressed and moved correctly
+        """
+        with tempfile.TemporaryDirectory() as sip_td:
+            # create an SIP to compress
+            res = bic.process(
+                recid="2728246",
+                source="cds",
+                target=sip_td,
+                loglevel=0,
+            )
+
+            sip_folder_name = res["foldername"]
+
+            # a separate dir is needed, ow we walk a dir that keeps getting a zip updated
+            with tempfile.TemporaryDirectory() as zip_td:
+                # compress the SIP
+                with zipfile.ZipFile(os.path.join(zip_td, "test.zip"), "x") as zip_obj:
+                    for root, subfolders, files in os.walk(sip_td):
                         for file in files:
                             file_path = os.path.join(root, file)
-                            zipf.write(file_path, file_path[len_dir_path:])
-                zipf.close()
-                
+                            zip_obj.write(file_path, os.path.basename(file_path))
+                zip_obj.close()
 
-                with open("test.zip", mode="rb") as myzip:
+                try:
+                    res = uncompress(zip_td, sip_td)
+                except Exception as e:
+                    self.fail(f"uncomrpess() raised an exception: {str(e)}")
 
-                    url = reverse("upload-sip")
-                    response = self.client.post(url, {"file": myzip})
-                
-                os.remove("test.zip")
+                self.assertEqual(sip_folder_name in os.listdir(sip_td), True)
 
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                
-                self.assertEqual(response.data["status"], 0)
-                self.assertEqual(response.data["msg"], 'SIP uploaded, see Archives page')
+        # this is the last test, dleete the tmp dir of the mock uj
+        if os.path.exists(self.uj.tmp_dir):
+            shutil.rmtree(self.uj.tmp_dir)
