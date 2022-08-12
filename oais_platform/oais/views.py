@@ -389,7 +389,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source=source,
             source_url=url,
             creator=request.user,
-            restricted=True
+            restricted=True,
         )
 
         return redirect(
@@ -423,7 +423,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source=source,
             source_url=url,
             creator=request.user,
-            restricted=True
+            restricted=True,
         )
 
         return redirect(
@@ -502,7 +502,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     creator=request.user,
                     staged=True,
-                    restricted=True
+                    restricted=True,
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
@@ -684,6 +684,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows to create UploadJobs, add files, and submit
     """
+
     queryset = UploadJob.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
@@ -697,9 +698,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         tmp_dir = tempfile.mkdtemp()
 
         uj = UploadJob.objects.create(
-            creator=request.user,
-            tmp_dir=tmp_dir,
-            files=json.dumps({})
+            creator=request.user, tmp_dir=tmp_dir, files=json.dumps({})
         )
         uj.save()
 
@@ -748,14 +747,17 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             loglevel=0,
             target=base_path,
             source_path=uj.tmp_dir,
-            author=str(request.user.id)
+            author=str(request.user.id),
         )
 
         if result["status"] != 0:
-            raise BadRequest({
-                "status": 1,
-                "msg": "bagit_create failed creating the SIP: " + result["errormsg"]
-            })
+            raise BadRequest(
+                {
+                    "status": 1,
+                    "msg": "bagit_create failed creating the SIP: "
+                    + result["errormsg"],
+                }
+            )
 
         # update the db
         sip_name = result["foldername"]
@@ -778,10 +780,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             recid = sip_json["recid"]
             url = get_source(source).get_record_url(recid)
             archive = Archive.objects.create(
-                recid=recid,
-                source=source,
-                source_url=url,
-                creator=request.user
+                recid=recid, source=source, source_url=url, creator=request.user
             )
 
             step = Step.objects.create(
@@ -795,7 +794,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
-            archive.set_archive_manifest( sip_json["audit"])
+            archive.set_archive_manifest(sip_json["audit"])
             archive.update_next_steps(step.name)
             archive.save()
             run_next_step(archive.id, step.id)
@@ -804,7 +803,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
                 {
                     "status": 0,
                     "archive": archive.id,
-                    "msg": "SIP uploaded, see Archives page"
+                    "msg": "SIP uploaded, see Archives page",
                 }
             )
 
@@ -936,7 +935,6 @@ def get_archive_information_labels(request):
 
 @extend_schema_view(
     post=extend_schema(
-<<<<<<< HEAD
         description="""Creates an Archive given a list of UploadedFile objects by
         reconstructing their directory tree and packaging it as SIP with bagit_create"""
     )
@@ -998,7 +996,11 @@ def upload_folder(request):
             recid = sip_json["recid"]
             url = get_source(source).get_record_url(recid)
             archive = Archive.objects.create(
-                recid=recid, source=source, source_url=url, creator=request.user, restricted=True
+                recid=recid,
+                source=source,
+                source_url=url,
+                creator=request.user,
+                restricted=True,
             )
 
             step = Step.objects.create(
@@ -1078,7 +1080,7 @@ def upload_sip(request):
             source=source,
             source_url=url,
             creator=request.user,
-            restricted=True
+            restricted=True,
         )
 
         step = Step.objects.create(
