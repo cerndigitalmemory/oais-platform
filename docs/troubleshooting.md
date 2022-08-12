@@ -30,6 +30,9 @@ Containers overview:
   `docker exec -it <CONTAINER_NAME> sh`
 - Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
   `docker-compose build`
+- Rebuild images skipping cache. Can take a lot of time.
+  Sometimes you need it when upgrading pip dependencies that are pointing to git repositories, e.g. bagit-create.
+  `docker-compose build --no-cache`
 
 To keep in mind:
 

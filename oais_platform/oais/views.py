@@ -1,13 +1,16 @@
-import time
+import json
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import zipfile
-import tempfile
 from pathlib import PurePosixPath
+from threading import local
 from urllib.parse import unquote, urlparse
-from click import pass_context
 
+from bagit_create import main as bic
+from click import pass_context
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
@@ -18,7 +21,14 @@ from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Status,
+    Step,
+    Steps,
+    UploadJob,
+)
 from oais_platform.oais.permissions import (
     filter_all_archives_user_has_access,
     filter_archives_by_user_creator,
@@ -45,7 +55,6 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from bagit_create import main as bic
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -671,6 +680,142 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return self.add_or_remove_arch(request, "oais.can_reject_archive", add=False)
 
 
+class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint that allows to create UploadJobs, add files, and submit
+    """
+    queryset = UploadJob.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=["POST"], url_path="create", url_name="create-job")
+    def create_job(self, request):
+        """
+        Initializes an UploadJob, returns its id and its corresponding temporary directory.
+        """
+        # new files will be added to our own tmp dir
+        # (the tmp dir handled by Django gets deleted at context exit)
+        tmp_dir = tempfile.mkdtemp()
+
+        uj = UploadJob.objects.create(
+            creator=request.user,
+            tmp_dir=tmp_dir,
+            files=json.dumps({})
+        )
+        uj.save()
+
+        return Response({"uploadJobId": uj.id})
+
+    @action(detail=True, methods=["POST"], url_path="add/file", url_name="add-file")
+    def add_file(self, request, pk=None):
+        """
+        Adds the given file to the specified UploadJob. \n
+        Reconstructs the original relative path in the UploadJob's corresponding temporary directory.
+        """
+        # prepare directories preserving the original structure
+        uj = self.get_object()
+        tmp_dir = uj.tmp_dir
+        relative_path, file = request.FILES.items().__iter__().__next__()
+
+        local_path = os.path.join(tmp_dir, os.path.dirname(relative_path))
+        if not os.path.exists(local_path):
+            os.makedirs(local_path)
+
+        # move newly added file to our own tmp dir
+        shutil.move(file.temporary_file_path(), os.path.join(tmp_dir, relative_path))
+
+        uj = self.get_object()
+        uj.add_file(os.path.join(tmp_dir, relative_path), relative_path)
+
+        return Response()
+
+    @action(detail=True, methods=["POST"], url_path="sip", url_name="sip")
+    def create_sip(self, request, pk=None):
+        """
+        Creates an SIP calling bagit_create on the specified UploadJob. \n
+        Saves the SIP on the env. var BIC_UPLOAD_PATH (current working directory if not declared).
+        """
+        uj = self.get_object()
+
+        if settings.BIC_UPLOAD_PATH:
+            base_path = settings.BIC_UPLOAD_PATH
+        else:
+            base_path = os.getcwd()
+
+        # Create the SIP with bagit_create
+        result = bic.process(
+            recid=None,
+            source="local",
+            loglevel=0,
+            target=base_path,
+            source_path=uj.tmp_dir,
+            author=str(request.user.id)
+        )
+
+        if result["status"] != 0:
+            raise BadRequest({
+                "status": 1,
+                "msg": "bagit_create failed creating the SIP: " + result["errormsg"]
+            })
+
+        # update the db
+        sip_name = result["foldername"]
+        uj.set_sip_dir(os.path.join(base_path, sip_name))
+
+        return Response({"status": 0, "msg": "SIP created successfully"})
+
+    @action(detail=True, methods=["POST"], url_path="archive", url_name="archvive")
+    def create_archive(self, request, pk=None):
+        """
+        Creates an Archive given the path to an SIP. \n
+        Returns id of this Archive if succesful.
+        """
+        try:
+            uj = self.get_object()
+            sip_json = get_manifest(uj.sip_dir)
+            step = None
+
+            source = sip_json["source"]
+            recid = sip_json["recid"]
+            url = get_source(source).get_record_url(recid)
+            archive = Archive.objects.create(
+                recid=recid,
+                source=source,
+                source_url=url,
+                creator=request.user
+            )
+
+            step = Step.objects.create(
+                archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+            )
+            archive.set_step(step)
+
+            # Uploading completed
+            step.set_status(Status.COMPLETED)
+            step.set_finish_date()
+
+            # Save path and change status of the archive
+            archive.path_to_sip = uj.sip_dir
+            archive.set_archive_manifest( sip_json["audit"])
+            archive.update_next_steps(step.name)
+            archive.save()
+            run_next_step(archive.id, step.id)
+
+            return Response(
+                {
+                    "status": 0,
+                    "archive": archive.id,
+                    "msg": "SIP uploaded, see Archives page"
+                }
+            )
+
+        except TypeError:
+            raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
+        except Exception as e:
+            if step:
+                step.set_status(Status.FAILED)
+            raise BadRequest({"status": 1, "msg": e})
+
+
 # called by /settings
 @api_view(["GET"])
 def get_settings(request):
@@ -690,8 +835,6 @@ def get_settings(request):
         githash = "n/a"
 
     user = request.user
-    if not user.has_perm("can_view_system_settings"):
-        raise PermissionDenied()
     serializer = UserSerializer(user)
 
     data = {
@@ -793,6 +936,7 @@ def get_archive_information_labels(request):
 
 @extend_schema_view(
     post=extend_schema(
+<<<<<<< HEAD
         description="""Creates an Archive given a list of UploadedFile objects by
         reconstructing their directory tree and packaging it as SIP with bagit_create"""
     )

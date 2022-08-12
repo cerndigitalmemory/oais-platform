@@ -1,5 +1,6 @@
 import ast
 import json
+from lib2to3.pgen2.token import RPAR
 import logging
 import ntpath
 import os
@@ -18,7 +19,7 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Resource, Status, Step, Steps
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_ABS_DIRECTORY,
@@ -185,91 +186,44 @@ def invenio(self, archive_id, step_id, input_data=None):
     If another Archive referring to the same (Source, Record ID) was already published,
     create a new version of the Record.
     """
-
     logger.info(f"Starting the publishing to InvenioRDM of Archive {archive_id}")
 
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
-
     step.set_status(Status.IN_PROGRESS)
 
-    invenio_id = None
-
-    # Check if there is another Archive referring to the the same upstream (Source, Record ID)
-    archive_already_recorded = (
-        Archive.objects.filter(recid=archive.recid, source=archive.source)
-        .exclude(id=archive.id)
-        .last()
-    )
+    # The InvenioRDM API endpoint
+    invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
 
     # Set up the authentication for the requests to the InvenioRDM API
     headers = {
         "Authorization": "Bearer " + INVENIO_API_TOKEN,
         "Content-type": "application/json",
     }
-    # The InvenioRDM API endpoint
-    invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
 
-    # Start populating some data for the Invenio record we will create
-    # TODO: Decide on the defaults here?
-    if archive.restricted is True:
-        access = "private"
-    else:
-        access = "public"
-
-    if not archive.creator.last_name:
-        last_name = "Smith"
-    else:
-        last_name = archive.creator.last_name
-
-    if not archive.creator.first_name:
-        first_name = "David"
-    else:
-        first_name = archive.creator.first_name
-
-    # If this Archive was never published before to InvenioRDM (version == 0)
+    # If this Archive was never published before to InvenioRDM
     # and no similar Archive was published before
-    if (archive.invenio_version == 0) and (archive_already_recorded is None):
+    if (archive.resource.invenio_parent_id) is None:
+
         # We create a brand new Record in InvenioRDM
         archive.invenio_version = 1
+        data = initialize_data(archive)
 
-        data = {
-            "access": {
-                "record": access,
-                "files": access,
-            },
-            # Metadata only
-            "files": {"enabled": False},
-            "metadata": {
-                "creators": [
-                    {
-                        "person_or_org": {
-                            "family_name": last_name,
-                            "given_name": first_name,
-                            "type": "personal",
-                        }
-                    }
-                ],
-                # Set publication_date to the moment we trigger a publish
-                "publication_date": archive.timestamp.date().isoformat(),
-                "resource_type": {"id": "publication"},
-                "title": archive.title,
-                "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
-                # The first time we publish to InvenioRDM we call the version '1'
-                "version": f"1, Archive {archive.id}",
-            },
-        }
+        try:
 
-        # Create a record as a InvenioRDM draft
-        req = requests.post(
-            invenio_records_endpoint,
-            headers=headers,
-            data=json.dumps(data),
-            verify=False,
-        )
-
-        # TODO: If this request doesn't succeed (HTTP CODE != 200), raise an Exception and set the Step as failed
+            # Create a record as a InvenioRDM draft
+            req = requests.post(
+                invenio_records_endpoint,
+                headers=headers,
+                data=json.dumps(data),
+                verify=False,
+            )
+            req.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(f"The request didn't succed:{err}")
+            step.set_status(Status.FAILED)
+            return {"status": 1, "ERROR": err}
 
         # Parse the response and get our new record ID so we can link it
         data_loaded = json.loads(req.text)
@@ -293,44 +247,21 @@ def invenio(self, archive_id, step_id, input_data=None):
         # An InvenioRDM parent ID groups every version of the same Record, extract it
         data_published = json.loads(req_publish_invenio.text)
         invenio_parent_id = data_published["parent"]["id"]
-        archive.invenio_parent_id = invenio_parent_id
 
-        # Generate the link to show every version of a Record using the parent id
-        archive.invenio_parent_url = (
-            f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}&f=allversions:true"
-        )
+        # Set the value to the resource fields for the first time
+        resource = archive.resource
+        resource.set_invenio_id(invenio_id)
+        resource.set_invenio_parent_fields(invenio_parent_id)
+
+        # Save the resource and the archive
+        resource.save()
         archive.save()
 
     # Create a new InvenioRDM version of an already published Record
     else:
 
-        # If the same upstream (Source, Record ID) was already published from another Archive
-        # fetch from it the InvenioRDM parent ID and related link and copy them in the current
-        # Archive
-        if archive_already_recorded is not None:
-
-            invenio_step = Step.objects.filter(
-                name=Steps.INVENIO_RDM_PUSH, archive=archive_already_recorded
-            ).latest("start_date")
-            logging.info(f"Upstream resource was already published, getting Invenio data from Step {invenio_step.id}")
-            archive.invenio_parent_id = archive_already_recorded.invenio_parent_id
-            archive.invenio_parent_url = archive_already_recorded.invenio_parent_url
-            archive.save()
-
-        # otherwise, we're already in the Archive that originally published that upstream resource
-        else:
-            # The object that I am looking for
-            invenio_step = Step.objects.filter(name=Steps.INVENIO_RDM_PUSH, archive=archive).latest("start_date")
-            logging.info(f"This archive was already published, getting Invenio data from Step {invenio_step.id}")
-
-        # Let's get the ID of the Invenio record against which we will create a new version,
-        # from the "input data" from the found Invenio Step
-        field_object = Step._meta.get_field("input_data")
-        field_value = field_object.value_from_object(invenio_step)
-        logging.info(invenio_step.id)
-
-        output = json.loads(field_value)
-        invenio_id = output["id"]
+        # Invenio_id of the first version published in InvenioRDM of the resource
+        invenio_id = archive.resource.invenio_id
 
         # Create new version as draft
         req_invenio_draft_new_version = requests.post(
@@ -344,33 +275,9 @@ def invenio(self, archive_id, step_id, input_data=None):
 
         # Increment the version
         archive.invenio_version += 1
-        archive.save()
 
-        new_version_data = {
-            "access": {
-                "record": access,
-                "files": access,
-            },
-            # Metadata only
-            "files": {"enabled": False},
-            "metadata": {
-                "creators": [
-                    {
-                        "person_or_org": {
-                            "family_name": last_name,
-                            "given_name": first_name,
-                            "type": "personal",
-                        }
-                    }
-                ],
-                # Set publication_date to the moment we trigger a publish
-                "publication_date": archive.timestamp.date().isoformat(),
-                "resource_type": {"id": "publication"},
-                "title": archive.title,
-                "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
-                "version": f"{archive.invenio_version}, Archive {archive.id}",
-            },
-        }
+        # Initialize the archive data that is going to be sent on the request
+        new_version_data = initialize_data(archive)
 
         # Update draft with the new adata
         requests.put(
@@ -386,6 +293,8 @@ def invenio(self, archive_id, step_id, input_data=None):
             headers=headers,
             verify=False,
         )
+
+        archive.save()
 
         # Create a InvenioRDM path artifact with a link to the new version
         relative_path = f"/records/{new_version_invenio_id}"
@@ -764,3 +673,51 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         periodic_task = PeriodicTask.objects.get(name=task_name)
         periodic_task.delete()
         step.set_status(Status.FAILED)
+
+
+def initialize_data(archive):
+    """
+    Called from Invenio step to populate some data for the Invenio record we will create
+    """
+    if archive.restricted is True:
+        access = "private"
+    else:
+        access = "public"
+
+    if not archive.creator.last_name:
+        last_name = "Smith"
+    else:
+        last_name = archive.creator.last_name
+
+    if not archive.creator.first_name:
+        first_name = "David"
+    else:
+        first_name = archive.creator.first_name
+
+    data = {
+        "access": {
+            "record": access,
+            "files": access,
+        },
+        # Metadata only
+        "files": {"enabled": False},
+        "metadata": {
+            "creators": [
+                {
+                    "person_or_org": {
+                        "family_name": last_name,
+                        "given_name": first_name,
+                        "type": "personal",
+                    }
+                }
+            ],
+            # Set publication_date to the moment we trigger a publish
+            "publication_date": archive.timestamp.date().isoformat(),
+            "resource_type": {"id": "publication"},
+            "title": archive.title,
+            "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
+            # The first time we publish to InvenioRDM we call the version '1'
+            "version": f"{archive.invenio_version}, Archive {archive.id}",
+        },
+    }
+    return data
