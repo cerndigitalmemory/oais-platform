@@ -575,6 +575,24 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionSerializer(tag, many=False)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
+    def edit_tag(self, request,pk=None):
+        """
+        Update a Tag with title, description
+        """
+        title = request.data["title"]
+        description = request.data["description"]
+
+        with transaction.atomic():
+            tag = self.get_object()
+
+        tag.set_title(title)
+        tag.set_description(description)
+        tag.set_modification_timestamp()
+
+        serializer = CollectionSerializer(tag, many=False)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def delete_tag(self, request, pk=None):
         """
