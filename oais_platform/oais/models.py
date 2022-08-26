@@ -295,6 +295,12 @@ class Collection(models.Model):
         self.save()
 
 
+class UJStatus(models.IntegerChoices):
+    SUCCESS = 0
+    FAIL = 1
+    PENDING = 2
+
+
 class UploadJob(models.Model):
     """
     An upload job with a unique ID and a set of associated files
@@ -305,11 +311,15 @@ class UploadJob(models.Model):
         User, on_delete=models.PROTECT, null=True, related_name="uploadjobs")
     timestamp = models.DateTimeField(default=timezone.now)
     tmp_dir = models.CharField(max_length=1000)
-    sip_dir = models.CharField(max_length=1000)
+    path_to_sip = models.CharField(max_length=1000)
     files = models.JSONField()
+    status = models.IntegerField(
+        choices=UJStatus.choices,
+        default=UJStatus.PENDING
+    )
 
     class Meta:
-        ordering = ["-id"]
+        ordering = ["timestamp"]
 
     def get_files(self):
         return json.loads(self.files)
@@ -320,6 +330,10 @@ class UploadJob(models.Model):
         self.files = json.dumps(files)
         self.save(update_fields=["files"])
 
-    def set_sip_dir(self, sip_dir):
-        self.sip_dir = sip_dir
-        self.save(update_fields=["sip_dir"])
+    def set_path_to_sip(self, path_to_sip):
+        self.path_to_sip = path_to_sip
+        self.save(update_fields=["path_to_sip"])
+
+    def set_status(self, status):
+        self.status = status
+        self.save(update_fields=["status"])

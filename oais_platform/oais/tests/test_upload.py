@@ -1,4 +1,3 @@
-from sre_constants import SUCCESS
 import tempfile
 import os
 import json
@@ -6,15 +5,12 @@ import shutil
 import zipfile
 
 from django.urls import reverse
-from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
-from unittest.mock import patch
 from bagit_create import main as bic
 
-from oais_platform.settings import BIC_UPLOAD_PATH
 from oais_platform.oais.models import User, UploadJob, Archive, Step, Steps, Status
-from oais_platform.oais.tasks import build_sip, uncompress, process
+from oais_platform.oais.tasks import build_sip, uncompress
 
 
 class UploadTests(APITestCase):

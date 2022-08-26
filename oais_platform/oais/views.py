@@ -731,6 +731,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         process.delay(
             archive.id,
             step.id,
+            uj_id=uj.id,
             input_data=uj.tmp_dir,
             create_sip=request.data["create_sip"]
         )

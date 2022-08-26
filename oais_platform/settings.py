@@ -151,9 +151,15 @@ DATABASES = {
 }
 
 
-## File Uploads
+## UPLOADS
+
 # set to 0 to avoid files being uploaded in memory
 FILE_UPLOAD_MAX_MEMORY_SIZE = 0
+
+# specified in hours
+PERIODIC_SCAN_INTERVAL = 72
+JOB_EXPIRY_TIME = 144
+
 
 ##  Password validation
 
