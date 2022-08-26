@@ -20,7 +20,7 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from oais_platform.oais.models import Archive, Resource, Status, Step, Steps
+from oais_platform.oais.models import Archive, Resource, Status, Step, Steps, UJStatus, UploadJob
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_ABS_DIRECTORY,
@@ -391,7 +391,7 @@ def uncompress(input_data, target_dir):
 
 
 @shared_task(name="new_process", bind=True, ignore_result=True, after_return=finalize)
-def process(self, archive_id, step_id, input_data=None, create_sip=True):
+def process(self, archive_id, step_id, uj_id=None, input_data=None, create_sip=True):
     """
     Processes data submission to the platform:
         - Builds or uncompresses and moves an SIP (depending on create_sip) in/to BIC_UPLOAD_PATH.
@@ -414,37 +414,47 @@ def process(self, archive_id, step_id, input_data=None, create_sip=True):
             (sip_folder_name, retval) = uncompress(input_data, BIC_UPLOAD_PATH)
 
     except zipfile.BadZipFile:
-        if os.path.exists(input_data):
-            shutil.rmtree(input_data)
-        return {"status": 1, "msg": "Check the zip file for errors"}
+        msg = "Check the zip file for errors"
 
     except TypeError:
-        if os.path.exists(input_data):
-            os.remove(input_data)
-        return {"status": 1, "msg": "Check your SIP structure"}
+        msg = "Check your SIP structure"
 
     except Exception as e:
+        msg = str(e)
+
+    else:
+        # SIP now created or moved, delete the data used to create it
         if os.path.exists(input_data):
             shutil.rmtree(input_data)
-        return {"status": 1, "errormsg": str(e)}
 
-    # SIP now created or moved, delete the data used to create it
+        # udpate the path to the SIP
+        path_to_sip = os.path.join(BIC_UPLOAD_PATH, sip_folder_name) if BIC_UPLOAD_PATH else sip_folder_name
+        archive.set_path(path_to_sip)
+
+        # update status and path
+        if uj_id:
+            uj = UploadJob.objects.get(pk=uj_id)
+            uj.set_status(UJStatus.SUCCESS)
+            uj.set_path_to_sip(path_to_sip)
+
+        # Create a SIP path artifact
+        output_artifact = create_path_artifact(
+            "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name)
+        )
+        retval["artifact"] = output_artifact
+
+        logger.info(retval)
+        return retval
+
+    # an exception got raised, delete data and update status
     if os.path.exists(input_data):
         shutil.rmtree(input_data)
 
-    # udpate the path to the SIP
-    if BIC_UPLOAD_PATH:
-        sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
-    archive.set_path(sip_folder_name)
+    if uj_id:
+        uj = UploadJob.objects.get(pk=uj_id)
+        uj.set_status(UJStatus.FAIL)
 
-    # Create a SIP path artifact
-    output_artifact = create_path_artifact(
-        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name)
-    )
-    retval["artifact"] = output_artifact
-
-    logger.info(retval)
-    return retval
+    return {"status": 1, "msg": msg}
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)

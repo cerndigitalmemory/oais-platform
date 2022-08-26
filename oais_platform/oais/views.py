@@ -672,7 +672,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
                 random_name = "".join(random.choices(string.ascii_lowercase, k=8))
 
             tmp_dir = os.path.join("/oais_platform/tmp/", random_name)
-            os.mkdir(tmp_dir)
+            os.makedirs(tmp_dir)
 
             uj = UploadJob.objects.create(
                 creator=request.user,
@@ -731,6 +731,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         process.delay(
             archive.id,
             step.id,
+            uj_id=uj.id,
             input_data=uj.tmp_dir,
             create_sip=request.data["create_sip"]
         )
