@@ -21,11 +21,9 @@ class SourcesSerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    sources = SourcesSerializer(required=False)
-
     class Meta:
         model = Profile
-        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token", "sources"]
+        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token"]
 
 
 class ResourceSerializer(serializers.ModelSerializer):
