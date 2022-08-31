@@ -90,14 +90,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = self.get_object()
         archives = filter_all_archives_user_has_access(
             # user.archives.all() returns every Archive the User has created
-            user.archives.all(), request.user
+            user.archives.all(),
+            request.user,
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
     @action(detail=False, methods=["GET", "POST"], url_path="me", url_name="me")
     def get_set_me(self, request):
         """
-        Returns information and settings about the User or, 
+        Returns information and settings about the User or,
         updates its profile using the passed values to overwrite
         """
         if request.method == "POST":
@@ -271,7 +272,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns details of an identified Archive
         """
         archives = filter_all_archives_user_has_access(
-            super().get_queryset(), request.user)
+            super().get_queryset(), request.user
+        )
         archive = get_object_or_404(archives, pk=pk)
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
@@ -336,8 +338,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return self.make_paginated_response(collections, CollectionSerializer)
 
-    @action(detail=True, methods=["POST"],
-            url_path="save-manifest", url_name="save-manifest")
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="save-manifest",
+        url_name="save-manifest",
+    )
     def archive_save_manifest(self, request, pk=None):
         """
         Update the manifest for the specified Archive with the given content
@@ -391,8 +397,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = None
             return Response()
 
-    @action(detail=True, methods=["POST"],
-            url_path="unstage", url_name="sgl-unstage")
+    @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
         Unstages the passed Archive, setting them to the Harvest stage
@@ -418,8 +423,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(serializer.data)
 
     @extend_schema(operation_id="mlt-unstage")
-    @action(detail=False, methods=["POST"],
-            url_path="unstage", url_name="mlt-unstage")
+    @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
         Unstages the passed Archives, setting them to the Harvest stage
@@ -480,8 +484,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
 
     @extend_schema(request=SourceRecordSerializer, responses=ArchiveSerializer)
-    @action(detail=False, methods=["POST"],
-            url_path="create/harvest", url_name="create-harvest")
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="create/harvest",
+        url_name="create-harvest",
+    )
     def archive_create_by_harvest(self, request):
         """
         Creates an Archive triggering its own harvesting, given the Source and Record ID
@@ -687,12 +695,15 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         description = request.data["description"]
         archives = request.data["archives"]
 
-        tag = Collection.objects.create(
-            title=title,
-            description=description,
-            creator=request.user,
-            internal=False,
-        )
+        try:
+            tag = Collection.objects.create(
+                title=title,
+                description=description,
+                creator=request.user,
+                internal=False,
+            )
+        except Exception as e:
+            raise BadRequest(e)
         if archives:
             tag.archives.set(archives)
 
@@ -700,7 +711,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
-    def edit_tag(self, request,pk=None):
+    def edit_tag(self, request, pk=None):
         """
         Update a Tag with title, description
         """
@@ -795,6 +806,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows to create UploadJobs, add files, and submit
     """
+
     queryset = UploadJob.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
@@ -808,9 +820,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         tmp_dir = tempfile.mkdtemp()
 
         uj = UploadJob.objects.create(
-            creator=request.user,
-            tmp_dir=tmp_dir,
-            files=json.dumps({})
+            creator=request.user, tmp_dir=tmp_dir, files=json.dumps({})
         )
         uj.save()
 
@@ -859,14 +869,17 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             loglevel=0,
             target=base_path,
             source_path=uj.tmp_dir,
-            author=str(request.user.id)
+            author=str(request.user.id),
         )
 
         if result["status"] != 0:
-            raise BadRequest({
-                "status": 1,
-                "msg": "bagit_create failed creating the SIP: " + result["errormsg"]
-            })
+            raise BadRequest(
+                {
+                    "status": 1,
+                    "msg": "bagit_create failed creating the SIP: "
+                    + result["errormsg"],
+                }
+            )
 
         # update the db
         sip_name = result["foldername"]
@@ -889,10 +902,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             recid = sip_json["recid"]
             url = get_source(source).get_record_url(recid)
             archive = Archive.objects.create(
-                recid=recid,
-                source=source,
-                source_url=url,
-                creator=request.user
+                recid=recid, source=source, source_url=url, creator=request.user
             )
 
             step = Step.objects.create(
@@ -906,7 +916,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
-            archive.set_archive_manifest( sip_json["audit"])
+            archive.set_archive_manifest(sip_json["audit"])
             archive.update_next_steps(step.name)
             archive.save()
             run_next_step(archive.id, step.id)
@@ -915,7 +925,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
                 {
                     "status": 0,
                     "archive": archive.id,
-                    "msg": "SIP uploaded, see Archives page"
+                    "msg": "SIP uploaded, see Archives page",
                 }
             )
 
@@ -1048,7 +1058,8 @@ def get_archive_information_labels(request):
 @extend_schema_view(
     post=extend_schema(
         description="""Creates an Archive given an UploadedFile
-        representing a zipped SIP""")
+        representing a zipped SIP"""
+    )
 )
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])

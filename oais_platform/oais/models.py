@@ -280,6 +280,7 @@ class Collection(models.Model):
 
     class Meta:
         ordering = ["-id"]
+        constraints = [models.UniqueConstraint(fields=["title", "creator"], name="id")]
 
     def set_title(self, title):
         self.title = title
@@ -309,7 +310,8 @@ class UploadJob(models.Model):
 
     id = models.AutoField(primary_key=True)
     creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="uploadjobs")
+        User, on_delete=models.PROTECT, null=True, related_name="uploadjobs"
+    )
     timestamp = models.DateTimeField(default=timezone.now)
     tmp_dir = models.CharField(max_length=1000)
     sip_dir = models.CharField(max_length=1000)
