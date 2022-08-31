@@ -1,16 +1,32 @@
 from re import S
 
 from django.contrib.auth.models import Group, User
-from oais_platform.oais.models import Archive, Collection, Profile, Step, Resource
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Profile,
+    Step,
+    Resource,
+    Sources,
+)
 from opensearch_dsl import utils
 from rest_framework import serializers
 from rest_framework.fields import IntegerField
 
 
+class SourcesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sources
+        fields = ["cds", "cod", "inveniordm", "zenodo", "indico", "codimd"]
+
+
 class ProfileSerializer(serializers.ModelSerializer):
+    sources = SourcesSerializer(required=False)
+
     class Meta:
         model = Profile
-        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token"]
+
+        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token", "sources"]
 
 
 class ResourceSerializer(serializers.ModelSerializer):

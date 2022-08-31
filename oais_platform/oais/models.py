@@ -70,6 +70,64 @@ class Status(models.IntegerChoices):
     WAITING = 7
 
 
+class SourceStatus(models.IntegerChoices):
+    READY = 1
+    NEEDS_CONFIG_PRIVATE = 2
+    NEEDS_CONFIG = 3
+
+
+class Sources(models.Model):
+    profile = models.OneToOneField(Profile, primary_key=True, on_delete=models.CASCADE)
+    cds = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+    inveniordm = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+    cod = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+    indico = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+    zenodo = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+    codimd = models.IntegerField(
+        choices=SourceStatus.choices, default=SourceStatus.NEEDS_CONFIG
+    )
+
+
+@receiver(post_save, sender=Profile)
+def create_profile_sources(sender, instance, created, **kwargs):
+    # Every time a User is created (post_save), create an attached Profile, too
+    if created:
+        Sources.objects.create(profile=instance)
+
+
+@receiver(post_save, sender=Profile)
+def set_source_status(sender, instance, **kwargs):
+    indico_api_key = instance.indico_api_key
+    codimd_api_key = instance.codimd_api_key
+    sso_comp_token = instance.sso_comp_token
+    if indico_api_key:
+        instance.sources.indico = SourceStatus.READY
+    else:
+        instance.sources.indico = SourceStatus.NEEDS_CONFIG_PRIVATE
+    if codimd_api_key:
+        instance.sources.codimd = SourceStatus.READY
+    else:
+        instance.sources.codimd = SourceStatus.NEEDS_CONFIG
+    if sso_comp_token:
+        instance.sources.cds = SourceStatus.READY
+    else:
+        instance.sources.cds = SourceStatus.NEEDS_CONFIG_PRIVATE
+    instance.sources.inveniordm = SourceStatus.READY
+    instance.sources.cod = SourceStatus.READY
+    instance.sources.zenodo = SourceStatus.READY
+    instance.sources.save()
+
+
 class Archive(models.Model):
     """
     An archival process of a single addressable record in a upstream
