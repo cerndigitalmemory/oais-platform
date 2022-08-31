@@ -280,7 +280,6 @@ class Collection(models.Model):
 
     class Meta:
         ordering = ["-id"]
-        constraints = [models.UniqueConstraint(fields=["title", "creator"], name="id")]
 
     def set_title(self, title):
         self.title = title

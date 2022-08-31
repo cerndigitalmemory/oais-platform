@@ -22,7 +22,7 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.exceptions import BadRequest, DoesNotExist
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     Archive,
@@ -695,20 +695,22 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         description = request.data["description"]
         archives = request.data["archives"]
 
-        try:
+        is_duplicate = check_for_tag_name_puplicate(title, request.user)
+
+        if is_duplicate:
+            raise BadRequest("A tag with the same name already exists!")
+        else:
             tag = Collection.objects.create(
                 title=title,
                 description=description,
                 creator=request.user,
                 internal=False,
             )
-        except Exception as e:
-            raise BadRequest(e)
-        if archives:
-            tag.archives.set(archives)
+            if archives:
+                tag.archives.set(archives)
 
-        serializer = CollectionSerializer(tag, many=False)
-        return Response(serializer.data)
+            serializer = CollectionSerializer(tag, many=False)
+            return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
     def edit_tag(self, request, pk=None):
@@ -718,15 +720,20 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         title = request.data["title"]
         description = request.data["description"]
 
-        with transaction.atomic():
-            tag = self.get_object()
+        is_duplicate = check_for_tag_name_puplicate(title, request.user)
 
-        tag.set_title(title)
-        tag.set_description(description)
-        tag.set_modification_timestamp()
+        if is_duplicate:
+            raise BadRequest("A tag with the same name already exists!")
+        else:
+            with transaction.atomic():
+                tag = self.get_object()
 
-        serializer = CollectionSerializer(tag, many=False)
-        return Response(serializer.data)
+            tag.set_title(title)
+            tag.set_description(description)
+            tag.set_modification_timestamp()
+
+            serializer = CollectionSerializer(tag, many=False)
+            return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def delete_tag(self, request, pk=None):
@@ -1503,3 +1510,11 @@ def login(request):
 def logout(request):
     auth.logout(request)
     return Response({"status": "success"})
+
+
+def check_for_tag_name_puplicate(title, creator):
+    try:
+        Collection.objects.get(title=title, creator=creator)
+        return True
+    except Collection.DoesNotExist:
+        return False
