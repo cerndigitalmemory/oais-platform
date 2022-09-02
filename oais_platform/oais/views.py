@@ -695,7 +695,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         description = request.data["description"]
         archives = request.data["archives"]
 
-        is_duplicate = check_for_tag_name_puplicate(title, request.user)
+        is_duplicate = check_for_tag_name_duplicate(title, request.user)
 
         if is_duplicate:
             raise BadRequest("A tag with the same name already exists!")
@@ -720,7 +720,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         title = request.data["title"]
         description = request.data["description"]
 
-        is_duplicate = check_for_tag_name_puplicate(title, request.user)
+        is_duplicate = check_for_tag_name_duplicate(title, request.user)
 
         if is_duplicate:
             raise BadRequest("A tag with the same name already exists!")
@@ -1512,7 +1512,12 @@ def logout(request):
     return Response({"status": "success"})
 
 
-def check_for_tag_name_puplicate(title, creator):
+@permission_classes([permissions.IsAuthenticated])
+def check_for_tag_name_duplicate(title, creator):
+    """
+    Given the tag title and the creator checks if there is another tag with the same name
+    created by the same person.
+    """
     try:
         Collection.objects.get(title=title, creator=creator)
         return True
