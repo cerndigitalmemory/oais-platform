@@ -12,6 +12,12 @@ class Gitlab(Source):
         self.baseURL = baseURL
         self.api_key = api_key
 
+    def get_record_url(self, recid):
+        """
+        To get the actual record url, a request using the Gitlab API must be made using the authentication token.
+        """
+        return f"{self.baseURL}/api/v4/projects/{recid}"
+
     def get_records(self):
         try:
             req = requests.get(
@@ -21,8 +27,7 @@ class Gitlab(Source):
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
-        data = req.json()
-        records = data["history"]
+        records = req.json()
 
         if not req.ok:
             raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
@@ -50,7 +55,7 @@ class Gitlab(Source):
             sorted_records = []
 
             for record in records:
-                title = record["name"].lower()
+                title = record["name_with_namespace"]
 
                 record["score"] = 0
                 for word in query:
@@ -91,7 +96,7 @@ class Gitlab(Source):
         return {
             "source_url": url,
             "recid": recid,
-            "title": record["name"],
+            "title": record["name_with_namespace"],
             "authors": record["creator_id"],
             "source": self.source,
         }
