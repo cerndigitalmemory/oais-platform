@@ -10,7 +10,12 @@ from rest_framework.fields import IntegerField
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token"]
+        fields = [
+            "indico_api_key",
+            "codimd_api_key",
+            "sso_comp_token",
+            "gitlab_api_key",
+        ]
 
 
 class ResourceSerializer(serializers.ModelSerializer):

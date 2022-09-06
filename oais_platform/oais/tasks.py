@@ -336,6 +336,13 @@ def process(self, archive_id, step_id, input_data=None):
         except Exception as e:
             return {"status": 1, "errormsg": e}
 
+    if archive.source == "gitlab":
+        try:
+            user = archive.creator
+            api_token = user.profile.gitlab_api_key
+        except Exception as e:
+            return {"status": 1, "errormsg": e}
+
     try:
         bagit_result = bic.process(
             recid=archive.recid,

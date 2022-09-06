@@ -3,6 +3,7 @@ from oais_platform.oais.sources.invenio import Invenio
 from oais_platform.oais.sources.indico import Indico
 from oais_platform.oais.sources.codimd import CodiMD
 from oais_platform.oais.sources.local import Local
+from oais_platform.oais.sources.gitlab import Gitlab
 
 sources = {
     "cds": CDS("cds", "https://cds.cern.ch"),
@@ -25,6 +26,8 @@ def get_source(source, api_token=None):
         return Indico("indico", "https://indico.cern.ch", api_token)
     if source == "codimd":
         return CodiMD("codimd", "https://codimd.web.cern.ch", api_token)
+    if source == "gitlab":
+        return Gitlab("gitlab", "https://gitlab.cern.ch", api_token)
 
     if source not in sources:
         raise InvalidSource(f"Invalid source: {source}")
