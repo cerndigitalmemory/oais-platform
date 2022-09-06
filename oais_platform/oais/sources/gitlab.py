@@ -16,7 +16,16 @@ class Gitlab(Source):
         """
         To get the actual record url, a request using the Gitlab API must be made using the authentication token.
         """
-        return f"{self.baseURL}/api/v4/projects/{recid}"
+        try:
+            r = requests.get(
+                f"{self.baseURL}/api/v4/projects/{recid}",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+            )
+            results = r.json()
+            return results["web_url"]
+        except Exception:
+            raise ServiceUnavailable("Cannot perform search")
+        # return f"{self.baseURL}/api/v4/projects/{recid}"
 
     def get_records(self):
         try:
