@@ -24,3 +24,9 @@ logs-django:
 # Attach to a shell inside the Django container
 shell:
 	docker exec -it oais_django sh
+
+# Cleans up logs and local data (e.g. SIPs)
+# should be run with a "reset-db"
+clean:
+	rm -rf oais-data/*
+	rm *.tmp
