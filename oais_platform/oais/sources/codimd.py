@@ -5,16 +5,15 @@ import requests
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
+
 class CodiMD(Source):
     def __init__(self, source, baseURL, session_id):
         self.source = source
         self.baseURL = baseURL
         self.session_id = session_id
 
-
     def get_record_url(self, recid):
         return f"{self.baseURL}/{recid}#"
-
 
     def get_records(self):
         try:
@@ -29,12 +28,9 @@ class CodiMD(Source):
         records = data["history"]
 
         if not req.ok:
-            raise ServiceUnavailable(
-                f"Search failed with error code {req.status_code}"
-            )
+            raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
 
         return records
-
 
     def search(self, query, page=1, size=20):
         """
@@ -60,20 +56,33 @@ class CodiMD(Source):
                 title = record["text"].lower()
 
                 record["score"] = 0
-                for word in query: 
-                    if word in title: record["score"] += 1
-            
+                for word in query:
+                    if word in title:
+                        record["score"] += 1
+
                 if record["score"] > 0:
                     sorted_records.append(record)
 
-            sorted_records.sort(key = itemgetter("score"), reverse = True)
+            sorted_records.sort(key=itemgetter("score"), reverse=True)
             results = list(map(self.parse_record, sorted_records))
 
-
         total_num_hits = len(results)
-        idx = 10 * (page - 1)
-        return {"total_num_hits": total_num_hits, "results": results[idx:idx+size]}
 
+        # paginate the resulting query
+        # number of elements to skip (in the previous pages than the requested)
+        skip = size * (page - 1)
+        if skip + size > total_num_hits:
+            # if there are not enough results to fill a page, return everything that is remaining
+            return {
+                "total_num_hits": total_num_hits,
+                "results": results[skip:],
+            }
+        else:
+            # else, return exactly as many elements to fill a page after the skipped results
+            return {
+                "total_num_hits": total_num_hits,
+                "results": results[skip: skip + size],
+            }
 
     def search_by_id(self, recid):
         """
@@ -81,13 +90,12 @@ class CodiMD(Source):
         Returns the resulting record if it exists, None otherwise
         """
         records = self.get_records()
-        
+
         for record in records:
             if record["id"] == recid:
                 return {"result": [self.parse_record(record)]}
 
         return {"result": None}
-
 
     def parse_record(self, record):
         """
@@ -102,5 +110,5 @@ class CodiMD(Source):
             "recid": recid,
             "title": record["text"],
             "authors": "",
-            "source": self.source
+            "source": self.source,
         }
