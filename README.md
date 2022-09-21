@@ -5,7 +5,7 @@
 
 This is the backend implementation of the OAIS Platform of the CERN Digital Memory, built on Django.
 
-It provides a REST API which can be used to interact with the platform. The best way to start is reading the Open API specification of the exposed methods.
+It provides a REST API which can be used to interact with the platform.
 
 The main goals of the platform are:
 
@@ -32,7 +32,7 @@ The platform is designed according to these principles:
 
 ## Usage
 
-A public instance of the platform is available over [https://dm-luteus.web.cern.ch/](https://dm-luteus.web.cern.ch/).
+A public instance of the platform is available over [https://dm-luteus.web.cern.ch/](https://dm-luteus.web.cern.ch/). Swagger API documentation can be found [here](https://dm-luteus.web.cern.ch/api/schema/swagger-ui/).
 
 User documentation is available [here](docs/user.md).
 
