@@ -30,6 +30,12 @@ The platform is designed according to these principles:
 - The platform must be fully usable through the exposed API surface, enabling any service to integrate a long term preservation strategy to their workflows.
   - A [web interface](https://gitlab.cern.ch/digitalmemory/oais-web) is also provided, allowing users to use the platform through any browser.
 
+## Usage
+
+A public instance of the platform is available over [https://dm-luteus.web.cern.ch/](https://dm-luteus.web.cern.ch/).
+
+User documentation is available [here](docs/user.md).
+
 ## Run
 
 Here's how you can run a local instance of the platform.
@@ -72,8 +78,6 @@ The following endpoints are then available, on `localhost`:
 - `/api/schema` - OpenAPI 3 specification of the API
 - `/api/schema/swagger-ui/` - Swagger UI documentation for the API
 
-See [troubleshooting](docs/troubleshooting.md) for more instructions on how to see logs and run commands in the single containers.
-
 ### Helper commands
 
 A Makefile is included in the repository, providing some utility commands:
@@ -97,6 +101,8 @@ DJANGO_SUPERUSER_PASSWORD=root DJANGO_SUPERUSER_USERNAME=root DJANGO_SUPERUSER_E
 # Run the application
 python manage.py runserver
 ```
+
+See [troubleshooting](docs/troubleshooting.md) for further instructions on how to maintain an instance and debug issues.
 
 ### Run tests
 
@@ -142,3 +148,14 @@ To be able to connect the platform with InvenioRDM, create a new API Token in yo
 export INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
 export INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 ```
+
+## CI/CD
+
+The CI configured on this repository to run the tests on every commit and trigger an upstream deployment.
+
+The platform gets deployed with Helm Charts on a Kubernetes cluster from CERN OpenShift. To learn more, check the [openshift-deploy](https://gitlab.cern.ch/digitalmemory/openshift-deploy) repository.
+
+Two deployments are currently online:
+
+- dm-luteus, tracking stable branches of the backend and the frontend
+- dm-galanos, tracking development branches of the backend and the frontend
