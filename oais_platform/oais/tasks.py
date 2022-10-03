@@ -20,7 +20,15 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from oais_platform.oais.models import Archive, Resource, Status, Step, Steps, UJStatus, UploadJob
+from oais_platform.oais.models import (
+    Archive,
+    Resource,
+    Status,
+    Step,
+    Steps,
+    UJStatus,
+    UploadJob,
+)
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_ABS_DIRECTORY,
@@ -338,7 +346,7 @@ def build_sip(archive, input_data, target_dir):
         target=target_dir,
         source_path=input_data,
         author=str(archive.creator),
-        token=api_token
+        token=api_token,
     )
 
     logger.info(bagit_result)
@@ -381,11 +389,7 @@ def uncompress(input_data, target_dir):
     shutil.move(path_to_sip, target_dir)
 
     # recreate a bagit_result that gets passed to finalize()
-    retval = {
-        "status": 0,
-        "errormsg": None,
-        "foldername": sip_folder_name
-    }
+    retval = {"status": 0, "errormsg": None, "foldername": sip_folder_name}
 
     return (sip_folder_name, retval)
 
@@ -416,7 +420,7 @@ def process(self, archive_id, step_id, uj_id=None, input_data=None, create_sip=T
     except zipfile.BadZipFile:
         msg = "Check the zip file for errors"
 
-    except TypeError:
+    except TypeError as e:
         msg = "Check your SIP structure"
 
     except Exception as e:
@@ -428,7 +432,11 @@ def process(self, archive_id, step_id, uj_id=None, input_data=None, create_sip=T
             shutil.rmtree(input_data)
 
         # udpate the path to the SIP
-        path_to_sip = os.path.join(BIC_UPLOAD_PATH, sip_folder_name) if BIC_UPLOAD_PATH else sip_folder_name
+        path_to_sip = (
+            os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
+            if BIC_UPLOAD_PATH
+            else sip_folder_name
+        )
         archive.set_path(path_to_sip)
 
         # update status and path

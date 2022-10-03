@@ -28,7 +28,7 @@ from oais_platform.oais.models import (
     Status,
     Step,
     Steps,
-    UploadJob
+    UploadJob,
 )
 from oais_platform.oais.permissions import (
     filter_all_archives_user_has_access,
@@ -87,14 +87,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = self.get_object()
         archives = filter_all_archives_user_has_access(
             # user.archives.all() returns every Archive the User has created
-            user.archives.all(), request.user
+            user.archives.all(),
+            request.user,
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
     @action(detail=False, methods=["GET", "POST"], url_path="me", url_name="me")
     def get_set_me(self, request):
         """
-        Returns information and settings about the User or, 
+        Returns information and settings about the User or,
         updates its profile using the passed values to overwrite
         """
         if request.method == "POST":
@@ -210,7 +211,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns details of an identified Archive
         """
         archives = filter_all_archives_user_has_access(
-            super().get_queryset(), request.user)
+            super().get_queryset(), request.user
+        )
         archive = get_object_or_404(archives, pk=pk)
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
@@ -275,8 +277,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return self.make_paginated_response(collections, CollectionSerializer)
 
-    @action(detail=True, methods=["POST"],
-            url_path="save-manifest", url_name="save-manifest")
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="save-manifest",
+        url_name="save-manifest",
+    )
     def archive_save_manifest(self, request, pk=None):
         """
         Update the manifest for the specified Archive with the given content
@@ -330,8 +336,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = None
             return Response()
 
-    @action(detail=True, methods=["POST"],
-            url_path="unstage", url_name="sgl-unstage")
+    @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
         Unstages the passed Archive
@@ -346,8 +351,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(serializer.data)
 
     @extend_schema(operation_id="mlt-unstage")
-    @action(detail=False, methods=["POST"],
-            url_path="unstage", url_name="mlt-unstage")
+    @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
         Unstages passed Archives, creates a job Tag for all of them
@@ -394,8 +398,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
 
     @extend_schema(request=SourceRecordSerializer, responses=ArchiveSerializer)
-    @action(detail=False, methods=["POST"],
-            url_path="create/harvest", url_name="create-harvest")
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="create/harvest",
+        url_name="create-harvest",
+    )
     def archive_create_by_harvest(self, request):
         """
         Creates an Archive triggering its own harvesting, given the Source and Record ID
@@ -453,7 +461,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archives = Archive.objects.filter(staged=True, creator=request.user)
         pagination = request.GET.get("paginated", "true")
-        print(pagination)
+
         if pagination == "false":
             return Response(ArchiveSerializer(archives, many=True).data)
         else:
@@ -655,6 +663,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows to create UploadJobs, add files, and submit
     """
+
     queryset = UploadJob.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
@@ -668,16 +677,14 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             # (the tmp dir handled by Django gets deleted at context exit)
             # a unique name is required for the tmp dir
             random_name = "".join(random.choices(string.ascii_lowercase, k=8))
-            while os.path.exists(os.path.join("/oais_platform/tmp/", random_name)):
+            while os.path.exists(os.path.join("/tmp/", random_name)):
                 random_name = "".join(random.choices(string.ascii_lowercase, k=8))
 
-            tmp_dir = os.path.join("/oais_platform/tmp/", random_name)
+            tmp_dir = os.path.join("/tmp/", random_name)
             os.makedirs(tmp_dir)
 
             uj = UploadJob.objects.create(
-                creator=request.user,
-                tmp_dir=tmp_dir,
-                files=json.dumps({})
+                creator=request.user, tmp_dir=tmp_dir, files=json.dumps({})
             )
             uj.save()
 
@@ -733,15 +740,11 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             step.id,
             uj_id=uj.id,
             input_data=uj.tmp_dir,
-            create_sip=request.data["create_sip"]
+            create_sip=request.data["create_sip"],
         )
 
         return Response(
-            {
-                "status": 0,
-                "archive": archive.id,
-                "msg": "Data submitted for upload"
-            }
+            {"status": 0, "archive": archive.id, "msg": "Data submitted for upload"}
         )
 
 
