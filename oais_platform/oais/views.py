@@ -387,7 +387,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
-        Unstages passed Archives, creates a job Tag for all of them
+        Unstages the passed Archives, setting them to the Harvest stage, waiting to be approved.Archives are also grouped under the same job tag
         """
         archives = request.data["archives"]
 
@@ -406,7 +406,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
             )
 
-        return Response(archives)
+        serializer = CollectionSerializer(
+            job_tag,
+            many=False,
+        )
+        return Response(serializer.data)
+
 
     # no @action to have recid and source variables in the url
     def archive_create(self, request, recid, source):
