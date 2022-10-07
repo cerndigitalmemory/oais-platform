@@ -57,19 +57,24 @@ urlpatterns = [
                     "api-auth/",
                     include("rest_framework.urls", namespace="rest_framework"),
                 ),
+
                 # CERN SSO through OpenID Connect
                 path("oidc/", include("mozilla_django_oidc.urls")),
+
                 # Conventional login/logout ("local" accounts)
                 path("login/", views.login, name="login"),
                 path("logout/", views.logout, name="logout"),
+
                 # API
                 path("", include(router.urls)),
+
                 path(
                     "users/me/staging-area/",
-                    views.ArchiveViewSet.as_view(
-                        {"get": "get_staging_area", "post": "add_to_staging_area"}
-                    ),
-                    name="staging_area",
+                    views.ArchiveViewSet.as_view({
+                        "get": "get_staging_area",
+                        "post": "add_to_staging_area"
+                    }),
+                    name="staging_area"
                 ),
                 path(
                     "archives/create/<str:recid>/<str:source>/",
