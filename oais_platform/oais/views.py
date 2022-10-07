@@ -164,7 +164,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         filtered_steps = filter_steps_by_user_perms(steps, request.user)
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
-
+    
     @action(detail=False, url_path="me/sources", url_name="me-sources")
     def get_source_status(self, request):
         """
@@ -723,7 +723,6 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows to create UploadJobs, add files, and submit
     """
-
     queryset = UploadJob.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
