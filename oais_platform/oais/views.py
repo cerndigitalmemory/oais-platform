@@ -203,6 +203,44 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(data)
 
+    @action(detail=False, url_path="me/sources", url_name="me-sources")
+    def get_source_status(self, request):
+        """
+        Returns a collection of (read-only) the status of each supported source.
+        """
+
+        profile = Profile.objects.get(user=request.user)
+
+        indico_api_key = profile.indico_api_key
+        codimd_api_key = profile.codimd_api_key
+        sso_comp_token = profile.sso_comp_token
+
+        data = {}
+
+        READY = 1
+        NEEDS_CONFIG_PRIVATE = 2
+        NEEDS_CONFIG = 3
+        NOT_AVAILABLE = 4
+
+        data["inveniordm"] = READY
+        data["cod"] = READY
+        data["zenodo"] = READY
+
+        if indico_api_key:
+            data["indico"] = READY
+        else:
+            data["indico"] = NEEDS_CONFIG_PRIVATE
+        if codimd_api_key:
+            data["codimd"] = READY
+        else:
+            data["codimd"] = NEEDS_CONFIG
+        if sso_comp_token:
+            data["cds"] = READY
+        else:
+            data["cds"] = NEEDS_CONFIG_PRIVATE
+
+        return Response(data)
+
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -723,6 +761,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows to create UploadJobs, add files, and submit
     """
+
     queryset = UploadJob.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
