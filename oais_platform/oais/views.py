@@ -24,6 +24,7 @@ from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     Archive,
     Collection,
+    Profile,
     Status,
     Step,
     Steps,
@@ -162,6 +163,49 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         filtered_steps = filter_steps_by_user_perms(steps, request.user)
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
+   
+    @action(detail=False, url_path="me/sources", url_name="me-sources")
+    def get_source_status(self, request):
+        """
+        Exposes the configuration status of the various upstream sources supported by
+        the platform.
+        """
+
+        profile = Profile.objects.get(user=request.user)
+
+        indico_api_key = profile.indico_api_key
+        codimd_api_key = profile.codimd_api_key
+        sso_comp_token = profile.sso_comp_token
+
+        data = {}
+
+        # Ready means that the source is configure for both private and public records
+        READY = 1
+        # The source works, but for it to return private results to it needs additional configuration
+        NEEDS_CONFIG_PRIVATE = 2
+        # The source is lacking mandatory configuration values and it won't work in this state
+        NEEDS_CONFIG = 3
+
+        data["inveniordm"] = READY
+        data["cod"] = READY
+        data["zenodo"] = READY
+
+        if indico_api_key:
+            data["indico"] = READY
+        else:
+            data["indico"] = NEEDS_CONFIG_PRIVATE
+        if codimd_api_key:
+            data["codimd"] = READY
+        else:
+            data["codimd"] = NEEDS_CONFIG
+        if sso_comp_token:
+            data["cds"] = READY
+        else:
+            data["cds"] = NEEDS_CONFIG_PRIVATE
+
+        # TODO: Additional checks can be added here to verify the functioning
+        # (e.g. pinging an endpoint to see if it can be authenticated)
+        return Response(data)
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
