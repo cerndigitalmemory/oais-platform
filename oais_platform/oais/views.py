@@ -167,7 +167,8 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=False, url_path="me/sources", url_name="me-sources")
     def get_source_status(self, request):
         """
-        Returns a collection of (read-only) the status of each supported source.
+        Exposes the configuration status of the various upstream sources supported by
+        the platform.
         """
 
         profile = Profile.objects.get(user=request.user)
@@ -178,10 +179,12 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         data = {}
 
+        # Ready means that the source is configure for both private and public records
         READY = 1
+        # The source works, but for it to return private results to it needs additional configuration
         NEEDS_CONFIG_PRIVATE = 2
+        # The source is lacking mandatory configuration values and it won't work in this state
         NEEDS_CONFIG = 3
-        NOT_AVAILABLE = 4
 
         data["inveniordm"] = READY
         data["cod"] = READY
@@ -200,6 +203,8 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         else:
             data["cds"] = NEEDS_CONFIG_PRIVATE
 
+        # TODO: Additional checks can be added here to verify the functioning
+        # (e.g. pinging an endpoint to see if it can be authenticated)
         return Response(data)
 
 
