@@ -108,7 +108,7 @@ def filter_records_by_user_perms(queryset, user):
 
 def has_user_archive_edit_rights(archive_id, user):
     """
-    Return
+    Returns true if the user has access rights for the archive or they are the creator of the archive
     """
     archive = Archive.objects.get(pk=archive_id)
     if not user.has_perm("oais.can_access_all_archives"):
