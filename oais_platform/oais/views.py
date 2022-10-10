@@ -41,6 +41,7 @@ from oais_platform.oais.permissions import (
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
     filter_steps_by_user_perms,
+    has_user_archive_edit_rights,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -527,7 +528,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = request.data["archive"]
 
         if int(next_step) in Steps:
-            next_step = create_step(next_step, pk, archive["last_step"])
+            if has_user_archive_edit_rights(pk, request.user):
+                next_step = create_step(next_step, pk, archive["last_step"])
+            else:
+                raise Exception("User has no rights to perform a step for this archive")
         else:
             raise Exception("Wrong Step input")
 

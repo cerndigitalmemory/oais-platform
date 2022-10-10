@@ -2,6 +2,8 @@ from guardian.shortcuts import get_objects_for_user
 from itertools import chain
 from django.db.models import Q
 
+from oais_platform.oais.models import Archive
+
 
 def filter_archives_by_user_creator(queryset, user):
     """Filters a queryset of archives based on the user's permissions.
@@ -102,3 +104,14 @@ def filter_records_by_user_perms(queryset, user):
     if not user.has_perm("oais.can_access_all_archives"):
         queryset = queryset.filter(creator=user)
     return queryset
+
+
+def has_user_archive_edit_rights(archive_id, user):
+    """
+    Return
+    """
+    archive = Archive.objects.get(pk=archive_id)
+    if not user.has_perm("oais.can_access_all_archives"):
+        if archive.creator != user:
+            return False
+    return True
