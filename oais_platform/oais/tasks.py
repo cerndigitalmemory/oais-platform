@@ -424,14 +424,10 @@ def checksum(self, archive_id, step_id, input_data):
                     splited = checksum.split(":")
                     checksum = splited[0] + ":" + "0"
                     checksum_list.append(checksum)
-            except Exception:
-                if (
-                    file["origin"]["filename"] == "bagitcreate.log"
-                    or file["origin"]["filename"] == "sip.json"
-                ):
-                    pass
-                else:
-                    return {"status": 1}
+            except KeyError as e:
+                current_file = file["origin"]["filename"]
+                logger.info(f"Checksum not found for file {current_file}")
+                
 
     logger.info("Checksum completed!")
 
