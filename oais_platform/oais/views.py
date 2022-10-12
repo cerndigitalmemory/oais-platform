@@ -410,6 +410,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         archive.set_unstaged()
 
+        step = Step.objects.create(
+                archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+            )
+
+        process.delay(step.archive.id, step.id)
+
         serializer = ArchiveSerializer(
             archive,
             many=False,
@@ -435,10 +441,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive = Archive.objects.get(id=archive["id"])
             archive.set_unstaged()
             job_tag.add_archive(archive)
-
-            Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
+            
+            step = Step.objects.create(
+                archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
             )
+            # Step is auto-approved and harvest step runs
+            process.delay(step.archive.id, step.id)
 
         serializer = CollectionSerializer(
             job_tag,
