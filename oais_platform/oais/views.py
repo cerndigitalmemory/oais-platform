@@ -6,8 +6,10 @@ import tempfile
 import time
 import zipfile
 from pathlib import PurePosixPath
+from shutil import make_archive
 from threading import local
 from urllib.parse import unquote, urlparse
+from wsgiref.util import FileWrapper
 
 from bagit_create import main as bic
 from click import pass_context
@@ -17,6 +19,7 @@ from django.contrib.auth.models import Group, User
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
@@ -256,6 +259,32 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = get_object_or_404(archives, pk=pk)
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
+    
+    @action(detail=True, url_path="download/sip", url_name="download-sip")
+    def download_sip(self, request, pk=None):
+        """
+        Download Archive SIP
+        """
+        # Fetch Archive
+        archives = filter_all_archives_user_has_access(
+            super().get_queryset(), request.user)
+        archive = get_object_or_404(archives, pk=pk)
+        serializer = self.get_serializer(archive)
+
+        # If the logged in user is the creator of the Archive
+        if (request.user.id is archive.creator.id):
+            # Prepare the ZIP archive of the SIP
+            files_path = serializer.data["path_to_sip"]
+            file_name = f"{pk}-sip.zip"
+            path_to_zip = make_archive(files_path, "zip", files_path)
+            response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
+            response['Content-Disposition'] = 'attachment; filename="{filename}.zip"'.format(
+                filename = file_name
+            )
+            return response
+        else:
+            return HttpResponse(status=500)
+    
 
     @action(detail=False, methods=["POST"], url_path="details", url_name="mlt-details")
     def archives_details(self, request):
