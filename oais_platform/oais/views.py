@@ -278,7 +278,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             file_name = f"{pk}-sip.zip"
             path_to_zip = make_archive(files_path, "zip", files_path)
             response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
-            response['Content-Disposition'] = 'attachment; filename="{filename}.zip"'.format(
+            response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
                 filename = file_name
             )
             return response
