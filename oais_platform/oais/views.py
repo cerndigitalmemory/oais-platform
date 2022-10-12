@@ -234,16 +234,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         visibility = self.request.GET.get("filter", "all")
 
         if visibility == "public":
-            return filter_archives_public(super().get_queryset())
+            return filter_archives_public(super().get_queryset().filter(staged=False))
         elif visibility == "owned":
             return filter_archives_by_user_creator(
-                super().get_queryset(), self.request.user
+                super().get_queryset().filter(staged=False), self.request.user
             )
         elif visibility == "private":
-            return filter_archives_for_user(super().get_queryset(), self.request.user)
+            return filter_archives_for_user(super().get_queryset().filter(staged=False), self.request.user)
         else:
             return filter_all_archives_user_has_access(
-                super().get_queryset(), self.request.user
+                super().get_queryset().filter(staged=False), self.request.user
             )
 
     @action(detail=True, url_path="details", url_name="sgl-details")
@@ -469,14 +469,18 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
         )
 
-    @action(detail=True, url_path="delete", url_name="delete")
+    @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
         Deletes the passed Archive
         """
-        archive = self.get_object()
-        archive.delete()
-        return Response()
+        archive = Archive.objects.get(pk=pk)
+        if archive.creator == request.user or request.user.has_perm("oais.can_access_all_archives"):
+            archive.delete()
+            return Response()
+        else:
+            raise PermissionDenied()
+        
 
     @action(detail=True, methods=["POST"], url_path="next-step", url_name="next-step")
     def archive_next_step(self, request, pk=None):
