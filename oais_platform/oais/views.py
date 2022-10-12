@@ -457,11 +457,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except InvalidSource:
             raise BadRequest("Invalid source: ", source)
 
-        # If the source is CodiMD always make a restricted archive
-        if source == "codimd":
-            restricted = True
-        else:
-            restricted = False
 
         # Always create a new archive instance
         archive = Archive.objects.create(
@@ -469,7 +464,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source=source,
             source_url=url,
             creator=request.user,
-            restricted=restricted,
+            restricted=True,
         )
 
 
