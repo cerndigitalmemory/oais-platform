@@ -457,13 +457,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except InvalidSource:
             raise BadRequest("Invalid source: ", source)
 
+
         # Always create a new archive instance
         archive = Archive.objects.create(
             recid=recid,
             source=source,
             source_url=url,
             creator=request.user,
+            restricted=True,
         )
+
 
         return redirect(
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
