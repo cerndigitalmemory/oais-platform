@@ -283,7 +283,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             )
             return response
         else:
-            return HttpResponse(status=500)
+            return HttpResponse(status=401)
     
 
     @action(detail=False, methods=["POST"], url_path="details", url_name="mlt-details")
