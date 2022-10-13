@@ -111,7 +111,9 @@ def has_user_archive_edit_rights(archive_id, user):
     Returns true if the user has access rights for the archive or they are the creator of the archive
     """
     archive = Archive.objects.get(pk=archive_id)
-    if not user.has_perm("oais.can_access_all_archives"):
-        if archive.creator != user:
-            return False
-    return True
+    if user.has_perm("oais.can_access_all_archives"):
+        return True
+    elif archive.creator == user:
+        return True
+    else:
+        return False
