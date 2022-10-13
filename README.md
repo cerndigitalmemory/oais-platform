@@ -126,6 +126,8 @@ Code is formatted using **black** and linted with **flake8**. A VSCode settings 
 
 To enable the CERN SSO login, set Client ID and Client Secret from your application on https://application-portal.web.cern.ch/. Documentation can be found at https://auth.docs.cern.ch/applications/sso-registration/.
 
+When adding a new "CERN SSO Registration" select OIDC. The redirect URI should be pointing to the `/api/oidc/callback/` endpoint (e.g. `https://<NAME>.web.cern.ch/api/oidc/callback/`) and the Base URL should be something like `https://<NAME>.web.cern.ch`.
+
 ```bash
 # Secrets for OpenID Connect
 export OIDC_RP_CLIENT_ID="Put here the Client ID"
