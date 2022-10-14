@@ -11,6 +11,7 @@ from distutils.dir_util import copy_tree, mkpath
 from lib2to3.pgen2.token import RPAR
 from logging import log
 from urllib.parse import urljoin
+from urllib.error import HTTPError
 
 import requests
 from amclient import AMClient
@@ -496,35 +497,82 @@ def archivematica(self, archive_id, step_id, input_data):
     )
 
     try:
-        # After 2 seconds check if the folder has been transfered to archivematica
         package = am.create_package()
+        logging.info(f"Package {package} created successfully")
         if package == 3:
             """
-            In case there is an error in the request (Error 400, Error 404 etc),
+            In case archivematica is not connected (Error 500, Error 502 etc),
             archivematica returns as a result the number 3. By filtering the result in that way,
-            we know if am.create_package was executed successfully
+            we know if am.get_unit_status was executed successfully
             """
             logger.error(
                 f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
+            current_step.set_output_data(
+                {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+            )
             return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+        elif package == 1:
+            """
+            In case there is an error in the request (Error 400, Error 404 etc),
+            archivematica returns as a result the number 1. By filtering the result in that way,
+            we know if am.get_unit_status was executed successfully
+            """
+            logger.error(
+                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+            )
+            current_step.set_status(Status.FAILED)
+            current_step.set_output_data(
+                {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+            )
+            return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+        else:
+            step = Step.objects.get(pk=step_id)
+            step.set_status(Status.WAITING)
 
-        step = Step.objects.get(pk=step_id)
-        step.set_status(Status.WAITING)
-
-        # Create the scheduler (sets every 10 seconds)
-        schedule = IntervalSchedule.objects.create(
-            every=60, period=IntervalSchedule.SECONDS
-        )
-        # Create a periodic task that checks the status of archivematica avery 10 seconds.
-        PeriodicTask.objects.create(
-            interval=schedule,
-            name=f"Archivematica status for step: {current_step.id}",
-            task="check_am_status",
-            args=json.dumps([package, current_step.id, archive_id.id, transfer_name]),
-            expires=timezone.now() + timedelta(minutes=600),
-        )
+            # Create the scheduler (sets every 10 seconds)
+            schedule = IntervalSchedule.objects.create(
+                every=10, period=IntervalSchedule.SECONDS
+            )
+            # Create a periodic task that checks the status of archivematica.
+            PeriodicTask.objects.create(
+                interval=schedule,
+                name=f"Archivematica status for step: {current_step.id}",
+                task="check_am_status",
+                args=json.dumps(
+                    [package, current_step.id, archive_id.id, transfer_name]
+                ),
+                expires=timezone.now() + timedelta(minutes=600),
+            )
+    except requests.HTTPError as e:
+        if e.request.status_code == 403:
+            """
+            In case of error 403: Authentication issues (wrong credentials)
+            """
+            logger.error(
+                f"Error while archiving {current_step.id}. Check your archivematica credentials."
+            )
+            current_step.set_status(Status.FAILED)
+            current_step.set_output_data(
+                {"status": 1, "errormsg": "Check your archivematica credentials."}
+            )
+            return {"status": 1, "errormsg": "Check your archivematica credentials."}
+        else:
+            logger.error(
+                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+            )
+            current_step.set_status(Status.FAILED)
+            current_step.set_output_data(
+                {
+                    "status": 1,
+                    "errormsg": "Check your archivematica settings configuration.",
+                }
+            )
+            return {
+                "status": 1,
+                "errormsg": "Check your archivematica settings configuration.",
+            }
 
     except Exception as e:
         logger.error(
@@ -563,42 +611,48 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
         try:
             am_status = am.get_unit_status(message["id"])
-        except TypeError as e:
-            if message == 1:
-                """
-                In case archivematica is not connected (Error 500, Error 502 etc),
-                archivematica returns as a result the number 1. By filtering the result in that way,
-                we know if am.get_unit_status was executed successfully
-                """
-                step.set_output_data({"status": 1, "errormsg": e})
-                step.set_status(Status.FAILED)
-                periodic_task = PeriodicTask.objects.get(name=task_name)
-                periodic_task.delete()
-
-            if message == 3:
-                """
-                In case there is an error in the request (Error 400, Error 404 etc),
-                archivematica returns as a result the number 3. By filtering the result in that way,
-                we know if am.get_unit_status was executed successfully
-                """
-                step.set_output_data({"status": 1, "errormsg": e})
-                step.set_status(Status.FAILED)
-                periodic_task = PeriodicTask.objects.get(name=task_name)
-                periodic_task.delete()
-
-            if step.status == Status.NOT_RUN:
-                # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
-                am_status = {
-                    "status": "PROCESSING",
-                    "microservice": "Waiting for upload",
-                    "path": "",
-                    "directory": "",
-                    "name": "Pending...",
-                    "uuid": "Pending...",
-                    "message": "Waiting for upload to Archivematica",
-                }
-
-            logger.warning("Error while checking archivematica status: ", e)
+            logging.info(f"Current unit status for {am_status}")
+        except requests.HTTPError as e:
+            logging.info(f"Error {e.response.status_code} for archivematica")
+            if e.response.status_code == 400:
+                if step.status == Status.WAITING:
+                    # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
+                    am_status = {
+                        "status": "PROCESSING",
+                        "microservice": "Waiting for archivematica to respond",
+                        "path": "",
+                        "directory": "",
+                        "name": "Pending...",
+                        "uuid": "Pending...",
+                        "message": "Waiting for upload to Archivematica",
+                    }
+                    step.set_status(Status.IN_PROGRESS)
+                    logging.info(f"Current unit status for {am_status}")
+                else:
+                    # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
+                    # This is usually because archivematica may not have access to the file or the transfer source is not correct.
+                    step.set_output_data(
+                        {
+                            "status": 1,
+                            "errormsg": "Archivematica did not respond to package creation. Check transfer file and transfer source configuration",
+                        }
+                    )
+                    remove_periodic_task(periodic_task, step)
+            else:
+                # If there is other type of error code then archivematica connection could not be establissed.
+                step.set_output_data(
+                    {
+                        "status": 1,
+                        "errormsg": "Error: Could not connect to archivematica",
+                    }
+                )
+                remove_periodic_task(periodic_task, step)
+        except Exception as e:
+            """
+            In any other case make task fail (Archivematica crashed or not responding)
+            """
+            step.set_output_data({"status": 1, "errormsg": e})
+            remove_periodic_task(periodic_task, step)
 
         status = am_status["status"]
         microservice = am_status["microservice"]
@@ -655,12 +709,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 step.set_status(Status.IN_PROGRESS)
 
         elif status == "FAILED" and microservice == "Move to the failed directory":
-            step.set_status(Status.FAILED)
+            remove_periodic_task(periodic_task, step)
 
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-
-        elif status == "PROCESSING":
+        elif status == "PROCESSING" and "Waiting for upload":
             step.set_status(Status.IN_PROGRESS)
 
         step.set_output_data(am_status)
@@ -670,9 +721,16 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
             f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
         )
         logger.warning(e)
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-        periodic_task.delete()
-        step.set_status(Status.FAILED)
+        remove_periodic_task(periodic_task, step)
+
+
+def remove_periodic_task(periodic_task, step):
+    """
+    Sets step as failed and removes the scheduling task
+    """
+    step.set_status(Status.FAILED)
+    logger.warning(f"Step {step.id} failed. Step status: {step.status}")
+    periodic_task.delete()
 
 
 def initialize_data(archive):
