@@ -631,6 +631,8 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 else:
                     # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
                     # This is usually because archivematica may not have access to the file or the transfer source is not correct.
+                    am_status["status"] = "FAILED"
+                    am_status["microsrver"] = "Archivematica delayed to respond."
                     step.set_output_data(
                         {
                             "status": 1,
