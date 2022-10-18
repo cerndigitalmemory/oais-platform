@@ -260,32 +260,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = get_object_or_404(archives, pk=pk)
         serializer = self.get_serializer(archive)
         return Response(serializer.data)
-    
-    @action(detail=True, url_path="download/sip", url_name="download-sip")
-    def download_sip(self, request, pk=None):
-        """
-        Download Archive SIP
-        """
-        # Fetch Archive
-        archives = filter_all_archives_user_has_access(
-            super().get_queryset(), request.user)
-        archive = get_object_or_404(archives, pk=pk)
-        serializer = self.get_serializer(archive)
-
-        # If the logged in user is the creator of the Archive
-        if (request.user.id is archive.creator.id):
-            # Prepare the ZIP archive of the SIP
-            files_path = serializer.data["path_to_sip"]
-            file_name = f"{pk}-sip.zip"
-            path_to_zip = make_archive(files_path, "zip", files_path)
-            response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
-            response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
-                filename = file_name
-            )
-            return response
-        else:
-            return HttpResponse(status=401)
-    
 
     @action(detail=False, methods=["POST"], url_path="details", url_name="mlt-details")
     def archives_details(self, request):
@@ -608,6 +582,36 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(step)
         return Response(serializer.data)
+
+    @action(detail=True, url_path="download-artifact", url_name="download-artifact")
+    def download_artifact(self, request, pk=None):
+        step = self.get_object()
+
+        if (request.user.id is not step.archive.creator.id):
+            return HttpResponse(status=401)
+
+        output_data = json.loads(step.output_data)
+        # If this step has an "Artifact" in the output
+        if "artifact" in output_data:
+            # If this artifact has a path
+            if "artifact_localpath" in output_data["artifact"]:
+                files_path = output_data["artifact"]["artifact_localpath"]
+                if output_data["artifact"]["artifact_name"] == "SIP":
+                    file_name = f"{pk}-sip.zip"
+                    path_to_zip = make_archive(files_path, "zip", files_path)
+                    response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
+                    response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
+                        filename = file_name
+                    )
+                    return response
+                elif output_data["artifact"]["artifact_name"] == "AIP":
+                    file_name = f"{pk}-aip.7z"
+                    response = HttpResponse(FileWrapper(open(files_path, 'rb')), content_type='application/x-7z-compressed')
+                    response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
+                        filename = file_name
+                    )
+                    return response
+        return HttpResponse(status=404)
 
     @action(detail=True, methods=["POST"], url_path="approve", url_name="approve")
     def approve(self, request, pk=None):

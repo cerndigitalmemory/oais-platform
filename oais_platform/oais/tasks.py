@@ -157,7 +157,7 @@ def create_step(step_name, archive_id, input_step_id=None):
     return step
 
 
-def create_path_artifact(name, path):
+def create_path_artifact(name, path, localpath):
     """
     Given a step, the name and the path artifact and the description,
     """
@@ -171,6 +171,7 @@ def create_path_artifact(name, path):
     return {
         "artifact_name": name,
         "artifact_path": path,
+        "artifact_localpath": localpath,
         "artifact_url": url,
     }
 
@@ -362,7 +363,7 @@ def process(self, archive_id, step_id, input_data=None):
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
-        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name)
+        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name), sip_folder_name
     )
 
     bagit_result["artifact"] = output_artifact
@@ -625,7 +626,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                     am_status["aip_path"] = aip_path
 
                     path_artifact = create_path_artifact(
-                        "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path)
+                        "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
                     )
 
             # If the path artifact is found return complete otherwise set in progress and try again
