@@ -99,7 +99,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Update the next possible steps
             next_steps = archive.update_next_steps(step.name)
 
-            if len(next_steps) == 1:
+            # Automatically run next step ONLY if next_steps length is one and
+            # current step is UPLOAD, HARVEST, CHECKSUM or VALIDATE
+            if len(next_steps) == 1 and step.name in [1, 2, 3, 4]:
                 create_step(next_steps[0], archive_id, step_id)
         else:
             step.set_status(Status.FAILED)
@@ -430,7 +432,6 @@ def checksum(self, archive_id, step_id, input_data):
             except KeyError as e:
                 current_file = file["origin"]["filename"]
                 logger.info(f"Checksum not found for file {current_file}")
-                
 
     logger.info("Checksum completed!")
 
