@@ -190,22 +190,37 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         # The source is lacking mandatory configuration values and it won't work in this state
         NEEDS_CONFIG = 3
 
-        data["inveniordm"] = READY
-        data["cod"] = READY
-        data["zenodo"] = READY
+        data = {
+            "zenodo": {
+                "status" : READY,
+                "name": "Zenodo"
+            },
+            "indico": {
+                "name": "Indico"
+            },
+            "codimd": {
+                "name": "CodiMD"
+            },
+            "cds":{
+                "name": "CERN Document Server"
+            }
+        }
+
+
+        data["zenodo"]["status"] = READY
 
         if indico_api_key:
-            data["indico"] = READY
+            data["indico"]["status"] = READY
         else:
-            data["indico"] = NEEDS_CONFIG_PRIVATE
+            data["indico"]["status"] = NEEDS_CONFIG_PRIVATE
         if codimd_api_key:
-            data["codimd"] = READY
+            data["codimd"]["status"] = READY
         else:
-            data["codimd"] = NEEDS_CONFIG
+            data["codimd"]["status"] = NEEDS_CONFIG
         if sso_comp_token:
-            data["cds"] = READY
+            data["cds"]["status"] = READY
         else:
-            data["cds"] = NEEDS_CONFIG_PRIVATE
+            data["cds"]["status"] = NEEDS_CONFIG_PRIVATE
 
         # TODO: Additional checks can be added here to verify the functioning
         # (e.g. pinging an endpoint to see if it can be authenticated)
