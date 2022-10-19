@@ -232,6 +232,7 @@ def invenio(self, archive_id, step_id, input_data=None):
         relative_path = f"/records/{invenio_id}"
 
         # Create a path artifact with a link to the InvenioRDM Record we just created
+        # FIXME: Use a single method to create artifacts
         output_invenio_artifact = {
             "artifact_name": "Invenio Link",
             "artifact_path": "test",
@@ -298,6 +299,7 @@ def invenio(self, archive_id, step_id, input_data=None):
         archive.save()
 
         # Create a InvenioRDM path artifact with a link to the new version
+        # FIXME: Use a single method to create artifacts
         relative_path = f"/records/{new_version_invenio_id}"
         output_invenio_artifact = {
             "artifact_name": "Invenio Link",

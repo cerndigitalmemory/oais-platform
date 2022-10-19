@@ -594,9 +594,11 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         # If this step has an "Artifact" in the output
         if "artifact" in output_data:
             # If this artifact has a path
+            # FIXME: It shouldn't be needed to have different behaviours based on the type of the artifact
             if "artifact_localpath" in output_data["artifact"]:
-                files_path = output_data["artifact"]["artifact_localpath"]
                 if output_data["artifact"]["artifact_name"] == "SIP":
+                    # FIXME: Workaround, until the artifact creation/schema is decided
+                    files_path = output_data["artifact"]["artifact_localpath"]
                     file_name = f"{pk}-sip.zip"
                     path_to_zip = make_archive(files_path, "zip", files_path)
                     response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
@@ -605,6 +607,8 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     )
                     return response
                 elif output_data["artifact"]["artifact_name"] == "AIP":
+                    # FIXME: Workaround, until the artifact creation/schema is decided
+                    files_path = output_data["artifact"]["artifact_path"]
                     file_name = f"{pk}-aip.7z"
                     response = HttpResponse(FileWrapper(open(files_path, 'rb')), content_type='application/x-7z-compressed')
                     response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
