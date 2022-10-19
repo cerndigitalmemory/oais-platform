@@ -554,6 +554,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     creator=request.user,
                     staged=True,
+                    restricted=True,
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
