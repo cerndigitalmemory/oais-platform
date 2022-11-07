@@ -499,7 +499,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
         )
 
-    @action(detail=True, url_path="delete", url_name="delete")
+    @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
         Deletes the passed Archive
