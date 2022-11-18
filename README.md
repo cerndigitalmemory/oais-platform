@@ -51,32 +51,38 @@ A docker-compose setup is provided in this repository, bringing up the following
 | oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
 | oais_nginx     | Nginx      | Reverse Proxy                   | [:80](http://localhost:80)     |
 
-To quickly setup a development instance, featuring hot-reloading on the backend:
+To quickly setup a development instance, featuring hot-reloading on the backend and the frontend:
 
 ```bash
 # Start by cloning oais-platform
 git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-platform.git
-# Inside it, clone oais-web
-git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git oais-platform/oais-web
-# Build the web application
-cd oais-platform/oais-web
-npm install --force
-npm run build
-# Go back to the oais-platform folder and launch the docker compose setup
-cd ..
+# cd into the cloned folder
+cd oais-platform
+# Bring up the backend and the services:
 docker-compose up
+# From another shell in the same folder and clone there the frontend:
+git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git
+# cd into the cloned folder
+cd oais-web
+# Install npm dependencies
+npm install --force
+# Start an hot-reloading webpack build:
+npm run serve
+# This will spawn a tab on `localhost:3000`, but we actually want the React app served through nginx, so ignore that
 ```
-
-Node version 14.19.3 or newer is required for for building the web application (use `node -v` to check the current version).
-
-> If you also want the React application to hot-reload on file modifications, instead of running `npm run build`, keep a shell open and run `npm run serve`. Please note that by default this will open `localhost:3000`, but we actually want the React app served through nginx, so ignore that tab.
 
 The following endpoints are then available, on `localhost`:
 
-- `/` - Oais-web React application
-- `/api` - Base OAIS Platform API endpoint
-- `/api/schema` - OpenAPI 3 specification of the API
-- `/api/schema/swagger-ui/` - Swagger UI documentation for the API
+- `http://localhost/` - Oais-web React application
+- `http://localhost/api` - Base OAIS Platform API endpoint
+- `http://localhost/api/schema` - OpenAPI 3 specification of the API
+- `http://localhost/api/schema/swagger-ui/` - Swagger UI documentation for the API
+
+Some remarks:
+
+- Node version 14.19.3 or newer is required for for building the web application (use `node -v` to check the current version).
+- `npm install --force` is required
+- Any changes to the nginx configuration (in nginx/docker.conf) require you to rebuild the image (or shell into the nginx container, edit the file and then `nginx -s reload`)
 
 ### Helper commands
 
