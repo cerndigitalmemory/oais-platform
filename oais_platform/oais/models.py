@@ -20,6 +20,7 @@ class Profile(models.Model):
     indico_api_key = models.TextField(max_length=500, blank=True)
     codimd_api_key = models.TextField(max_length=500, blank=True)
     sso_comp_token = models.TextField(max_length=500, blank=True)
+    claims = models.TextField(max_length=500, blank=True)
 
     class Meta:
         permissions = [
@@ -31,6 +32,9 @@ class Profile(models.Model):
             setattr(self, key, data[key])
         self.save()
 
+    def update_claims(self, data):
+        setattr(self, "claims", data)
+        self.save()
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

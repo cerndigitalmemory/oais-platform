@@ -27,10 +27,12 @@ class CERNAuthenticationBackend(OIDCAuthenticationBackend):
         username = claims["cern_upn"]
         email = claims["email"]
         user = self.UserModel.objects.create_user(username, email=email)
+        
         return self.update_user(user, claims)
 
     def update_user(self, user, claims):
         user.first_name = claims["given_name"]
         user.last_name = claims["family_name"]
+        user.profile.update_claims(claims)
         user.save()
         return user
