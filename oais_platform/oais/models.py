@@ -7,6 +7,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 from oais_platform.settings import INVENIO_SERVER_URL
+from django.contrib.postgres.fields import ArrayField
 
 from . import pipeline
 
@@ -20,7 +21,8 @@ class Profile(models.Model):
     indico_api_key = models.TextField(max_length=500, blank=True)
     codimd_api_key = models.TextField(max_length=500, blank=True)
     sso_comp_token = models.TextField(max_length=500, blank=True)
-    claims = models.TextField(max_length=500, blank=True)
+    # make sure default here is a callable returning a list
+    cern_roles = ArrayField(models.CharField(max_length=500), default=list, blank=True)
 
     class Meta:
         permissions = [
@@ -32,8 +34,8 @@ class Profile(models.Model):
             setattr(self, key, data[key])
         self.save()
 
-    def update_claims(self, data):
-        setattr(self, "claims", data)
+    def update_roles(self, data):
+        setattr(self, "cern_roles", data)
         self.save()
 
 @receiver(post_save, sender=User)
