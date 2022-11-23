@@ -83,6 +83,7 @@ Some remarks:
 - Node version 14.19.3 or newer is required for for building the web application (use `node -v` to check the current version).
 - `npm install --force` is required
 - Any changes to the nginx configuration (in nginx/docker.conf) require you to rebuild the image (or shell into the nginx container, edit the file and then `nginx -s reload`)
+- Environment variables need to be set in the docker compose or in a `.env.dev` file. Values from the host environment will be ignored when using compose.
 
 ### Helper commands
 
