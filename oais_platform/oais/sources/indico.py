@@ -70,6 +70,8 @@ class Indico(Source):
                     self.baseURL
                     + "/search/api/search?q="
                     + query
+                    + "&type=contribution"
+                    + "&type=subcontribution"
                     + "&type=event"
                     + f"&page={api_page + actual_page}",
                     headers = self.headers
@@ -132,7 +134,7 @@ class Indico(Source):
             "source_url": url,
             "recid": recid,
             "title": record["title"],
-            "authors": record["persons"],
+            #"authors": record["persons"],
             "source": self.source,
         }
 
