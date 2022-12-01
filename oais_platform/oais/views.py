@@ -395,8 +395,13 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
-        Unstages the passed Archive
+        Unstages the passed Archive, setting them to the Harvest stage
         """
+
+        # If the user has 'can_unstage' permission and it's not a superuser, return Unauthorized
+        if not (request.user.has_perm("oais.can_unstage") or request.user.is_superuser):
+            raise BadRequest("Unauthorized")
+        
         archive = self.get_object()
         archive.set_unstaged()
 
@@ -417,9 +422,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
-        Unstages the passed Archives, setting them to the Harvest stage, waiting to be approved.Archives are also grouped under the same job tag
+        Unstages the passed Archives, setting them to the Harvest stage
+        Archives are also grouped under the same job tag
         """
         archives = request.data["archives"]
+
+        # If the user has 'can_unstage' permission and it's not a superuser, return Unauthorized
+        if not (request.user.has_perm("oais.can_unstage") or request.user.is_superuser):
+            raise BadRequest("Unauthorized")
 
         job_tag = Collection.objects.create(
             internal=True,
