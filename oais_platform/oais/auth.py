@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Permission
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
@@ -33,5 +33,24 @@ class CERNAuthenticationBackend(OIDCAuthenticationBackend):
         user.first_name = claims["given_name"]
         user.last_name = claims["family_name"]
         user.profile.update_roles(claims["cern_roles"])
+        self.update_perms(user, claims["cern_roles"])
         user.save()
+        return user
+
+    def update_perms(self, user, claims):
+        """
+        Given the user claims from SSO (granted by e-group memberships
+        configured in the SSO application), assign them permission
+        """
+        can_unstage_perm = Permission.objects.get(codename="can_unstage")
+
+        # First, reset every permission
+        user.user_permissions.remove(can_unstage_perm)
+
+        # If the user has the 'oais-admin' claim (the CERN account is in the 'oais-admin' e-group)
+        #  or the 'can-create-archive' one (the CERN account is in the 'dmp-create-archives' e-group)
+        #  give them the 'can_unstage' permission
+        if "oais-admin" in claims or "can-create-archive" in claims:
+            user.user_permissions.add(can_unstage_perm)
+
         return user
