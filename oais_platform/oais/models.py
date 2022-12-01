@@ -104,7 +104,8 @@ class Archive(models.Model):
 
     class Meta:
         ordering = ["-id"]
-        permissions = (("grant_view_right", "Grant view right"),)
+        permissions = (("grant_view_right", "Grant view right"),
+                       ("can_unstage", "Can unstage a record and start the pipeline"))
 
     def set_step(self, step_id):
         """
