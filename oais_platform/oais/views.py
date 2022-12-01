@@ -462,7 +462,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source=source,
             source_url=url,
             creator=request.user,
-            restricted=True,
         )
 
 
@@ -533,7 +532,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archives = Archive.objects.filter(staged=True, creator=request.user)
         pagination = request.GET.get("paginated", "true")
-        print(pagination)
         if pagination == "false":
             return Response(ArchiveSerializer(archives, many=True).data)
         else:
@@ -554,7 +552,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     creator=request.user,
                     staged=True,
-                    restricted=True,
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:

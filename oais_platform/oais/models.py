@@ -96,7 +96,7 @@ class Archive(models.Model):
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
-    restricted = models.BooleanField(default=False)
+    restricted = models.BooleanField(default=True)
     # A number we'll increment every time we need to publish a new version on InvenioRDM
     invenio_version = models.IntegerField(default=0)
     # Resource attached to the archive
