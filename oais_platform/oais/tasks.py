@@ -515,7 +515,7 @@ def archivematica(self, archive_id, step_id, input_data):
 
         # Create the scheduler (sets every 10 seconds)
         schedule = IntervalSchedule.objects.create(
-            every=5, period=IntervalSchedule.SECONDS
+            every=60, period=IntervalSchedule.SECONDS
         )
         # Create a periodic task that checks the status of archivematica avery 10 seconds.
         PeriodicTask.objects.create(
