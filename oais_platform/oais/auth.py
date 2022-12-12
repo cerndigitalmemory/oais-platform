@@ -40,17 +40,17 @@ class CERNAuthenticationBackend(OIDCAuthenticationBackend):
     def update_perms(self, user, claims):
         """
         Given the user claims from SSO (granted by e-group memberships
-        configured in the SSO application), assign them permission
+        configured in the SSO application), assign them permissions
         """
         can_unstage_perm = Permission.objects.get(codename="can_unstage")
 
-        # First, reset every permission
+        # First, reset every permission we map with this mechanism
         user.user_permissions.remove(can_unstage_perm)
 
         # If the user has the 'oais-admin' claim (the CERN account is in the 'oais-admin' e-group)
         #  or the 'can-create-archive' one (the CERN account is in the 'dmp-create-archives' e-group)
         #  give them the 'can_unstage' permission
-        if "oais-admin" in claims or "can-create-archive" in claims:
+        if "oais-admin" in claims or "can-create-archives" in claims:
             user.user_permissions.add(can_unstage_perm)
 
         return user
