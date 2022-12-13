@@ -481,7 +481,7 @@ def archivematica(self, archive_id, step_id, input_data):
     # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
 
-    # Get configuration from archivematica from settings
+    # Set up the AMClient to interact with the AM configuration provided in the settings
     am = AMClient()
     am.am_url = AM_URL
     am.am_user_name = AM_USERNAME
@@ -713,7 +713,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         elif status == "FAILED" and microservice == "Move to the failed directory":
             remove_periodic_task(periodic_task, step)
 
-        elif status == "PROCESSING" and "Waiting for upload":
+        elif status == "PROCESSING" and microservice == "Waiting for upload":
             step.set_status(Status.IN_PROGRESS)
 
         step.set_output_data(am_status)
