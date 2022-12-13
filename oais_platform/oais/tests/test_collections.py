@@ -4,6 +4,7 @@ from oais_platform.oais.models import Archive, Collection
 from rest_framework import status
 from rest_framework.test import APITestCase
 from oais_platform.oais.serializers import ArchiveSerializer
+from oais_platform.oais.views import check_for_tag_name_duplicate
 
 
 class CollectionTests(APITestCase):
@@ -227,3 +228,66 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(results.status_code, status.HTTP_200_OK)
         self.assertEqual(results.data["count"], 1)
+
+    def test_check_duplicate_create(self):
+        """
+        Creates one tag and then creates another one with the same name.
+        The second creation must fail.
+        """
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("tags-create")
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "test description", "archives": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("tags-create")
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "test description", "archives": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_check_duplicate_create(self):
+        """
+        Creates two tags with different names.
+        The second tag is edited and the name changes to match the first one.
+        The renaming must fail
+        """
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("tags-create")
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "test description", "archives": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("tags-create")
+        response = self.client.post(
+            url,
+            {"title": "test2", "description": "test description", "archives": None},
+            format="json",
+        )
+
+        # Get the id of the created tag
+        second_tag_id = response.data["id"]
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("tags-edit", args=[second_tag_id])
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "test description"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
