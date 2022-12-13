@@ -499,43 +499,30 @@ def archivematica(self, archive_id, step_id, input_data):
     try:
         package = am.create_package()
         logging.info(f"Package {package} created successfully")
-        if package == 3:
+        if package in [-1, 1, 2, 3, 4]:
             """
-            In case archivematica is not connected (Error 500, Error 502 etc),
-            archivematica returns as a result the number 3. By filtering the result in that way,
-            we know if am.get_unit_status was executed successfully
-            """
-            logger.error(
-                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
-            )
-            current_step.set_status(Status.FAILED)
-            current_step.set_output_data(
-                {"status": 1, "errormsg": "Wrong Archivematica configuration"}
-            )
-            return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
-        elif package == 1:
-            """
-            In case there is an error in the request (Error 400, Error 404 etc),
-            archivematica returns as a result the number 1. By filtering the result in that way,
-            we know if am.get_unit_status was executed successfully
+            The AMClient will return values in [-1, 1, 2, 3, 4] when there was an error in the request to the AM API.
+            We can't do much in these cases, a part from suggesting to take a look at the AM logs.
+            Check 'amclient/errors' for more information.
             """
             logger.error(
                 f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
+            errormsg = "AM Create package returned {package}. This may be a configuration error. Check AM logs for more information."
             current_step.set_output_data(
-                {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+                {"status": 1, "errormsg": errormsg}
             )
-            return {"status": 1, "errormsg": "Wrong Archivematica configuration"}
+            return {"status": 1, "errormsg": errormsg}
         else:
             step = Step.objects.get(pk=step_id)
             step.set_status(Status.WAITING)
 
-            # Create the scheduler (sets every 10 seconds)
+            # Create the scheduler
             schedule = IntervalSchedule.objects.create(
                 every=60, period=IntervalSchedule.SECONDS
             )
-            # Create a periodic task that checks the status of archivematica.
+            # Spawn a periodic task to check for the status of the package on AM
             PeriodicTask.objects.create(
                 interval=schedule,
                 name=f"Archivematica status for step: {current_step.id}",
@@ -551,27 +538,27 @@ def archivematica(self, archive_id, step_id, input_data):
             In case of error 403: Authentication issues (wrong credentials)
             """
             logger.error(
-                f"Error while archiving {current_step.id}. Check your archivematica credentials."
+                f"Error while archiving {current_step.id} (403). Check your archivematica credentials."
             )
             current_step.set_status(Status.FAILED)
             current_step.set_output_data(
-                {"status": 1, "errormsg": "Check your archivematica credentials."}
+                {"status": 1, "errormsg": "Check your archivematica credentials (403)."}
             )
-            return {"status": 1, "errormsg": "Check your archivematica credentials."}
+            return {"status": 1, "errormsg": "Check your archivematica credentials (403)."}
         else:
             logger.error(
-                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+                f"Error while archiving {current_step.id} ({e.request.status_code}). Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
             current_step.set_output_data(
                 {
                     "status": 1,
-                    "errormsg": "Check your archivematica settings configuration.",
+                    "errormsg": "Check your archivematica settings configuration. ({e.request.status_code})",
                 }
             )
             return {
                 "status": 1,
-                "errormsg": "Check your archivematica settings configuration.",
+                "errormsg": "Check your archivematica settings configuration. ({e.request.status_code})",
             }
 
     except Exception as e:
