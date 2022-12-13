@@ -509,7 +509,7 @@ def archivematica(self, archive_id, step_id, input_data):
                 f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
             )
             current_step.set_status(Status.FAILED)
-            errormsg = "AM Create package returned {package}. This may be a configuration error. Check AM logs for more information."
+            errormsg = f"AM Create package returned {package}. This may be a configuration error. Check AM logs for more information."
             current_step.set_output_data(
                 {"status": 1, "errormsg": errormsg}
             )
