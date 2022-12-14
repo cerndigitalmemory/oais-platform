@@ -37,6 +37,7 @@ from oais_platform.settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
+    BASE_URL
 )
 from oais_utils.validate import validate_sip
 
@@ -208,6 +209,7 @@ def invenio(self, archive_id, step_id, input_data=None):
 
     # If this Archive was never published before to InvenioRDM
     # and no similar Archive was published before
+
     if (archive.resource.invenio_parent_id) is None:
 
         # We create a brand new Record in InvenioRDM
@@ -498,7 +500,6 @@ def archivematica(self, archive_id, step_id, input_data):
 
     try:
         package = am.create_package()
-        logging.info(f"Package {package} created successfully")
         if package in [-1, 1, 2, 3, 4]:
             """
             The AMClient will return values in [-1, 1, 2, 3, 4] when there was an error in the request to the AM API.
@@ -724,7 +725,7 @@ def remove_periodic_task(periodic_task, step):
 
 def initialize_data(archive):
     """
-    From the Archive, prepare some metadata to create the Invenio Record
+    From the Archive data, prepare some metadata to create the Invenio Record
     """
 
     # If there's no title, put the source and the record ID
@@ -738,22 +739,36 @@ def initialize_data(archive):
     else:
         access = "public"
 
-    if not archive.creator.last_name:
-        last_name = "Smith"
-    else:
-        last_name = archive.creator.last_name
+    last_name = "OAIS"
+    first_name = "Platform"
 
-    if not archive.creator.first_name:
-        first_name = "David"
-    else:
-        first_name = archive.creator.first_name
+    # Prepare the artifacts to publish
+    # Get all the completed (status = 4) steps of the Archive
+    steps = archive.steps.all().order_by("start_date").filter(status=4)
+
+    invenio_artifacts = []
+
+    for step in steps:
+        if "artifact" in step.output_data:
+            out_data = json.loads(step.output_data)
+            if out_data["artifact"]["artifact_name"] in ["SIP", "AIP"]:
+                invenio_artifacts.append({
+                    "type": out_data["artifact"]["artifact_name"],
+                    "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
+                    "path": out_data["artifact"]["artifact_path"],
+                    "add_details": {
+                        "SIP":"Submission Information Package as harvested by the platform from the upstream digital repository.",
+                        "AIP":"Archival Information Package, as processed by Archivematica."
+                    }[out_data["artifact"]["artifact_name"]],
+                    "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S")
+                })
 
     data = {
         "access": {
             "record": access,
             "files": access,
         },
-        # Metadata only
+        # Set it as Metadata only
         "files": {"enabled": False},
         "metadata": {
             "creators": [
@@ -770,9 +785,13 @@ def initialize_data(archive):
             "resource_type": {"id": "publication"},
             "title": title,
             "description": f"<b>Source:</b> {archive.source}<br><b>Link:</b> <a href={archive.source_url}>{archive.source_url}<br></a>",
-            # The first time we publish to InvenioRDM we call the version '1'
+            # The version "name" we give on invenio is the Nth time we publish to invenio + the Archive ID from the platform
+            # (there can be different Archive IDs going as a version to the same Invenio record: when two Archives are about the same Resource)
             "version": f"{archive.invenio_version}, Archive {archive.id}",
         },
+        "custom_fields": {
+            "artifacts": invenio_artifacts  
+        }
     }
 
     return data
