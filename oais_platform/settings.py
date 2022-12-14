@@ -44,6 +44,9 @@ SECRET_KEY = "REPLACE_ME"
 DEBUG = True
 
 ALLOWED_HOSTS = []
+# Where are we being served from? No trailing slash here
+BASE_URL = "http://localhost"
+
 
 ## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
