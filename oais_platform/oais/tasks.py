@@ -43,9 +43,6 @@ from oais_utils.validate import validate_sip
 
 logger = get_task_logger(__name__)
 
-# Execution flow
-
-
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
     """
     `Callback` for Celery tasks, handling result and updating
@@ -65,7 +62,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     step_id = args[1]
     step = Step.objects.get(pk=step_id)
 
-    # Should be removed?
+    # TODO: Check if this should be removed
     step.set_task(self.request.id)
 
     # If the Celery task succeded
@@ -91,7 +88,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 try:
                     with open(sip_location) as json_file:
                         sip_json = json.load(json_file)
-                        ##TODO: Decide which part of the sip.json will go here
+                        # Populate some values in the Archive model from the SIP manifest
+                        # TODO: should other values be extracted ?
+                        # Save the audit log from the sip.json
                         json_audit = sip_json["audit"]
                         archive.set_archive_manifest(json_audit)
                         logging.info(f"Sip.json audit saved at manifest field")
@@ -106,6 +105,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             if len(next_steps) == 1 and step.name in [1, 2, 3, 4]:
                 create_step(next_steps[0], archive_id, step_id)
         else:
+            # If the celery task failed, set the Step as failed too and save the return value as the output data
             step.set_status(Status.FAILED)
             step.set_output_data(retval)
     else:
@@ -146,7 +146,7 @@ def create_step(step_name, archive_id, input_step_id=None):
         status=Status.WAITING,
     )
 
-    # Consider switching this to "eval"?
+    # TODO: Consider switching this to "eval" or something similar
     if step_name == Steps.HARVEST:
         task = process.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.VALIDATION:
@@ -186,22 +186,23 @@ def create_path_artifact(name, path, localpath):
 )
 def invenio(self, archive_id, step_id, input_data=None):
     """
-    Publish an Archive on our platform as a new Record on the configured InvenioRDM instance.
+    Publish an Archive on the configured InvenioRDM instance
     If the Archive was already published, create a new version of the Record.
-    If another Archive referring to the same (Source, Record ID) was already published,
-    create a new version of the Record.
+    If another Archive referring to the same Resource (Source, Record ID)
+    was already published, create a new version of the Record.
     """
     logger.info(f"Starting the publishing to InvenioRDM of Archive {archive_id}")
 
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    # And set the step as in progress
     step.set_status(Status.IN_PROGRESS)
 
     # The InvenioRDM API endpoint
     invenio_records_endpoint = f"{INVENIO_SERVER_URL}/api/records"
 
-    # Set up the authentication for the requests to the InvenioRDM API
+    # Set up the authentication headers for the requests to the InvenioRDM API
     headers = {
         "Authorization": "Bearer " + INVENIO_API_TOKEN,
         "Content-type": "application/json",
@@ -214,7 +215,7 @@ def invenio(self, archive_id, step_id, input_data=None):
 
         # We create a brand new Record in InvenioRDM
         archive.invenio_version = 1
-        data = initialize_data(archive)
+        data = prepare_invenio_payload(archive)
 
         try:
 
@@ -251,11 +252,11 @@ def invenio(self, archive_id, step_id, input_data=None):
             verify=False,
         )
 
-        # An InvenioRDM parent ID groups every version of the same Record, extract it
+        # An InvenioRDM parent ID groups every published version reffering to the same Resource
         data_published = json.loads(req_publish_invenio.text)
         invenio_parent_id = data_published["parent"]["id"]
 
-        # Set the value to the resource fields for the first time
+        # Save the Invenio parent ID on the Resource
         resource = archive.resource
         resource.set_invenio_id(invenio_id)
         resource.set_invenio_parent_fields(invenio_parent_id)
@@ -267,7 +268,7 @@ def invenio(self, archive_id, step_id, input_data=None):
     # Create a new InvenioRDM version of an already published Record
     else:
 
-        # Invenio_id of the first version published in InvenioRDM of the resource
+        # Let's get the Parent ID for which we will create a new version
         invenio_id = archive.resource.invenio_id
 
         # Create new version as draft
@@ -284,7 +285,7 @@ def invenio(self, archive_id, step_id, input_data=None):
         archive.invenio_version += 1
 
         # Initialize the archive data that is going to be sent on the request
-        new_version_data = initialize_data(archive)
+        new_version_data = prepare_invenio_payload(archive)
 
         # Update draft with the new adata
         requests.put(
@@ -723,9 +724,10 @@ def remove_periodic_task(periodic_task, step):
     periodic_task.delete()
 
 
-def initialize_data(archive):
+def prepare_invenio_payload(archive):
     """
-    From the Archive data, prepare some metadata to create the Invenio Record
+    From the Archive data and metadata, prepare the payload to create an Invenio Record,
+    ready to be POSTed to the Invenio RDM API.
     """
 
     # If there's no title, put the source and the record ID
@@ -739,8 +741,10 @@ def initialize_data(archive):
     else:
         access = "public"
 
-    last_name = "OAIS"
-    first_name = "Platform"
+    # We don't have reliable information about the authors of the upstream resource here, 
+    # so let's put a placeholder
+    last_name = "N/A"
+    first_name = "N/A"
 
     # Prepare the artifacts to publish
     # Get all the completed (status = 4) steps of the Archive
@@ -763,6 +767,7 @@ def initialize_data(archive):
                     "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S")
                 })
 
+    # Prepare the final payload
     data = {
         "access": {
             "record": access,
