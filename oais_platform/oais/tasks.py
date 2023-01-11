@@ -632,19 +632,21 @@ def check_for_sips(announce_path, creator):
     Submission Packages (SIPs) and upload them to the platform
     """
     logger.info(f"Starting announce of {announce_path}")
-    logger.info(f"Looking for SIPs in given path.")
+    logger.info("Looking for SIPs in given path.")
 
-    # Check if there is access to the folder
+    # Check if the folder exists
+    #  this can fail also if we don't have access
     folder_exists = os.path.exists(announce_path)
     if not folder_exists:
-        return {"status": 1, "errormsg": "OAIS has no access to that folder"}
-
+        return {"status": 1, "errormsg": "Folder does not exist or the oais user has no access"}
+    
     sip_folder_name = ntpath.basename(announce_path)
 
+    # Validate the folder as a SIP
     try:
         valid = validate_sip(announce_path)
     except Exception as e:
-        return {"status": 1, "errormsg": e}
+        return {"status": 1, "errormsg": f"The folder doesn't seem to be a valid SIP. {e}"}
 
     if valid:
         try:
@@ -655,7 +657,7 @@ def check_for_sips(announce_path, creator):
                 url = get_source(source).get_record_url(recid)
             else:
                 url = " "
-        except:
+        except Exception as e:
             return {"status": 1, "errormsg": "Error while reading sip.json"}
 
         # Check if folder exists
@@ -736,6 +738,7 @@ def announce(self, archive_id, step_id, input_data):
             if announce_path == dirpath:
                 target = target_path
             else:
+                
                 dest_relpath = dirpath[len(announce_path) + 1 :]
                 target = os.path.join(target_path, dest_relpath)
                 os.mkdir(target)
