@@ -54,11 +54,11 @@ To reset your instance:
 
 ```bash
 docker-compose down
-docker volume purge
+docker volume prune
 docker-compose up
-# sometimes django needs to be restarted manually..
+# sometimes django may need to be restarted manually..
 docker start oais_django
-# create a new superuser (user and pass admin) without entering manually the values
+# create a new superuser (with user and pass "admin") without entering manually the values
 docker exec -e DJANGO_SUPERUSER_PASSWORD=admin oais_django python3 manage.py createsuperuser --noinput --username admin --email root@root.com
 ```
 
@@ -86,3 +86,11 @@ Celery:
 
 - Celery: set log level to "DEBUG" instead of "INFO" in the worker:
   `celery -A oais_platform.celery worker -l INFO` -> `celery -A oais_platform.celery worker -l DEBUG`
+
+Testing the "Announce" feature:
+
+```
+docker cp /your/local/bag/location/sip::cds::2798105::1673366862 oais_django:/sip1
+```
+
+then try to announce `/sip1`
