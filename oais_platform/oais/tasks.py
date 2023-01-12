@@ -626,27 +626,28 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         step.set_status(Status.FAILED)
 
 
-def check_for_sips(announce_path, creator):
+def announce_sip(announce_path, creator):
     """
-    Run the OAIS validation tool on a shared folder on eos to find all the
-    Submission Packages (SIPs) and upload them to the platform
+    Given a filesystem path and a user:
+
+    Run the OAIS validation tool on passed path and verify it's a proper SIP
+    If true, import the SIP into the platform
     """
-    logger.info(f"Starting announce of {announce_path}")
-    logger.info("Looking for SIPs in given path.")
+    logger.info(f"Starting announce of {announce_path}. Checking if the path points to a valid SIP..")
 
     # Check if the folder exists
     #  this can fail also if we don't have access
     folder_exists = os.path.exists(announce_path)
     if not folder_exists:
         return {"status": 1, "errormsg": "Folder does not exist or the oais user has no access"}
-    
+
     sip_folder_name = ntpath.basename(announce_path)
 
     # Validate the folder as a SIP
     try:
         valid = validate_sip(announce_path)
     except Exception as e:
-        return {"status": 1, "errormsg": f"The folder doesn't seem to be a valid SIP. {e}"}
+        return {"status": 1, "errormsg": f"Couldn't validate the path as a SIP. {e}"}
 
     if valid:
         try:
@@ -657,97 +658,68 @@ def check_for_sips(announce_path, creator):
                 url = get_source(source).get_record_url(recid)
             else:
                 url = " "
-        except Exception as e:
+        except Exception:
             return {"status": 1, "errormsg": "Error while reading sip.json"}
 
-        # Check if folder exists
-        if BIC_UPLOAD_PATH:
-            target_path = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
-        else:
-            target_path = sip_folder_name
-
-        n = 1
-        sip_exists = os.path.isdir(target_path)
-
-        while sip_exists:
-            # Check if directory found is a valid sip
-            target_is_sip = validate_sip(target_path)
-            if target_is_sip:
-                # Compares the contents of the target and the announce path
-                files_to_check = [
-                    "manifest-md5.txt",
-                    "data/meta/sip.json",
-                    "bagit.txt",
-                    "bag-info.txt",
-                ]
-                match, mismatch, errors = filecmp.cmpfiles(
-                    target_path, announce_path, files_to_check
-                )
-                if len(match) != len(files_to_check):
-                    # In that case the sip is not the same one so creates a new one with a suffix in the end
-                    # Appends the _n as a suffix so the new archive creation does not collide with the existing ones
-                    target_path = target_path + "_" + str(n)
-                    sip_folder_name = sip_folder_name + "_" + str(n)
-                else:
-                    # In that case the user tries to upload the exact same folder so the execution is stoped
-                    return {"status": 1, "errormsg": "SIP has already been uploaded."}
-            else:
-                # If the target is not a valid sip then a new archive is created
-                target_path = target_path + "_" + str(n)
-                sip_folder_name = sip_folder_name + "_" + str(n)
-            # Checks if the name with the _n suffix exists, if returns false then the archive creation starts
-            sip_exists = os.path.isdir(target_path)
-            n += 1
-
-        # Create a new Archive instance
+        # Create a new Archive
         archive = Archive.objects.create(
             recid=recid,
             source=source,
             source_url=url,
             creator=creator,
+            title=f"{source} - {recid}"
         )
 
+        # Create the starting Announce step
         step = Step.objects.create(
             archive=archive, name=Steps.ANNOUNCE, status=Status.IN_PROGRESS
         )
 
         output_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
-        announce.delay(archive.id, step.id, output_data)
+        # Let's copy the SIP to our storage
+        copy_sip.delay(archive.id, step.id, output_data)
         return {"status": 0, "archive_id": archive.id}
 
     else:
-        return {"status": 1, "errormsg": "Given folder is not a valid SIP"}
+        return {"status": 1, "errormsg": "The given path is not a valid SIP."}
 
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
-def announce(self, archive_id, step_id, input_data):
+def copy_sip(self, archive_id, step_id, input_data):
+    """
+    Given a path, copy the given path into the platform SIP storage
+    If successful, save the final path in the passed Archive
+    """
 
     foldername = input_data["foldername"]
     announce_path = input_data["announce_path"]
+
     if BIC_UPLOAD_PATH:
         target_path = os.path.join(BIC_UPLOAD_PATH, foldername)
     else:
         target_path = foldername
     try:
-        directory = os.mkdir(target_path)
-    except FileExistsError as e:
-        return {"status": 1, "errormsg": "Folder already exists"}
+        os.mkdir(target_path)
+    except FileExistsError:
+        return {"status": 1, "errormsg": "The SIP couldn't be copied to the platform \
+            because it already exists in the target destination."}
     try:
         for (dirpath, dirnames, filenames) in os.walk(announce_path, followlinks=False):
+            logger.info(f"Starting copy of {announce_path} to {target_path}..")
             if announce_path == dirpath:
                 target = target_path
             else:
-                
-                dest_relpath = dirpath[len(announce_path) + 1 :]
+                dest_relpath = dirpath[len(announce_path) + 1:]
                 target = os.path.join(target_path, dest_relpath)
                 os.mkdir(target)
             for file in filenames:
                 shutil.copy(f"{os.path.abspath(dirpath)}/{file}", target)
 
-        logger.info(f"Copy completed!")
-        archive = Archive.objects.get(pk=archive_id)
+        logger.info("Copy completed!")
 
+        # Save the final target path
+        archive = Archive.objects.get(pk=archive_id)
         archive.set_path(target_path)
 
         return {"status": 0, "errormsg": None, "foldername": foldername}
