@@ -61,15 +61,15 @@ To reset your instance:
 
 ```bash
 docker-compose down
-docker volume purge
+docker volume prune
 docker-compose up
-# sometimes django needs to be restarted manually..
+# sometimes django may need to be restarted manually..
 docker start oais_django
-# create a new superuser (user and pass admin) without entering manually the values
+# create a new superuser (with user and pass "admin") without entering manually the values
 docker exec -e DJANGO_SUPERUSER_PASSWORD=admin oais_django python3 manage.py createsuperuser --noinput --username admin --email root@root.com
 ```
 
-Django:
+### Django
 
 If you need to create migrations but you can't get django up through docker (e.g. failing because of model changes), create a local virtual env to run `manage.py`:
 
@@ -84,12 +84,18 @@ python manage.py makemigrations
 - Collect static files (to correctly see the Django admin panel)
   `python manage.py collectstatic`
 
-Postgres/database:
+### Postgres/database:
 
 - Browse database using PGAdmin
   Open [localhost:5050](http://localhost:5050) and create a new connection, with address `db` and the password provided in the docker-compose.yml (by default `overwritethisinprod!`).
 
-Celery:
+### Celery
 
 - Celery: set log level to "DEBUG" instead of "INFO" in the worker:
   `celery -A oais_platform.celery worker -l INFO` -> `celery -A oais_platform.celery worker -l DEBUG`
+
+### Testing the "Announce" feature
+
+Move (or create) a SIP directly in the oais-platform main path. It is mounted by default as /oais-platform in the django and celery containers.
+
+So e.g. if you have `/home/avivace/dm/oais-platform/sip::cds::2798105::1673532831` announce it as `/oais_platform/sip::cds::2798105::1673532831`.
