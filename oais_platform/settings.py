@@ -270,7 +270,7 @@ INVENIO_SERVER_URL = environ.get("INVENIO_SERVER_URL")
 
 # Bagit Create Settings
 
-# Path where bagitcreate exports data (using the target option)
+# Path where SIP (uploaded, announced or created through the Harvest feature) are stored
 BIC_UPLOAD_PATH = "oais-data"
 
 # Base URL that serves the packages

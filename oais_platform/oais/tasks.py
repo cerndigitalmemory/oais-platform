@@ -39,7 +39,8 @@ from oais_platform.settings import (
     SIP_UPSTREAM_BASEPATH,
     BASE_URL
 )
-from oais_utils.validate import validate_sip
+from oais_utils.validate import validate_sip, get_manifest
+from oais_platform.oais.sources import get_source
 
 logger = get_task_logger(__name__)
 
@@ -80,8 +81,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             if not step.name == 5:
                 step.set_output_data(retval)
 
-            # If harvest or upload is completed then add the audit of the sip.json to the archive.manifest field
-            if step.name == 2 or step.name == 1:
+            # If harvest, upload or announce is completed then add the audit of the sip.json to the 
+            #  archive.manifest field
+            if step.name in [1, 2, 8]:
                 sip_folder_name = archive.path_to_sip
                 sip_manifest_path = "data/meta/sip.json"
                 sip_location = os.path.join(sip_folder_name, sip_manifest_path)
@@ -800,3 +802,108 @@ def prepare_invenio_payload(archive):
     }
 
     return data
+
+
+def announce_sip(announce_path, creator):
+    """
+    Given a filesystem path and a user:
+
+    Run the OAIS validation tool on passed path and verify it's a proper SIP
+    If true, import the SIP into the platform
+    """
+    logger.info(f"Starting announce of {announce_path}. Checking if the path points to a valid SIP..")
+
+    # Check if the folder exists
+    #  this can fail also if we don't have access
+    folder_exists = os.path.exists(announce_path)
+    if not folder_exists:
+        return {"status": 1, "errormsg": "Folder does not exist or the oais user has no access"}
+
+    sip_folder_name = ntpath.basename(announce_path)
+
+    # Validate the folder as a SIP
+    try:
+        valid = validate_sip(announce_path)
+    except Exception as e:
+        return {"status": 1, "errormsg": f"Couldn't validate the path as a SIP. {e}"}
+
+    if valid:
+        try:
+            sip_json = get_manifest(announce_path)
+            source = sip_json["source"]
+            recid = sip_json["recid"]
+            if source != "local":
+                url = get_source(source).get_record_url(recid)
+            else:
+                url = " "
+        except Exception as e:
+            print(e)
+            return {"status": 1, "errormsg": "Error while reading sip.json"}
+
+        # Create a new Archive
+        archive = Archive.objects.create(
+            recid=recid,
+            source=source,
+            source_url=url,
+            creator=creator,
+            title=f"{source} - {recid}"
+        )
+
+        # Create the starting Announce step
+        step = Step.objects.create(
+            archive=archive, name=Steps.ANNOUNCE, status=Status.IN_PROGRESS
+        )
+
+        output_data = {"foldername": sip_folder_name, "announce_path": announce_path}
+
+        # Let's copy the SIP to our storage
+        copy_sip.delay(archive.id, step.id, output_data)
+        return {"status": 0, "archive_id": archive.id}
+
+    else:
+        return {"status": 1, "errormsg": "The given path is not a valid SIP."}
+
+
+@shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
+def copy_sip(self, archive_id, step_id, input_data):
+    """
+    Given a path, copy the given path into the platform SIP storage
+    If successful, save the final path in the passed Archive
+    """
+
+    foldername = input_data["foldername"]
+    announce_path = input_data["announce_path"]
+
+    if BIC_UPLOAD_PATH:
+        target_path = os.path.join(BIC_UPLOAD_PATH, foldername)
+    else:
+        target_path = foldername
+    try:
+        os.mkdir(target_path)
+    except FileExistsError:
+        return {"status": 1, "errormsg": "The SIP couldn't be copied to the platform \
+            because it already exists in the target destination."}
+    try:
+        for (dirpath, dirnames, filenames) in os.walk(announce_path, followlinks=False):
+            logger.info(f"Starting copy of {announce_path} to {target_path}..")
+            if announce_path == dirpath:
+                target = target_path
+            else:
+                dest_relpath = dirpath[len(announce_path) + 1:]
+                target = os.path.join(target_path, dest_relpath)
+                os.mkdir(target)
+            for file in filenames:
+                shutil.copy(f"{os.path.abspath(dirpath)}/{file}", target)
+
+        logger.info("Copy completed!")
+
+        # Save the final target path
+        archive = Archive.objects.get(pk=archive_id)
+        archive.set_path(target_path)
+
+        return {"status": 0, "errormsg": None, "foldername": foldername}
+
+    except Exception as e:
+        # In case of exception delete the target folder
+        shutil.rmtree(target_path)
+        return {"status": 1, "errormsg": e}

@@ -70,7 +70,7 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import create_step, invenio, process, run_next_step
+from .tasks import create_step, invenio, process, run_next_step, announce_sip
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1523,3 +1523,32 @@ def check_for_tag_name_duplicate(title, creator):
         return True
     except Collection.DoesNotExist:
         return False
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def announce(request):
+    """
+    Announce the path of SIP to import it into the system.
+    The SIP will be validated, copied to the platform designated storage and 
+    an Archive will be created
+    """
+
+    # Get the path passed in the request
+    announce_path = request.data["announce_path"]
+
+    # Run the "announce" procedure (validate, copy, create an Archive)
+    announce_response = announce_sip(announce_path, request.user)
+
+    # If the process was successful, redirect to the detail of the newly created Archive
+    if announce_response["status"] == 0:
+        return redirect(
+            reverse(
+                "archives-sgl-details",
+                request=request,
+                kwargs={"pk": announce_response["archive_id"]},
+            )
+        )
+    # otherwise, return why the announce failed
+    else:
+        raise BadRequest(announce_response["errormsg"])
