@@ -901,7 +901,11 @@ def copy_sip(self, archive_id, step_id, input_data):
         archive = Archive.objects.get(pk=archive_id)
         archive.set_path(target_path)
 
-        return {"status": 0, "errormsg": None, "foldername": foldername}
+        # Create a SIP path artifact
+        output_artifact = create_path_artifact(
+            "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, target_path), target_path
+        )
+        return {"status": 0, "errormsg": None, "foldername": foldername, "artifact": output_artifact}
 
     except Exception as e:
         # In case of exception delete the target folder
