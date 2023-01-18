@@ -832,12 +832,14 @@ def announce_sip(announce_path, creator):
             sip_json = get_manifest(announce_path)
             source = sip_json["source"]
             recid = sip_json["recid"]
-            if source != "local":
-                url = get_source(source).get_record_url(recid)
-            else:
-                url = " "
-        except Exception as e:
-            print(e)
+            try:
+                if source != "local":
+                    url = get_source(source).get_record_url(recid)
+                else:
+                    url = "N/A"
+            except Exception:
+                url = "N/A"
+        except Exception:
             return {"status": 1, "errormsg": "Error while reading sip.json"}
 
         # Create a new Archive
