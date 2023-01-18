@@ -103,8 +103,8 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             next_steps = archive.update_next_steps(step.name)
 
             # Automatically run next step ONLY if next_steps length is one and
-            # current step is UPLOAD, HARVEST, CHECKSUM or VALIDATE
-            if len(next_steps) == 1 and step.name in [1, 2, 3, 4]:
+            # current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
+            if len(next_steps) == 1 and step.name in [1, 2, 3, 4, 8]:
                 create_step(next_steps[0], archive_id, step_id)
         else:
             # If the celery task failed, set the Step as failed too and save the return value as the output data
