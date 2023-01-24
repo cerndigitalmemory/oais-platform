@@ -38,6 +38,7 @@ class Profile(models.Model):
         setattr(self, "cern_roles", data)
         self.save()
 
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     # Every time a User is created (post_save), create an attached Profile, too
@@ -105,8 +106,10 @@ class Archive(models.Model):
 
     class Meta:
         ordering = ["-id"]
-        permissions = (("grant_view_right", "Grant view right"),
-                       ("can_unstage", "Can unstage a record and start the pipeline"))
+        permissions = (
+            ("grant_view_right", "Grant view right"),
+            ("can_unstage", "Can unstage a record and start the pipeline"),
+        )
 
     def set_step(self, step_id):
         """
@@ -147,13 +150,9 @@ class Archive(models.Model):
 
     def save(self, *args, **kwargs):
 
-        # It is only executed on the object creation
+        # If the object is being created right now:
         if not self.pk:
-            # This code only happens if the objects is
-            # not in the database yet. Otherwise it would
-            # have pk
-
-            # Look to see if there is a resource with the same source+recid
+            # Check if there is a Resource with the same source+recid
             try:
                 resource = Resource.objects.get(source=self.source, recid=self.recid)
             except ObjectDoesNotExist:

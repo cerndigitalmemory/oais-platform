@@ -43,6 +43,7 @@ SECRET_KEY = "REPLACE_ME"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# List of the hosts allowed to consume this API
 ALLOWED_HOSTS = []
 # Where are we being served from? No trailing slash here
 BASE_URL = "http://localhost"
@@ -87,7 +88,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 
-# Application definition
+# Django application definition
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -244,12 +245,13 @@ sentry_sdk.init(
     # release="myapp@1.0.0",
 )
 
-# ARCHIVEMATICA SETTINGS
+# ARCHIVEMATICA integration
 
-# add the URL archivematica is running, username and password
+# add the URL where archivematica is exposed, username and password
 AM_URL = "http://umbrinus.cern.ch:62080"
 AM_USERNAME = "test"
 AM_API_KEY = "test"
+# Archivematica Storage Server
 AM_SS_URL = "http://umbrinus.cern.ch:62081"
 AM_SS_USERNAME = "test"
 AM_SS_API_KEY = "test"
@@ -262,15 +264,16 @@ AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
 # Directory that Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
-# Invenio
+# INVENIORDM integration
 
-INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
+# Base URL of the InvenioRDM instance
 INVENIO_SERVER_URL = environ.get("INVENIO_SERVER_URL")
+INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 
 
 # Bagit Create Settings
 
-# Path where SIP (uploaded, announced or created through the Harvest feature) are stored
+# Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
 BIC_UPLOAD_PATH = "oais-data"
 
 # Base URL that serves the packages
@@ -280,5 +283,5 @@ AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
 # Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
 
-# Import local settings
+# Import local settings (overriding this file)
 from oais_platform.local_settings import *  # noqa
