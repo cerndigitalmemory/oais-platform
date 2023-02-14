@@ -12,6 +12,7 @@ class ServiceUnavailable(APIException):
     default_detail = "Service temporarily unavailable"
     default_code = "service_unavailable"
 
+
 class DoesNotExist(APIException):
     status_code = 404
     default_detail = "DoesNotExist"

@@ -149,7 +149,6 @@ class Archive(models.Model):
         self.save()
 
     def save(self, *args, **kwargs):
-
         # If the object is being created right now:
         if not self.pk:
             # Check if there is a Resource with the same source+recid

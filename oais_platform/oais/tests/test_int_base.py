@@ -1,14 +1,5 @@
-from unittest import mock
-from unittest.mock import patch
-
 from django.contrib.auth.models import User
-from django.urls import reverse
-from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tests.utils import TestSource
-from rest_framework import status
 from rest_framework.test import APITestCase
-from oais_platform.oais.tasks import process
-import json
 
 
 class IntegrationAPITests(APITestCase):
@@ -17,7 +8,7 @@ class IntegrationAPITests(APITestCase):
     executed interacting with the API works as expected (such as the ones implemented by the web interfact).
     """
 
-    def setUp(self):
+    def setup(self):
         # Create an admin user and authenticate as it
         my_admin = User.objects.create_superuser("admin_test", "", "pw")
         self.client.force_authenticate(user=my_admin)

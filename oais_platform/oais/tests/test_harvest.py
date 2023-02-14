@@ -9,8 +9,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from oais_platform.oais.tasks import process
 
+
 class HarvestTests(APITestCase):
-    def setUp(self):
+    def setup(self):
         self.user = User.objects.create_user("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
@@ -73,7 +74,7 @@ class HarvestTests(APITestCase):
 
     def test_bagitcreate_exec(self):
         # Create an admin user and authenticate as it
-        my_admin = User.objects.create_superuser('admin_test', '', "pw")
+        my_admin = User.objects.create_superuser("admin_test", "", "pw")
         self.client.force_authenticate(user=my_admin)
 
         # Create an Archive for CDS record 2798105
@@ -100,4 +101,4 @@ class HarvestTests(APITestCase):
         result = process(archive_id, steps[0].id)
 
         # Check that BagIt Create succeded
-        self.assertEqual(result['status'], 0)
+        self.assertEqual(result["status"], 0)

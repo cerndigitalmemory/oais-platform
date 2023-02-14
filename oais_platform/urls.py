@@ -91,11 +91,11 @@ urlpatterns = [
                     views.check_archived_records,
                     name="check_archived_records",
                 ),
-                # Trigger the harvest of the given Archive 
+                # Trigger the harvest of the given Archive
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 # Upload a SIP
                 path("upload/sip", views.upload_sip, name="upload-sip"),
-                # Search 
+                # Search
                 path("search/<str:source>/", views.search, name="search"),
                 path(
                     "search/<str:source>/<str:recid>/",
