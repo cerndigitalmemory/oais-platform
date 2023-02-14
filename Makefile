@@ -30,3 +30,6 @@ shell:
 clean:
 	rm -rf oais-data/*
 	rm *.tmp
+
+test:
+	docker-compose -f test-compose.yml up --exit-code-from django
