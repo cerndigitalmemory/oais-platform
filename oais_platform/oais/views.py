@@ -7,22 +7,19 @@ import time
 import zipfile
 from pathlib import PurePosixPath
 from shutil import make_archive
-from threading import local
 from urllib.parse import unquote, urlparse
 from wsgiref.util import FileWrapper
 
 from bagit_create import main as bic
-from click import pass_context
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import Group, User
-from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest, DoesNotExist
+from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     Archive,
@@ -70,7 +67,7 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import create_step, invenio, process, run_next_step, announce_sip
+from .tasks import create_step, process, run_next_step, announce_sip
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -168,7 +165,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         filtered_steps = filter_steps_by_user_perms(steps, request.user)
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
-   
+
     @action(detail=False, url_path="me/sources", url_name="me-sources")
     def get_source_status(self, request):
         """
@@ -192,21 +189,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         NEEDS_CONFIG = 3
 
         data = {
-            "zenodo": {
-                "status" : READY,
-                "name": "Zenodo"
-            },
-            "indico": {
-                "name": "Indico"
-            },
-            "codimd": {
-                "name": "CodiMD"
-            },
-            "cds":{
-                "name": "CERN Document Server"
-            }
+            "zenodo": {"status": READY, "name": "Zenodo"},
+            "indico": {"name": "Indico"},
+            "codimd": {"name": "CodiMD"},
+            "cds": {"name": "CERN Document Server"},
         }
-
 
         data["zenodo"]["status"] = READY
 
@@ -397,6 +384,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archives = None
             return Response()
 
+    @extend_schema(operation_id="sgl-unstage")
     @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
@@ -406,13 +394,13 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         # If the user has 'can_unstage' permission and it's not a superuser, return Unauthorized
         if not (request.user.has_perm("oais.can_unstage") or request.user.is_superuser):
             raise BadRequest("Unauthorized")
-        
+
         archive = self.get_object()
         archive.set_unstaged()
 
         step = Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
-            )
+            archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+        )
 
         process.delay(step.archive.id, step.id)
 
@@ -445,7 +433,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive = Archive.objects.get(id=archive["id"])
             archive.set_unstaged()
             job_tag.add_archive(archive)
-            
+
             step = Step.objects.create(
                 archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
             )
@@ -458,7 +446,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return Response(serializer.data)
 
-
     # no @action to have recid and source variables in the url
     def archive_create(self, request, recid, source):
         """
@@ -469,7 +456,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except InvalidSource:
             raise BadRequest("Invalid source: ", source)
 
-
         # Always create a new archive instance
         archive = Archive.objects.create(
             recid=recid,
@@ -477,7 +463,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source_url=url,
             creator=request.user,
         )
-
 
         return redirect(
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
@@ -618,7 +603,7 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
     def download_artifact(self, request, pk=None):
         step = self.get_object()
 
-        if (request.user.id is not step.archive.creator.id):
+        if request.user.id is not step.archive.creator.id:
             return HttpResponse(status=401)
 
         output_data = json.loads(step.output_data)
@@ -632,19 +617,25 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     files_path = output_data["artifact"]["artifact_localpath"]
                     file_name = f"{pk}-sip.zip"
                     path_to_zip = make_archive(files_path, "zip", files_path)
-                    response = HttpResponse(FileWrapper(open(path_to_zip, 'rb')), content_type='application/zip')
-                    response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
-                        filename = file_name
+                    response = HttpResponse(
+                        FileWrapper(open(path_to_zip, "rb")),
+                        content_type="application/zip",
                     )
+                    response[
+                        "Content-Disposition"
+                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
                     return response
                 elif output_data["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
                     files_path = output_data["artifact"]["artifact_path"]
                     file_name = f"{pk}-aip.7z"
-                    response = HttpResponse(FileWrapper(open(files_path, 'rb')), content_type='application/x-7z-compressed')
-                    response['Content-Disposition'] = 'attachment; filename="{filename}"'.format(
-                        filename = file_name
+                    response = HttpResponse(
+                        FileWrapper(open(files_path, "rb")),
+                        content_type="application/x-7z-compressed",
                     )
+                    response[
+                        "Content-Disposition"
+                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
                     return response
         return HttpResponse(status=404)
 
@@ -961,9 +952,6 @@ def get_settings(request):
         )
     except Exception:
         githash = "n/a"
-
-    user = request.user
-    serializer = UserSerializer(user)
 
     data = {
         "am_url": AM_URL,
@@ -1458,7 +1446,6 @@ def search_query(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def parse_url(request):
-
     url = request.data["url"]
 
     # To be replaced by utils
@@ -1530,7 +1517,7 @@ def check_for_tag_name_duplicate(title, creator):
 def announce(request):
     """
     Announce the path of SIP to import it into the system.
-    The SIP will be validated, copied to the platform designated storage and 
+    The SIP will be validated, copied to the platform designated storage and
     an Archive will be created
     """
 
