@@ -2,7 +2,7 @@ version: "3"
 
 services:
   nginx:
-    container_name: oais_nginx
+    container_name: oais_test_nginx
     build:
       context: nginx/
     ports:
@@ -12,7 +12,7 @@ services:
     depends_on:
       - django
   db:
-    container_name: oais_psql
+    container_name: oais_test_psql
     image: postgres:12-alpine
     environment:
       - POSTGRES_DB=oais_platform
@@ -29,7 +29,7 @@ services:
       retries: 50
 
   pgadmin:
-    container_name: oais_pgadmin
+    container_name: oais_test_pgadmin
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
@@ -43,7 +43,7 @@ services:
 
   # Django app
   django:
-    container_name: oais_django
+    container_name: oais_test_django
     # Current path contains the Dockerfile for the Django app
     build:
       context: .
@@ -78,11 +78,11 @@ services:
 
   # Redis
   redis:
-    container_name: oais_redis
+    container_name: oais_test_redis
     image: redis:alpine
 
   celery:
-    container_name: oais_celery
+    container_name: oais_test_celery
     restart: always
     build:
       context: .
