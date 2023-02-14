@@ -6,9 +6,8 @@ from django.urls import reverse
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tests.utils import TestSource
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
-
+from oais_platform.oais.tasks import process
 
 class HarvestTests(APITestCase):
     def setUp(self):
@@ -16,17 +15,18 @@ class HarvestTests(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_wrong_source(self):
-
-        url = reverse("archives-create", args=["1", "wrong"])
+        # Try to trigger an harvesting of an Archive with an invalid source id
+        url = reverse("archives-create", args=["1", "a_bad_source"])
         response = self.client.post(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # No archives and not steps should've been created
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Step.objects.count(), 0)
 
     @patch("oais_platform.oais.views.get_source")
     def test_harvest(self, get_source):
-
+        # Make up a test "Source"
         source = TestSource()
         get_source.return_value = source
 
@@ -70,3 +70,34 @@ class HarvestTests(APITestCase):
         response = self.client.post(url, format="json", follow=True)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_bagitcreate_exec(self):
+        # Create an admin user and authenticate as it
+        my_admin = User.objects.create_superuser('admin_test', '', "pw")
+        self.client.force_authenticate(user=my_admin)
+
+        # Create an Archive for CDS record 2798105
+        url = reverse("archives-create", args=["2798105", "cds"])
+        response = self.client.post(url, format="json", follow=True)
+
+        # Check if the creation succeded and with the given data
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "cds")
+        self.assertEqual(response.data["recid"], "2798105")
+
+        archive_id = response.data["id"]
+
+        # Create an Harvest step on it
+        url = reverse("harvest", args=[archive_id])
+        response = self.client.post(url, format="json", follow=True)
+
+        archive = Archive.objects.get(id=archive_id)
+        steps = archive.steps.all().order_by("start_date")
+
+        # This part will simulate what approving an Harvest step does
+        # Let's execute directly what the Harvest step would do (but without celery)
+        # Run bagit-create
+        result = process(archive_id, steps[0].id)
+
+        # Check that BagIt Create succeded
+        self.assertEqual(result['status'], 0)
