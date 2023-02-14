@@ -1,17 +1,10 @@
-import ast
 import json
 import logging
 import ntpath
 import os
 import shutil
-import time
-import uuid
-from datetime import datetime, timedelta
-from distutils.dir_util import copy_tree, mkpath
-from lib2to3.pgen2.token import RPAR
-from logging import log
+from datetime import timedelta
 from urllib.parse import urljoin
-from urllib.error import HTTPError
 
 import requests
 from amclient import AMClient
@@ -20,7 +13,7 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from oais_platform.oais.models import Archive, Resource, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_ABS_DIRECTORY,
@@ -37,12 +30,13 @@ from oais_platform.settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
-    BASE_URL
+    BASE_URL,
 )
 from oais_utils.validate import validate_sip, get_manifest
 from oais_platform.oais.sources import get_source
 
 logger = get_task_logger(__name__)
+
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
     """
@@ -71,7 +65,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
         # This is for tasks failing without throwing an exception
         # (e.g BIC returning an error)
         if retval["status"] == 0:
-
             # Set last_step to the successful step
             archive.set_step(step)
 
@@ -81,7 +74,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             if not step.name == 5:
                 step.set_output_data(retval)
 
-            # If harvest, upload or announce is completed then add the audit of the sip.json to the 
+            # If harvest, upload or announce is completed then add the audit of the sip.json to the
             #  archive.manifest field
             if step.name in [1, 2, 8]:
                 sip_folder_name = archive.path_to_sip
@@ -95,8 +88,8 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                         # Save the audit log from the sip.json
                         json_audit = sip_json["audit"]
                         archive.set_archive_manifest(json_audit)
-                        logging.info(f"Sip.json audit saved at manifest field")
-                except:
+                        logging.info("Sip.json audit saved at manifest field")
+                except Exception:
                     logging.info(f"Sip.json was not found inside {sip_location}")
 
             # Update the next possible steps
@@ -150,15 +143,15 @@ def create_step(step_name, archive_id, input_step_id=None):
 
     # TODO: Consider switching this to "eval" or something similar
     if step_name == Steps.HARVEST:
-        task = process.delay(step.archive.id, step.id, step.input_data)
+        process.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.VALIDATION:
-        task = validate.delay(step.archive.id, step.id, step.input_data)
+        validate.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.CHECKSUM:
-        task = checksum.delay(step.archive.id, step.id, step.input_data)
+        checksum.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.ARCHIVE:
-        task = archivematica.delay(step.archive.id, step.id, step.input_data)
+        archivematica.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.INVENIO_RDM_PUSH:
-        task = invenio.delay(step.archive.id, step.id, step.input_data)
+        invenio.delay(step.archive.id, step.id, step.input_data)
 
     return step
 
@@ -214,13 +207,11 @@ def invenio(self, archive_id, step_id, input_data=None):
     # and no similar Archive was published before
 
     if (archive.resource.invenio_parent_id) is None:
-
         # We create a brand new Record in InvenioRDM
         archive.invenio_version = 1
         data = prepare_invenio_payload(archive)
 
         try:
-
             # Create a record as a InvenioRDM draft
             req = requests.post(
                 invenio_records_endpoint,
@@ -269,7 +260,6 @@ def invenio(self, archive_id, step_id, input_data=None):
 
     # Create a new InvenioRDM version of an already published Record
     else:
-
         # Let's get the Parent ID for which we will create a new version
         invenio_id = archive.resource.invenio_id
 
@@ -383,7 +373,6 @@ def process(self, archive_id, step_id, input_data=None):
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
 def validate(self, archive_id, step_id, input_data):
-
     archive = Archive.objects.get(pk=archive_id)
     sip_folder_name = archive.path_to_sip
 
@@ -402,7 +391,7 @@ def validate(self, archive_id, step_id, input_data):
         return {"status": 1, "errormsg": "SIP does not exist"}
 
     # Runs validate_sip from oais_utils
-    valid = validate_sip(sip_folder_name)
+    validate_sip(sip_folder_name)
 
     return {"status": 0, "errormsg": None, "foldername": sip_folder_name}
 
@@ -435,7 +424,7 @@ def checksum(self, archive_id, step_id, input_data):
                     splited = checksum.split(":")
                     checksum = splited[0] + ":" + "0"
                     checksum_list.append(checksum)
-            except KeyError as e:
+            except KeyError:
                 current_file = file["origin"]["filename"]
                 logger.info(f"Checksum not found for file {current_file}")
 
@@ -514,9 +503,7 @@ def archivematica(self, archive_id, step_id, input_data):
             )
             current_step.set_status(Status.FAILED)
             errormsg = f"AM Create package returned {package}. This may be a configuration error. Check AM logs for more information."
-            current_step.set_output_data(
-                {"status": 1, "errormsg": errormsg}
-            )
+            current_step.set_output_data({"status": 1, "errormsg": errormsg})
             return {"status": 1, "errormsg": errormsg}
         else:
             step = Step.objects.get(pk=step_id)
@@ -548,7 +535,10 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_output_data(
                 {"status": 1, "errormsg": "Check your archivematica credentials (403)."}
             )
-            return {"status": 1, "errormsg": "Check your archivematica credentials (403)."}
+            return {
+                "status": 1,
+                "errormsg": "Check your archivematica credentials (403).",
+            }
         else:
             logger.error(
                 f"Error while archiving {current_step.id} ({e.request.status_code}). Check your archivematica settings configuration."
@@ -582,7 +572,6 @@ def archivematica(self, archive_id, step_id, input_data):
     ignore_result=True,
 )
 def check_am_status(self, message, step_id, archive_id, transfer_name=None):
-
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
 
@@ -743,7 +732,7 @@ def prepare_invenio_payload(archive):
     else:
         access = "public"
 
-    # We don't have reliable information about the authors of the upstream resource here, 
+    # We don't have reliable information about the authors of the upstream resource here,
     # so let's put a placeholder
     last_name = "N/A"
     first_name = "N/A"
@@ -758,16 +747,18 @@ def prepare_invenio_payload(archive):
         if "artifact" in step.output_data:
             out_data = json.loads(step.output_data)
             if out_data["artifact"]["artifact_name"] in ["SIP", "AIP"]:
-                invenio_artifacts.append({
-                    "type": out_data["artifact"]["artifact_name"],
-                    "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
-                    "path": out_data["artifact"]["artifact_path"],
-                    "add_details": {
-                        "SIP":"Submission Information Package as harvested by the platform from the upstream digital repository.",
-                        "AIP":"Archival Information Package, as processed by Archivematica."
-                    }[out_data["artifact"]["artifact_name"]],
-                    "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S")
-                })
+                invenio_artifacts.append(
+                    {
+                        "type": out_data["artifact"]["artifact_name"],
+                        "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
+                        "path": out_data["artifact"]["artifact_path"],
+                        "add_details": {
+                            "SIP": "Submission Information Package as harvested by the platform from the upstream digital repository.",
+                            "AIP": "Archival Information Package, as processed by Archivematica.",
+                        }[out_data["artifact"]["artifact_name"]],
+                        "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
+                    }
+                )
 
     # Prepare the final payload
     data = {
@@ -796,9 +787,7 @@ def prepare_invenio_payload(archive):
             # (there can be different Archive IDs going as a version to the same Invenio record: when two Archives are about the same Resource)
             "version": f"{archive.invenio_version}, Archive {archive.id}",
         },
-        "custom_fields": {
-            "artifacts": invenio_artifacts  
-        }
+        "custom_fields": {"artifacts": invenio_artifacts},
     }
 
     return data
@@ -811,13 +800,18 @@ def announce_sip(announce_path, creator):
     Run the OAIS validation tool on passed path and verify it's a proper SIP
     If true, import the SIP into the platform
     """
-    logger.info(f"Starting announce of {announce_path}. Checking if the path points to a valid SIP..")
+    logger.info(
+        f"Starting announce of {announce_path}. Checking if the path points to a valid SIP.."
+    )
 
     # Check if the folder exists
     #  this can fail also if we don't have access
     folder_exists = os.path.exists(announce_path)
     if not folder_exists:
-        return {"status": 1, "errormsg": "Folder does not exist or the oais user has no access"}
+        return {
+            "status": 1,
+            "errormsg": "Folder does not exist or the oais user has no access",
+        }
 
     sip_folder_name = ntpath.basename(announce_path)
 
@@ -848,7 +842,7 @@ def announce_sip(announce_path, creator):
             source=source,
             source_url=url,
             creator=creator,
-            title=f"{source} - {recid}"
+            title=f"{source} - {recid}",
         )
 
         # Create the starting Announce step
@@ -883,15 +877,18 @@ def copy_sip(self, archive_id, step_id, input_data):
     try:
         os.mkdir(target_path)
     except FileExistsError:
-        return {"status": 1, "errormsg": "The SIP couldn't be copied to the platform \
-            because it already exists in the target destination."}
+        return {
+            "status": 1,
+            "errormsg": "The SIP couldn't be copied to the platform \
+            because it already exists in the target destination.",
+        }
     try:
-        for (dirpath, dirnames, filenames) in os.walk(announce_path, followlinks=False):
+        for dirpath, dirnames, filenames in os.walk(announce_path, followlinks=False):
             logger.info(f"Starting copy of {announce_path} to {target_path}..")
             if announce_path == dirpath:
                 target = target_path
             else:
-                dest_relpath = dirpath[len(announce_path) + 1:]
+                dest_relpath = dirpath[len(announce_path) + 1 :]
                 target = os.path.join(target_path, dest_relpath)
                 os.mkdir(target)
             for file in filenames:
@@ -907,7 +904,12 @@ def copy_sip(self, archive_id, step_id, input_data):
         output_artifact = create_path_artifact(
             "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, target_path), target_path
         )
-        return {"status": 0, "errormsg": None, "foldername": foldername, "artifact": output_artifact}
+        return {
+            "status": 0,
+            "errormsg": None,
+            "foldername": foldername,
+            "artifact": output_artifact,
+        }
 
     except Exception as e:
         # In case of exception delete the target folder
