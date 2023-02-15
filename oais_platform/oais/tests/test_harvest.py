@@ -11,7 +11,7 @@ from oais_platform.oais.tasks import process
 
 
 class HarvestTests(APITestCase):
-    def setup(self):
+    def setUp(self):
         self.user = User.objects.create_user("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 

@@ -8,7 +8,7 @@ class IntegrationAPITests(APITestCase):
     executed interacting with the API works as expected (such as the ones implemented by the web interfact).
     """
 
-    def setup(self):
+    def setUp(self):
         # Create an admin user and authenticate as it
         my_admin = User.objects.create_superuser("admin_test", "", "pw")
         self.client.force_authenticate(user=my_admin)
@@ -48,5 +48,6 @@ class IntegrationAPITests(APITestCase):
             "/api/users/me/staging-area/", post_data, format="json"
         )
 
+        print(response.data)
         self.assertEqual(response.data["results"][0]["source"], "cds")
         self.assertEqual(response.data["results"][0]["recid"], "2798105")
