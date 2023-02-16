@@ -117,6 +117,7 @@ urlpatterns = [
                     views.announce,
                     name="announce",
                 ),
+                path("stats/", views.statistics, name="statistics"),
             ]
         ),
     ),
