@@ -967,6 +967,17 @@ def get_settings(request):
     return Response(data)
 
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def statistics(request):
+    data = {
+        "archives": Archive.objects.count(),
+        "harvest": Step.objects.filter(name=2).count(),
+        "announce": Step.objects.filter(name=8).count(),
+    }
+    return Response(data)
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def check_archived_records(request):
