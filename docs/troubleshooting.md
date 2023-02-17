@@ -94,7 +94,7 @@ python manage.py makemigrations
 - Celery: set log level to "DEBUG" instead of "INFO" in the worker:
   `celery -A oais_platform.celery worker -l INFO` -> `celery -A oais_platform.celery worker -l DEBUG`
 
-### Testing the "Announce" feature
+### Locally testing the "Announce" feature
 
 Move (or create) a SIP directly in the oais-platform main path. It is mounted by default as /oais-platform in the django and celery containers.
 
