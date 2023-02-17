@@ -1535,6 +1535,14 @@ def announce(request):
     # Get the path passed in the request
     announce_path = request.data["announce_path"]
 
+    # Check if the path is allowed (a user is only allowed to "announce" paths in their home folder on EOS)
+    if (
+        # Superusers are allowed to announce any path
+        request.user.is_superuser is False
+        and check_allowed_path(announce_path, request.user.username) is False
+    ):
+        raise BadRequest("You're not allowed to announce this path")
+
     # Run the "announce" procedure (validate, copy, create an Archive)
     announce_response = announce_sip(announce_path, request.user)
 
@@ -1550,3 +1558,11 @@ def announce(request):
     # otherwise, return why the announce failed
     else:
         raise BadRequest(announce_response["errormsg"])
+
+
+def check_allowed_path(path, username):
+    allowed_starting_path = f"/eos/home-{username[0]}/{username}/"
+    if path.startswith(allowed_starting_path):
+        return True
+    else:
+        return False
