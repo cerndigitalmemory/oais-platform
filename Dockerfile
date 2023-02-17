@@ -36,7 +36,9 @@ RUN apk add --update \
   tk-dev \
   zlib-dev \
   # to allow pip install dependencies from git repositories
-  git 
+  git \
+  # needed to compile M2Crypto, needed for the FTS client
+  swig 
 
 RUN apk add libffi-dev
 COPY ./requirements.txt /requirements.txt
