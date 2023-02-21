@@ -603,7 +603,10 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
     def download_artifact(self, request, pk=None):
         step = self.get_object()
 
-        if request.user.id is not step.archive.creator.id:
+        if (
+            request.user.id is not step.archive.creator.id
+            and step.archive.restricted is True
+        ):
             return HttpResponse(status=401)
 
         output_data = json.loads(step.output_data)
