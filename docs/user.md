@@ -27,8 +27,8 @@ In more practical terms, this is what the platform can do for you.
 If your data is not exported yet:
 
 - Export it in a consistent format from a number of different sources. E.g.:
-  - GitLab repositories (including discussions, issues, threads, source code, releases, etc)
-  - CERN Digital Repositories such as Indico, CDS, Zenodo, ...
+    - GitLab repositories (including discussions, issues, threads, source code, releases, etc)
+    - CERN Digital Repositories such as Indico, CDS, Zenodo, ...
 - Export from services where data is not published/cannot be exported (e.g. CodiMD)
 - Create "exports" from your local filesystem (or e.g. from CERNBox)
 - Provide examples of "export" mechanisms you can adapt to your needs
@@ -39,10 +39,10 @@ If already have a way to export your data, by submitting it to the platform you 
 - Get data in a form that can be _disseminated_ and is able to live on its own, without the need of any digital repository or additional software
 - Push the preservation versions of important institutional data to the CERN Tape Archive (and not only byte level)
 - Get your files automatically converted into preservation formats. E.g.:
-  - AC3, AIFF, MP3, WAV, WMA into WAVE
-  - AVI, FLV, MOV, MPEG-1, MPEG-2, MPEG-4, SWF, WMV into FFV1/LPCM in MKV
-  - PDF to PDF/A
-  - BMP, GIF, JPG, JP2*, PCT, PNG*, PSD, TIFF, TGA to TIFF
+    - AC3, AIFF, MP3, WAV, WMA into WAVE
+    - AVI, FLV, MOV, MPEG-1, MPEG-2, MPEG-4, SWF, WMV into FFV1/LPCM in MKV
+    - PDF to PDF/A
+    - BMP, GIF, JPG, JP2*, PCT, PNG*, PSD, TIFF, TGA to TIFF
 - Make your data discover-able and search-able on the Digital Memory Registry
 
 ## Preliminar definitions
@@ -124,6 +124,7 @@ your-sip
 #### The SIP manifest
 
 See [https://gitlab.cern.ch/digitalmemory/sip-spec#sipjson](https://gitlab.cern.ch/digitalmemory/sip-spec#sipjson)
+
 
 ### Uploading a SIP
 
