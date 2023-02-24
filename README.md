@@ -158,6 +158,41 @@ export INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
 export INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 ```
 
+### FTS
+
+The CERN FTS client is used to push and retrieve data to the CERN Tape Archive (CTA). It is suggested to set up a Service account for this.
+
+Change your desired `FTS_INSTANCE` to use in the settings. By default the test one is used.
+
+You need a GRID certificate to authenticate. Request one from the [CERN Certification Authority](https://ca.cern.ch/ca/). If using a service account, request permission to obtain a Grid _Robot_ certificate.
+
+Finally, create a new certificate a download the related `.p12` file. We will need to extract the public part and the private one (as passwordless).
+
+```bash
+# Get the pubic part
+openssl pkcs12 -in myCert.p12 -clcerts -nokeys -out usercert.pem
+# Get the private one. A passphrase is required.
+openssl pkcs12 -in myCert.p12 -nocerts -out ./userkey.pem
+# Remove the passphrase from the private part
+openssl rsa -in userkey.pem -out private.nopwd.key
+```
+
+Once you have your final `usercert.pem` and `private.nopwd.key`, set their paths accordingly in the settings.
+
+### CTA
+
+Request a namespace on CTA and set the `CTA_BASE_PATH` like this:
+
+```
+root://<CTA_ENDPOINT>//eos/<YOUR_CTA_NAMESPACE>
+```
+
+E.g.:
+
+```
+root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/
+```
+
 ## CI/CD
 
 The CI configured on this repository to run the tests on every commit and trigger an upstream deployment.
