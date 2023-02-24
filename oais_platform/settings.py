@@ -283,5 +283,19 @@ AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
 # Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
 
+# FTS Settings
+FTS_INSTANCE = "https://fts3-pilot.cern.ch:8446"
+
+# GRID Certificate used to authenticate
+# Public part
+FTS_GRID_CERT = "usercert.pem"
+# Passwordless private part
+FTS_GRID_CERT_KEY = "private.nopwd.key"
+
+# CTA Settings
+CTA_BASE_PATH = (
+    "root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/"
+)
+
 # Import local settings (overriding this file)
 from oais_platform.local_settings import *  # noqa
