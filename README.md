@@ -83,7 +83,7 @@ Some remarks:
 - Node version 14.19.3 or newer is required for for building the web application (use `node -v` to check the current version).
 - `npm install --force` is required
 - Any changes to the nginx configuration (in nginx/docker.conf) require you to rebuild the image (or shell into the nginx container, edit the file and then `nginx -s reload`)
-- Environment variables need to be set in the docker compose or in a `.env.dev` file. Values from the host environment will be ignored when using compose.
+- Environment variables need to be set in the docker compose or in a `.env.dev` file. **Environment variables from the host environment will be ignored when using compose.**
 
 ### Helper commands
 
@@ -177,14 +177,20 @@ openssl pkcs12 -in myCert.p12 -nocerts -out ./userkey.pem
 openssl rsa -in userkey.pem -out private.nopwd.key
 ```
 
-Once you have your final `usercert.pem` and `private.nopwd.key`, set their paths accordingly in the settings.
+Once you have your final `usercert.pem` and `private.nopwd.key`, set their paths accordingly:
+
+```bash
+export FTS_INSTANCE="VALUE"
+export FTS_GRID_CERT="VALUE"
+export FTS_GRID_CERT_KEY="VALUE"
+```
 
 ### CTA
 
 Request a namespace on CTA and set the `CTA_BASE_PATH` like this:
 
-```
-root://<CTA_ENDPOINT>//eos/<YOUR_CTA_NAMESPACE>
+```bash
+export CTA_BASE_PATH="root://<CTA_ENDPOINT>//eos/<YOUR_CTA_NAMESPACE>"
 ```
 
 E.g.:
