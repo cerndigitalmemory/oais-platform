@@ -160,7 +160,7 @@ export INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 
 ### FTS
 
-The CERN FTS client is used to push and retrieve data to the CERN Tape Archive (CTA). It is suggested to set up a Service account for this.
+The [CERN FTS client](https://fts.web.cern.ch/fts/) is used to push and retrieve data to the CERN Tape Archive (CTA). It is suggested to set up a Service account for this.
 
 Change your desired `FTS_INSTANCE` to use in the settings. By default the test one is used.
 
@@ -169,7 +169,7 @@ You need a GRID certificate to authenticate. Request one from the [CERN Certific
 Finally, create a new certificate a download the related `.p12` file. We will need to extract the public part and the private one (as passwordless).
 
 ```bash
-# Get the pubic part
+# Get the public part
 openssl pkcs12 -in myCert.p12 -clcerts -nokeys -out usercert.pem
 # Get the private one. A passphrase is required.
 openssl pkcs12 -in myCert.p12 -nocerts -out ./userkey.pem
@@ -192,6 +192,11 @@ E.g.:
 ```
 root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/
 ```
+
+Make sure that:
+
+1. The FTS link has correctly mapped the certificate you are planning to use to the service account. This is usually automatic for user Grid certificates but not for Robot ones.
+2. The service account has permissions to read and write from the specified CTA space.
 
 ## CI/CD
 
