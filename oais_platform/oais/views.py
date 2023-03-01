@@ -21,53 +21,32 @@ from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import (
-    Archive,
-    Collection,
-    Profile,
-    Status,
-    Step,
-    Steps,
-    UploadJob,
-)
+from oais_platform.oais.models import (Archive, Collection, Profile, Status,
+                                       Step, Steps, UploadJob)
 from oais_platform.oais.permissions import (
-    filter_all_archives_user_has_access,
-    filter_archives_by_user_creator,
-    filter_archives_for_user,
-    filter_archives_public,
-    filter_collections_by_user_perms,
-    filter_jobs_by_user_perms,
-    filter_steps_by_user_perms,
-    has_user_archive_edit_rights,
-)
-from oais_platform.oais.serializers import (
-    ArchiveSerializer,
-    CollectionSerializer,
-    GroupSerializer,
-    LoginSerializer,
-    ProfileSerializer,
-    SourceRecordSerializer,
-    StepSerializer,
-    UserSerializer,
-)
+    filter_all_archives_user_has_access, filter_archives_by_user_creator,
+    filter_archives_for_user, filter_archives_public,
+    filter_collections_by_user_perms, filter_jobs_by_user_perms,
+    filter_steps_by_user_perms, has_user_archive_edit_rights)
+from oais_platform.oais.serializers import (ArchiveSerializer,
+                                            CollectionSerializer,
+                                            GroupSerializer, LoginSerializer,
+                                            ProfileSerializer,
+                                            SourceRecordSerializer,
+                                            StepSerializer, UserSerializer)
 from oais_platform.oais.sources import InvalidSource, get_source
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from ..settings import (
-    AM_ABS_DIRECTORY,
-    AM_REL_DIRECTORY,
-    AM_URL,
-    CELERY_BROKER_URL,
-    CELERY_RESULT_BACKEND,
-    INVENIO_API_TOKEN,
-    INVENIO_SERVER_URL,
-)
-from .tasks import create_step, process, run_next_step, announce_sip
+from ..settings import (AM_ABS_DIRECTORY, AM_REL_DIRECTORY, AM_URL,
+                        CELERY_BROKER_URL, CELERY_RESULT_BACKEND,
+                        INVENIO_API_TOKEN, INVENIO_SERVER_URL)
+from .tasks import announce_sip, create_step, process, run_next_step
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -115,7 +94,17 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         elif request.method == "GET":
             user = request.user
             serializer = self.get_serializer(user)
-            return Response(serializer.data)
+
+            # Serializer is immutable, so let's copy it to another dict
+            user_data = serializer.data
+
+            # Append the API token, if it exists
+            try:
+                user_data["api_token"] = Token.objects.get(user=user).key
+            except Exception:
+                pass
+
+            return Response(user_data)
 
     @action(detail=False, url_path="me/tags", url_name="me-tags")
     def get_tags(self, request):
