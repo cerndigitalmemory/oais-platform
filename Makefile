@@ -25,6 +25,11 @@ logs-django:
 shell:
 	docker exec -it oais_django sh
 
+# Prepare migrations and apply them
+migrations:
+	docker exec oais_django python manage.py makemigrations
+	docker exec oais_django python manage.py migrate
+
 # Cleans up logs and local data (e.g. SIPs)
 # should be run with a "reset-db"
 clean:
@@ -32,4 +37,4 @@ clean:
 	rm *.tmp
 
 test:
-	docker-compose -f test-compose.yml up --exit-code-from django
+	docker compose -f test-compose.yml up --exit-code-from django
