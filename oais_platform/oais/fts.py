@@ -35,7 +35,7 @@ class FTS:
 
     def prepare_retrieve_job(self, source, dest, bring_online=259200):
         """
-        CTA administrators reccomend to set bring_online to 72 hours (259200 seconds).
+        CTA administrators recommend to set bring_online to 72 hours (259200 seconds).
         It would allow the transfers to keep running over the weekend, and in case of a problem
         the tape operators would be able to check it on Monday
         """
@@ -52,13 +52,14 @@ class FTS:
         }
 
     def push_to_cta(self, source, dest):
-        job = prepare_push_job(source, dest)
+        job = self.prepare_push_job(source, dest)
         submitted_job = fts3.submit(job=job, context=self.context)
         return submitted_job
 
     def retrieve_from_cta(self, source, dest):
-        job = prepare_retrieve_job(source, dest)
+        job = self.prepare_retrieve_job(source, dest)
         submitted_job = fts3.submit(job=job, context=self.context)
+        return submitted_job
 
     def job_status(self, job_id):
         return fts3.get_job_status(self.context, job_id, list_files=False)
