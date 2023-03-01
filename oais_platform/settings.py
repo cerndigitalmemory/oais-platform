@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "guardian",
+    "rest_framework.authtoken",
 ]
 
 MIDDLEWARE = [
@@ -298,5 +299,6 @@ CTA_BASE_PATH = environ.get(
     "root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/",
 )
 
-# Import local settings (overriding this file)
+# Import local settings (overriding defaults and environment variables)
+# this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa
