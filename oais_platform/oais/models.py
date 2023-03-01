@@ -1,13 +1,13 @@
 import json
 
 from django.contrib.auth.models import User
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 from oais_platform.settings import INVENIO_SERVER_URL
-from django.contrib.postgres.fields import ArrayField
 
 from . import pipeline
 
@@ -60,6 +60,7 @@ class Steps(models.IntegerChoices):
     EDIT_MANIFEST = 6
     INVENIO_RDM_PUSH = 7
     ANNOUNCE = 8
+    PUSH_SIP_TO_CTA = 9
 
 
 class Status(models.IntegerChoices):
