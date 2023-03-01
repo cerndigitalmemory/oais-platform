@@ -1,11 +1,12 @@
 import json
 import logging
-import ntpath
 import os
 import shutil
+import time
 from datetime import timedelta
 from urllib.parse import urljoin
 
+import ntpath
 import requests
 from amclient import AMClient
 from bagit_create import main as bic
@@ -14,28 +15,27 @@ from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.settings import (
-    AIP_UPSTREAM_BASEPATH,
-    AM_ABS_DIRECTORY,
-    AM_API_KEY,
-    AM_REL_DIRECTORY,
-    AM_SS_API_KEY,
-    AM_SS_URL,
-    AM_SS_USERNAME,
-    AM_TRANSFER_SOURCE,
-    AM_URL,
-    AM_USERNAME,
-    BIC_UPLOAD_PATH,
-    FILES_URL,
-    INVENIO_API_TOKEN,
-    INVENIO_SERVER_URL,
-    SIP_UPSTREAM_BASEPATH,
-    BASE_URL,
-)
-from oais_utils.validate import validate_sip, get_manifest
 from oais_platform.oais.sources import get_source
+from oais_platform.settings import (AIP_UPSTREAM_BASEPATH, AM_ABS_DIRECTORY,
+                                    AM_API_KEY, AM_REL_DIRECTORY,
+                                    AM_SS_API_KEY, AM_SS_URL, AM_SS_USERNAME,
+                                    AM_TRANSFER_SOURCE, AM_URL, AM_USERNAME,
+                                    BASE_URL, BIC_UPLOAD_PATH, FILES_URL,
+                                    FTS_GRID_CERT, FTS_GRID_CERT_KEY,
+                                    FTS_INSTANCE, INVENIO_API_TOKEN,
+                                    INVENIO_SERVER_URL, SIP_UPSTREAM_BASEPATH)
+from oais_utils.validate import get_manifest, validate_sip
 
+from .fts import FTS
+
+# Set up logging
+## Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
+## Standard logger
+logging.basicConfig(level=logging.INFO)
+
+# Get the FTS client ready
+fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -152,6 +152,8 @@ def create_step(step_name, archive_id, input_step_id=None):
         archivematica.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.INVENIO_RDM_PUSH:
         invenio.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.PUSH_SIP_TO_CTA:
+        push_sip_to_cta.delay(step.archive.id, step.id, step.input_data)
 
     return step
 
@@ -176,6 +178,70 @@ def create_path_artifact(name, path, localpath):
 
 
 # Steps implementations
+
+
+@shared_task(name="pushSIPtoCTA", bind=True, ignore_result=True)
+def push_sip_to_cta(self, archive_id, step_id, input_data=None):
+    logger.info(f"Pushing Archive {archive_id} to CTA")
+
+    # Get the Archive and Step we're running for
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    path_to_sip = archive.path_to_sip
+    # And set the step as in progress
+    step.set_status(Status.IN_PROGRESS)
+
+    cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
+
+    submitted_job = fts.push_to_cta(
+        f"root://eospublic.cern.ch/{path_to_sip}",
+        f"root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/test/{cta_folder_name}",
+    )
+
+    logger.info(submitted_job)
+
+    output_cta_artifact = {
+        "artifact_name": "FTS Job",
+        "artifact_path": cta_folder_name,
+        "artifact_url": f"https://fts3-pilot.cern.ch:8449/fts3/ftsmon/#/job/{submitted_job}",
+    }
+
+    # Create the scheduler
+    schedule = IntervalSchedule.objects.create(every=2, period=IntervalSchedule.SECONDS)
+    # Spawn a periodic task to check for the status of the job
+    PeriodicTask.objects.create(
+        interval=schedule,
+        name=f"FTS job status for step: {step.id}",
+        task="check_fts_job_status",
+        args=json.dumps([archive.id, step.id, submitted_job]),
+        expires=timezone.now() + timedelta(minutes=600),
+    )
+
+    step.set_output_data(
+        {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
+    )
+
+
+@shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
+def check_fts_job_status(self, archive_id, step_id, job_id):
+    step = Step.objects.get(pk=step_id)
+    status = fts.job_status(job_id)
+
+    task_name = f"FTS job status for step: {step.id}"
+    periodic_task = PeriodicTask.objects.get(name=task_name)
+
+    if status["job_state"] == "FINISHED":
+        logger.info("Looks like the transfer succeded, removing periodic task")
+
+        step.set_finish_date()
+        step.set_status(Status.COMPLETED)
+
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+        periodic_task.delete()
+
+    logger.info(status["job_state"])
+
+
 @shared_task(
     name="processInvenio", bind=True, ignore_result=True, after_return=finalize
 )
@@ -693,7 +759,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         elif status == "FAILED" and microservice == "Move to the failed directory":
             remove_periodic_task(periodic_task, step)
 
-        elif status == "PROCESSING" and microservice == "Waiting for upload":
+        elif status == "PROCESSING":
             step.set_status(Status.IN_PROGRESS)
 
         step.set_output_data(am_status)
