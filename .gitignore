@@ -8,3 +8,5 @@ schema.yml
 oais-web/
 oais-data/
 .env.dev
+*.pem
+*.key
