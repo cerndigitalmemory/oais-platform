@@ -22,3 +22,9 @@ user = User.objects.create_user(username='<USERNAME>',
                                  email='<EMAIL>',
                                  password='<PASSWORD>')
 ```
+
+### Create or retrieve API token for user
+
+```
+make user=USER_NAME add-token
+```

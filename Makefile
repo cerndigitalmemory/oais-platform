@@ -38,3 +38,6 @@ clean:
 
 test:
 	docker compose -f test-compose.yml up --exit-code-from django
+
+add-token:
+	docker exec oais_django python manage.py drf_create_token $(foo)
