@@ -16,14 +16,27 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.sources import get_source
-from oais_platform.settings import (AIP_UPSTREAM_BASEPATH, AM_ABS_DIRECTORY,
-                                    AM_API_KEY, AM_REL_DIRECTORY,
-                                    AM_SS_API_KEY, AM_SS_URL, AM_SS_USERNAME,
-                                    AM_TRANSFER_SOURCE, AM_URL, AM_USERNAME,
-                                    BASE_URL, BIC_UPLOAD_PATH, FILES_URL,
-                                    FTS_GRID_CERT, FTS_GRID_CERT_KEY,
-                                    FTS_INSTANCE, INVENIO_API_TOKEN,
-                                    INVENIO_SERVER_URL, SIP_UPSTREAM_BASEPATH)
+from oais_platform.settings import (
+    AIP_UPSTREAM_BASEPATH,
+    AM_ABS_DIRECTORY,
+    AM_API_KEY,
+    AM_REL_DIRECTORY,
+    AM_SS_API_KEY,
+    AM_SS_URL,
+    AM_SS_USERNAME,
+    AM_TRANSFER_SOURCE,
+    AM_URL,
+    AM_USERNAME,
+    BASE_URL,
+    BIC_UPLOAD_PATH,
+    FILES_URL,
+    FTS_GRID_CERT,
+    FTS_GRID_CERT_KEY,
+    FTS_INSTANCE,
+    INVENIO_API_TOKEN,
+    INVENIO_SERVER_URL,
+    SIP_UPSTREAM_BASEPATH,
+)
 from oais_utils.validate import get_manifest, validate_sip
 
 from .fts import FTS
@@ -34,8 +47,11 @@ logger = get_task_logger(__name__)
 ## Standard logger
 logging.basicConfig(level=logging.INFO)
 
-# Get the FTS client ready
-fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
+try:
+    # Get the FTS client ready
+    fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
+except Exception:
+    logging.warning("Couldn't initialize the FTS client")
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
