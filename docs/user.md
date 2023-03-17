@@ -16,6 +16,7 @@ A backup is a short-term data recovery solution following loss or corruption and
 
 See also:
 
+- [CERN Digital Preservation Strategy (proposal)](https://digital-memory.web.cern.ch/misc/CERNDPStrategy.pdf)
 - [Why digital preservation matters](https://www.dpconline.org/handbook/digital-preservation/why-digital-preservation-matters)
 
 ### Features of the Digital Memory platform
@@ -26,28 +27,25 @@ In more practical terms, this is what the platform can do for you.
 
 If your data is not exported yet:
 
-- Export it in a consistent format from a number of different sources. E.g.:
-    - GitLab repositories (including discussions, issues, threads, source code, releases, etc)
-    - CERN Digital Repositories such as Indico, CDS, Zenodo, ...
+- Export it in a harmonised format from a number of different sources. E.g.:
+  - GitLab repositories (including discussions, issues, threads, source code, releases, etc)
+  - CERN Digital Repositories such as Indico, CDS, Zenodo, ...
 - Export from services where data is not published/cannot be exported (e.g. CodiMD)
 - Create "exports" from your local filesystem (or e.g. from CERNBox)
-- Provide examples of "export" mechanisms you can adapt to your needs
 - Prepare and curate your personal archive of documents scattered around different digital repositories while working at CERN
 
-If already have a way to export your data, by submitting it to the platform you will be able to:
+If you already have a way to export your data, by submitting it to the platform you will be able to:
 
 - Get data in a form that can be _disseminated_ and is able to live on its own, without the need of any digital repository or additional software
 - Push the preservation versions of important institutional data to the CERN Tape Archive (and not only byte level)
 - Get your files automatically converted into preservation formats. E.g.:
-    - AC3, AIFF, MP3, WAV, WMA into WAVE
-    - AVI, FLV, MOV, MPEG-1, MPEG-2, MPEG-4, SWF, WMV into FFV1/LPCM in MKV
-    - PDF to PDF/A
-    - BMP, GIF, JPG, JP2*, PCT, PNG*, PSD, TIFF, TGA to TIFF
-- Make your data discover-able and search-able on the Digital Memory Registry
+  - AC3, AIFF, MP3, WAV, WMA into WAVE
+  - AVI, FLV, MOV, MPEG-1, MPEG-2, MPEG-4, SWF, WMV into FFV1/LPCM in MKV
+  - PDF to PDF/A
+  - BMP, GIF, JPG, JP2*, PCT, PNG*, PSD, TIFF, TGA to TIFF
+- Make your data findable and search-able on the Digital Memory Registry
 
 ## Preliminar definitions
-
-Some important distinctions to make before digging in:
 
 #### SIP, AIP, DIP
 
@@ -86,9 +84,21 @@ An Archive can be published in different points in time to the Registry and they
 
 Those "versions" are always grouped under the same "Parent ID" so you will always be able to browse different versions of the same Archive.
 
-#### Artifact
+#### Information Packages
 
-Sometimes, a preservation step in the platform has some assets attached to it. E.g. the "Harvest" step will have the SIP artifact attached to it. You can find additional details and download links for the Artifacts from the Archive details in the platform and on the published Registry entry.
+The OAIS also defines the structure of the various information packages that are necessary for the management of the data, according to the place in the digital life cycle. These are the Submission Information Package (SIP), Dissemination Information Package (DIP) and Archival Information Package (AIP). A package is the conceptual parcel of the data and relevant metadata and descriptive information necessary to the particular object.
+
+The SIP is an Information Package that is delivered to the system for ingest. It contains the data to be stored and all the necessary related metadata about object. The SIP is accepted into the system and used to create an AIP.
+
+The AIP is an Information Package which is stored and preserved within the system. It is the information package the system stores, preserves and sustains.
+
+The DIP is the information package created to distribute the digital content.
+
+Additional details and download links for the packages related to an Archive can be found on the platform and in the registry.
+
+See also:
+
+- [The Open Archival Information System (OAIS) - iasa](https://www.iasa-web.org/tc04/open-archival-information-system-oais)
 
 ## UI
 
@@ -124,7 +134,6 @@ your-sip
 #### The SIP manifest
 
 See [https://gitlab.cern.ch/digitalmemory/sip-spec#sipjson](https://gitlab.cern.ch/digitalmemory/sip-spec#sipjson)
-
 
 ### Uploading a SIP
 
