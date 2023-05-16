@@ -33,6 +33,9 @@ Containers overview:
 - Rebuild images skipping cache. Can take a lot of time.
   Sometimes you need it when upgrading pip dependencies that are pointing to git repositories, e.g. bagit-create.
   `docker-compose build --no-cache`
+- Rebuild re-pulling the base images. If you're noticing unconsisting results or errors that shouldn't be there (e.g. build failing because of a missing dependency) this is mostly the cause, the base image may have been updated.
+  `docker-compose build --pull`
+
 
 To keep in mind:
 
