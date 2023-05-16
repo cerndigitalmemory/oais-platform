@@ -1,4 +1,4 @@
-FROM python:3.7-alpine
+FROM python:3.11-alpine
 
 # Ensure that the python output is sent straight to terminal
 ENV PYTHONUNBUFFERED 1
@@ -38,13 +38,11 @@ RUN apk add --update \
   # to allow pip install dependencies from git repositories
   git \
   # needed to compile M2Crypto, needed for the FTS client
-  swig 
+  swig
 
-RUN apk add libffi-dev
-COPY ./requirements.txt /requirements.txt
-
-# Postgreslq client
+# Postgresql client
 RUN apk add --update --no-cache postgresql-client jpeg-dev 
+
 # Build dependencies
 RUN apk add --update --no-cache --virtual .tmp-build-deps \
   gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev \
@@ -52,7 +50,9 @@ RUN apk add --update --no-cache --virtual .tmp-build-deps \
   krb5-dev
 
 # Install python packages
+COPY ./requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
+
 # Clean up temporary build dependencies
 RUN apk del .tmp-build-deps
 
