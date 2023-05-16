@@ -59,7 +59,7 @@ git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-platform.git
 # cd into the cloned folder
 cd oais-platform
 # Bring up the backend and the services:
-docker-compose up
+docker compose up
 # From another shell in the same folder and clone there the frontend:
 git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git
 # cd into the cloned folder
@@ -120,9 +120,9 @@ python manage.py test
 With docker-compose:
 
 ```bash
-docker-compose down
+docker compose down
 docker volume prune -y
-docker-compose -f test-compose.yml up --exit-code-from django
+docker compose -f test-compose.yml up --exit-code-from django
 ```
 
 Code is formatted using **black** and linted with **flake8**. A VSCode settings file is provided for convenience.
