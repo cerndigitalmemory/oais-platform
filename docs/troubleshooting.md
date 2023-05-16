@@ -13,15 +13,15 @@ Containers overview:
 | oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
 
 - Bring up the containers (start everything), showing aggregated logs
-  `docker-compose up`
+  `docker compose up`
   Stop containers with <kbd>CTRL</kbd>+<kbd>C</kbd>
 - Bring up the containers in detached mode (no logs)
-  `docker-compose up -d`
+  `docker compose up -d`
 - Show logs of single container
-  `docker-compose logs <CONTAINER_NAME>`
+  `docker compose logs <CONTAINER_NAME>`
   Use `-f` to keep following the logs
 - Remove containers
-  `docker-compose down`
+  `docker compose down`
 - Clean up volumes (e.g. to reset the database)
   `docker volume prune -f`
 - Run command in container
@@ -29,12 +29,12 @@ Containers overview:
 - Open shell in container
   `docker exec -it <CONTAINER_NAME> sh`
 - Rebuild images (e.g. when changing the Dockerfiles or requirements.txt)
-  `docker-compose build`
+  `docker compose build`
 - Rebuild images skipping cache. Can take a lot of time.
   Sometimes you need it when upgrading pip dependencies that are pointing to git repositories, e.g. bagit-create.
-  `docker-compose build --no-cache`
+  `docker compose build --no-cache`
 - Rebuild re-pulling the base images. If you're noticing unconsisting results or errors that shouldn't be there (e.g. build failing because of a missing dependency) this is mostly the cause, the base image may have been updated.
-  `docker-compose build --pull`
+  `docker compose build --pull`
 
 
 To keep in mind:
@@ -42,7 +42,7 @@ To keep in mind:
 - Modifications to tasks.py (and in general anything executed by Celery) may require a restart of the Celery runner
   `docker restart oais_celery`
 - Some changes (e.g. the change of a requirement) require the oais_django image to be rebuilt.
-  `docker-compose build`
+  `docker compose build`
 - Sometimes, the oais_django container may start before the database is ready. If it can't be started because of a failed connection to postgres, restart it manually:
   `docker start oais_django`
 
@@ -63,9 +63,9 @@ The "priority" order of settings is:
 To reset your instance:
 
 ```bash
-docker-compose down
+docker compose down
 docker volume prune
-docker-compose up
+docker compose up
 # sometimes django may need to be restarted manually..
 docker start oais_django
 # create a new superuser (with user and pass "admin") without entering manually the values
