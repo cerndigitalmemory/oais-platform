@@ -32,7 +32,7 @@ The platform is designed according to these principles:
 
 ## Usage
 
-A public instance of the platform is available over [https://dm-luteus.web.cern.ch/](https://dm-luteus.web.cern.ch/). Swagger API documentation can be found [here](https://dm-luteus.web.cern.ch/api/schema/swagger-ui/).
+A public instance of the platform is available over [https://preserve-qa.web.cern.ch/](https://preserve-qa.web.cern.ch/). Swagger API documentation can be found [here](https://preserve-qa.web.cern.ch/api/schema/swagger-ui/).
 
 User documentation is available [here](docs/user.md).
 
@@ -209,8 +209,3 @@ Make sure that:
 The CI configured on this repository to run the tests on every commit and trigger an upstream deployment.
 
 The platform gets deployed with Helm Charts on a Kubernetes cluster from CERN OpenShift. To learn more, check the [openshift-deploy](https://gitlab.cern.ch/digitalmemory/openshift-deploy) repository.
-
-Two deployments are currently online:
-
-- dm-luteus, tracking stable branches of the backend and the frontend
-- dm-galanos, tracking development branches of the backend and the frontend
