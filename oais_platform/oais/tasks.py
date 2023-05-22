@@ -196,8 +196,14 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(name="pushSIPtoCTA", bind=True, ignore_result=True)
+@shared_task(name="push_sip_to_cta", bind=True, ignore_result=True)
 def push_sip_to_cta(self, archive_id, step_id, input_data=None):
+    """
+    Push the SIP of the given Archive to CTA, preparing the FTS Job,
+    locations etc, then saving the details of the operation as the output
+    artifact. Once done, it sets up another periodic task to check on 
+    the status of the transfer.
+    """
     logger.info(f"Pushing Archive {archive_id} to CTA")
 
     # Get the Archive and Step we're running for
@@ -240,6 +246,11 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
 def check_fts_job_status(self, archive_id, step_id, job_id):
+    """
+    Check the status of a FTS job.
+    If done, set the corresponding step as completed and remove the
+    periodic task.
+    """
     step = Step.objects.get(pk=step_id)
     status = fts.job_status(job_id)
 
