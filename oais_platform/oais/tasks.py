@@ -59,13 +59,13 @@ except Exception:
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
     """
-    `Callback` for Celery tasks, handling result and updating
-    the Archive
+    This "callback" function is called everytime a Celery task 
+    finished its execution to update the status of the
+    relevant Archive and Step.
 
     status: Celery task status
     retval: returned value from the execution of the celery task
     task_id: Celery task ID
-    args:
     """
 
     # ID of the Archive this Step is in
@@ -81,8 +81,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
     # If the Celery task succeded
     if status == states.SUCCESS:
-        # This is for tasks failing without throwing an exception
-        # (e.g BIC returning an error)
+        # Even if the status is SUCCESS, the task may have failed 
+        # (e.g. without throwing an exception) so here we check 
+        # for returned errors
         if retval["status"] == 0:
             # Set last_step to the successful step
             archive.set_step(step)
@@ -114,33 +115,39 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Update the next possible steps
             next_steps = archive.update_next_steps(step.name)
 
-            # Automatically run next step ONLY if next_steps length is one and
-            # current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
+            # Automatically run next step ONLY if next_steps length is one (only one possible following step)
+            # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
             if len(next_steps) == 1 and step.name in [1, 2, 3, 8]:
                 create_step(next_steps[0], archive_id, step_id)
         else:
-            # If the celery task failed, set the Step as failed too and save the return value as the output data
+            # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)
             step.set_output_data(retval)
     else:
         step.set_status(Status.FAILED)
 
 
-def run_next_step(archive_id, step_id):
+def run_next_step(archive_id, previous_step_id):
     """
-    Prepare a step for the given Archive
+    Given an Archive (and its last executed step),
+    create the next step in the pipeline,
+    selecting the first possible one in the pipeline definition
     """
 
     archive = Archive.objects.get(pk=archive_id)
     step_name = archive.next_steps[0]
 
-    create_step(step_name, archive_id, step_id)
+    create_step(step_name, archive_id, previous_step_id)
 
 
 def create_step(step_name, archive_id, input_step_id=None):
     """
-    Given a step name, create a new Step for the given
-    Archive and spawn Celery tasks for it
+    Create a new Step of the desired type
+    for the given Archive and spawn Celery tasks for it
+
+    step_name: type of the step
+    archive_id: ID of the target Archive
+    input_step_id: (optional) step to set as "input" for the new one
     """
 
     try:
@@ -179,7 +186,8 @@ def create_step(step_name, archive_id, input_step_id=None):
 
 def create_path_artifact(name, path, localpath):
     """
-    Given a step, the name and the path artifact and the description,
+    Serialize an "Artifact" object with the given values.
+    The "URL" path is built prefixing the FILES_URL setting
     """
     # If the path starts with a slash (e.g. in case of /eos/.. paths)
     #  remove it so we can join it without losing parts of the FILES_URL
@@ -204,7 +212,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     """
     Push the SIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
-    artifact. Once done, it sets up another periodic task to check on 
+    artifact. Once done, set up another periodic task to check on 
     the status of the transfer.
     """
     logger.info(f"Pushing Archive {archive_id} to CTA")
