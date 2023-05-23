@@ -259,7 +259,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
 def check_fts_job_status(self, archive_id, step_id, job_id):
     """
     Check the status of a FTS job.
-    If done, set the corresponding step as completed and remove the
+    If finished, set the corresponding step as completed and remove the
     periodic task.
     """
     step = Step.objects.get(pk=step_id)
@@ -477,6 +477,10 @@ def process(self, archive_id, step_id, input_data=None):
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
 def validate(self, archive_id, step_id, input_data):
+    """
+    Validate the a folder against the CERN SIP specification,
+    using the OAIS utils package
+    """
     archive = Archive.objects.get(pk=archive_id)
     sip_folder_name = archive.path_to_sip
 
@@ -544,7 +548,9 @@ def checksum(self, archive_id, step_id, input_data):
 )
 def archivematica(self, archive_id, step_id, input_data):
     """
-    Gets the current step_id and the path to the sip folder and calls sends the sip to archivematica
+    Submit the SIP of the passed Archive to Archivematica
+    preparing the call to the Archivematica API
+    Once done, spawn a periodic task to check on the progress
     """
     archive = Archive.objects.get(pk=archive_id)
     path_to_sip = archive.path_to_sip
@@ -676,6 +682,11 @@ def archivematica(self, archive_id, step_id, input_data):
     ignore_result=True,
 )
 def check_am_status(self, message, step_id, archive_id, transfer_name=None):
+    """
+    Check the status of an Archivematica job by polling its API.
+    The related Step is updated with the information returned from Archivematica
+    e.g. the current microservice running or the final result.
+    """
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
 
@@ -812,7 +823,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
 def remove_periodic_task(periodic_task, step):
     """
-    Sets step as failed and removes the scheduling task
+    Set step as failed and remove the scheduled task
     """
     step.set_status(Status.FAILED)
     logger.warning(f"Step {step.id} failed. Step status: {step.status}")
@@ -902,7 +913,8 @@ def announce_sip(announce_path, creator):
     Given a filesystem path and a user:
 
     Run the OAIS validation tool on passed path and verify it's a proper SIP
-    If true, import the SIP into the platform
+    If true, import the SIP into the platform, creating an Archive for it
+    and setting the first Step
     """
     logger.info(
         f"Starting announce of {announce_path}. Checking if the path points to a valid SIP.."
@@ -967,7 +979,7 @@ def announce_sip(announce_path, creator):
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
 def copy_sip(self, archive_id, step_id, input_data):
     """
-    Given a path, copy the given path into the platform SIP storage
+    Given a path, copy it into the platform SIP storage
     If successful, save the final path in the passed Archive
     """
 
