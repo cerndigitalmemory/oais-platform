@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 import ntpath
 import requests
 from amclient import AMClient
-from bagit_create import main as bic
+import bagit_create
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
@@ -40,6 +40,9 @@ from oais_platform.settings import (
 from oais_utils.validate import get_manifest, validate_sip
 
 from .fts import FTS
+
+# Get the version of BagIt Create in use
+bic_version = bagit_create.version.get_version()
 
 # Set up logging
 ## Logger to be used inside Celery tasks
@@ -407,7 +410,7 @@ def process(self, archive_id, step_id, input_data=None):
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
     """
-    logger.info(f"Starting harvest of archive {archive_id}")
+    logger.info(f"Starting harvest of Archive {archive_id} using BagIt Create {bic_version}")
 
     archive = Archive.objects.get(pk=archive_id)
 
@@ -431,7 +434,7 @@ def process(self, archive_id, step_id, input_data=None):
             return {"status": 1, "errormsg": e}
 
     try:
-        bagit_result = bic.process(
+        bagit_result = bagit_create.main.process(
             recid=archive.recid,
             source=archive.source,
             loglevel=2,
