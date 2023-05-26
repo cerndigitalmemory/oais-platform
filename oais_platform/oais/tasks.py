@@ -1028,6 +1028,16 @@ def copy_sip(self, archive_id, step_id, input_data):
         }
 
     except Exception as e:
-        # In case of exception delete the target folder
+        # In case something goes wrong, delete the target 
+        # folder so we leave the file system clean
         shutil.rmtree(target_path)
         return {"status": 1, "errormsg": e}
+
+@shared_task(name="zip_folder", bind=True, ignore_result=True, after_return=finalize)
+def zip_folder(self, source_folder, target_path):
+    """
+    Create a zip archive of the given folder
+    """
+    
+    return make_archive(target, "zip", source_folder)
+

@@ -46,7 +46,7 @@ from rest_framework.reverse import reverse
 from ..settings import (AM_ABS_DIRECTORY, AM_REL_DIRECTORY, AM_URL,
                         CELERY_BROKER_URL, CELERY_RESULT_BACKEND,
                         INVENIO_API_TOKEN, INVENIO_SERVER_URL)
-from .tasks import announce_sip, create_step, process, run_next_step
+from .tasks import announce_sip, create_step, process, run_next_step, zip_folder
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -592,6 +592,7 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
     def download_artifact(self, request, pk=None):
         step = self.get_object()
 
+        # Artifacts of a restricted record are download-able only by the archive creator.
         if (
             request.user.id is not step.archive.creator.id
             and step.archive.restricted is True
@@ -607,16 +608,27 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                 if output_data["artifact"]["artifact_name"] == "SIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
                     files_path = output_data["artifact"]["artifact_localpath"]
-                    file_name = f"{pk}-sip.zip"
-                    path_to_zip = make_archive(files_path, "zip", files_path)
-                    response = HttpResponse(
-                        FileWrapper(open(path_to_zip, "rb")),
-                        content_type="application/zip",
-                    )
-                    response[
-                        "Content-Disposition"
-                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
-                    return response
+                    zip_name = f"{pk}-sip.zip"
+
+                    full_zip_path = files_path + zip_name
+                    print("full_zip_path:",full_zip_path)
+                    # path_to_zip = make_archive(files_path, "zip", files_path)
+
+                    # Did we create a ZIP file for this already?
+                    if os.path.exists(full_zip_path):
+                        response = HttpResponse(
+                            FileWrapper(open(full_zip_path, "rb")),
+                            content_type="application/zip",
+                        )
+                        response[
+                            "Content-Disposition"
+                        ] = 'attachment; filename="{filename}"'.format(filename=zip_name)
+                        return response
+                    else:
+                         zip_folder.delay(files_path, full_zip_path)
+                         return Response("ZIP not available, check back soon")
+
+                # AIPs are already available as 7z files from AM
                 elif output_data["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
                     files_path = output_data["artifact"]["artifact_path"]
@@ -629,6 +641,8 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         "Content-Disposition"
                     ] = 'attachment; filename="{filename}"'.format(filename=file_name)
                     return response
+
+                
         return HttpResponse(status=404)
 
     @action(detail=True, methods=["POST"], url_path="approve", url_name="approve")
