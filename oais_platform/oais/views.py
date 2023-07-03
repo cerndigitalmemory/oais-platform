@@ -19,22 +19,6 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from oais_platform.oais.exceptions import BadRequest
-from oais_platform.oais.mixins import PaginationMixin
-from oais_platform.oais.models import (Archive, Collection, Profile, Status,
-                                       Step, Steps, UploadJob)
-from oais_platform.oais.permissions import (
-    filter_all_archives_user_has_access, filter_archives_by_user_creator,
-    filter_archives_for_user, filter_archives_public,
-    filter_collections_by_user_perms, filter_jobs_by_user_perms,
-    filter_steps_by_user_perms, has_user_archive_edit_rights)
-from oais_platform.oais.serializers import (ArchiveSerializer,
-                                            CollectionSerializer,
-                                            GroupSerializer, LoginSerializer,
-                                            ProfileSerializer,
-                                            SourceRecordSerializer,
-                                            StepSerializer, UserSerializer)
-from oais_platform.oais.sources import InvalidSource, get_source
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.authtoken.models import Token
@@ -43,9 +27,48 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from ..settings import (AM_ABS_DIRECTORY, AM_REL_DIRECTORY, AM_URL,
-                        CELERY_BROKER_URL, CELERY_RESULT_BACKEND,
-                        INVENIO_API_TOKEN, INVENIO_SERVER_URL)
+from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.mixins import PaginationMixin
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Profile,
+    Status,
+    Step,
+    Steps,
+    UploadJob,
+)
+from oais_platform.oais.permissions import (
+    filter_all_archives_user_has_access,
+    filter_archives_by_user_creator,
+    filter_archives_for_user,
+    filter_archives_public,
+    filter_collections_by_user_perms,
+    filter_jobs_by_user_perms,
+    filter_steps_by_user_perms,
+    has_user_archive_edit_rights,
+)
+from oais_platform.oais.serializers import (
+    ArchiveSerializer,
+    CollectionSerializer,
+    GroupSerializer,
+    LoginSerializer,
+    ProfileSerializer,
+    SourceRecordSerializer,
+    StepSerializer,
+    UserSerializer,
+)
+from oais_platform.oais.sources import InvalidSource, get_source
+
+from ..settings import (
+    AM_ABS_DIRECTORY,
+    AM_REL_DIRECTORY,
+    AM_URL,
+    CELERY_BROKER_URL,
+    CELERY_RESULT_BACKEND,
+    INVENIO_API_TOKEN,
+    INVENIO_SERVER_URL,
+)
 from .tasks import announce_sip, create_step, process, run_next_step
 
 

@@ -1,19 +1,21 @@
 import json
 import logging
+import ntpath
 import os
 import shutil
 import time
 from datetime import timedelta
 from urllib.parse import urljoin
 
-import ntpath
+import bagit_create
 import requests
 from amclient import AMClient
-import bagit_create
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from oais_utils.validate import get_manifest, validate_sip
+
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.sources import get_source
 from oais_platform.settings import (
@@ -37,7 +39,6 @@ from oais_platform.settings import (
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
 )
-from oais_utils.validate import get_manifest, validate_sip
 
 from .fts import FTS
 
@@ -59,7 +60,7 @@ except Exception:
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
     """
-    This "callback" function is called everytime a Celery task 
+    This "callback" function is called everytime a Celery task
     finished its execution to update the status of the
     relevant Archive and Step.
 
@@ -81,8 +82,8 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
 
     # If the Celery task succeded
     if status == states.SUCCESS:
-        # Even if the status is SUCCESS, the task may have failed 
-        # (e.g. without throwing an exception) so here we check 
+        # Even if the status is SUCCESS, the task may have failed
+        # (e.g. without throwing an exception) so here we check
         # for returned errors
         if retval["status"] == 0:
             # Set last_step to the successful step
@@ -212,7 +213,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     """
     Push the SIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
-    artifact. Once done, set up another periodic task to check on 
+    artifact. Once done, set up another periodic task to check on
     the status of the transfer.
     """
     logger.info(f"Pushing Archive {archive_id} to CTA")
@@ -418,7 +419,9 @@ def process(self, archive_id, step_id, input_data=None):
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
     """
-    logger.info(f"Starting harvest of Archive {archive_id} using BagIt Create {bic_version}")
+    logger.info(
+        f"Starting harvest of Archive {archive_id} using BagIt Create {bic_version}"
+    )
 
     archive = Archive.objects.get(pk=archive_id)
 

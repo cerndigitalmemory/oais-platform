@@ -1,5 +1,6 @@
 from django.contrib import admin
-from oais_platform.oais.models import Archive, Step, Collection, Profile, UploadJob
+
+from oais_platform.oais.models import Archive, Collection, Profile, Step, UploadJob
 
 # Register your models here.
 

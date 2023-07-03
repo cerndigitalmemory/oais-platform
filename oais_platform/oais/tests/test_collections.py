@@ -1,8 +1,9 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Collection
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from oais_platform.oais.models import Archive, Collection
 from oais_platform.oais.serializers import ArchiveSerializer
 from oais_platform.oais.views import check_for_tag_name_duplicate
 

@@ -1,7 +1,7 @@
 from oais_platform.oais.sources.cds import CDS
-from oais_platform.oais.sources.invenio import Invenio
-from oais_platform.oais.sources.indico import Indico
 from oais_platform.oais.sources.codimd import CodiMD
+from oais_platform.oais.sources.indico import Indico
+from oais_platform.oais.sources.invenio import Invenio
 from oais_platform.oais.sources.local import Local
 
 sources = {

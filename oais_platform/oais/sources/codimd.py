@@ -2,6 +2,7 @@ import json
 from operator import itemgetter
 
 import requests
+
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
@@ -81,7 +82,7 @@ class CodiMD(Source):
             # else, return exactly as many elements to fill a page after the skipped results
             return {
                 "total_num_hits": total_num_hits,
-                "results": results[skip: skip + size],
+                "results": results[skip : skip + size],
             }
 
     def search_by_id(self, recid):

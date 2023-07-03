@@ -3,6 +3,7 @@ import json
 import os
 
 import requests
+
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
@@ -12,7 +13,7 @@ class ConfigFileUnavailable(Exception):
 
 
 class Indico(Source):
-    def __init__(self, source, baseURL,  api_key = None):
+    def __init__(self, source, baseURL, api_key=None):
         self.source = source
         self.baseURL = baseURL
         self.api_key = api_key
@@ -65,7 +66,7 @@ class Indico(Source):
 
         # Makes the api calls to get the results
         for api_page in range(number_of_api_calls):
-            try:       
+            try:
                 req = requests.get(
                     self.baseURL
                     + "/search/api/search?q="
@@ -74,7 +75,7 @@ class Indico(Source):
                     + "&type=subcontribution"
                     + "&type=event"
                     + f"&page={api_page + actual_page}",
-                    headers = self.headers
+                    headers=self.headers,
                 )
             except Exception:
                 raise ServiceUnavailable("Cannot perform search")
@@ -105,10 +106,7 @@ class Indico(Source):
         result = []
 
         try:
-            req = requests.get(
-                self.get_record_by_id(recid),
-                headers = self.headers
-            )
+            req = requests.get(self.get_record_by_id(recid), headers=self.headers)
 
         except Exception:
             raise ServiceUnavailable("Cannot perform searching", recid)
@@ -134,7 +132,7 @@ class Indico(Source):
             "source_url": url,
             "recid": recid,
             "title": record["title"],
-            #"authors": record["persons"],
+            # "authors": record["persons"],
             "source": self.source,
         }
 

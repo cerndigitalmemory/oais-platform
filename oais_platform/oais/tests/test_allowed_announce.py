@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
-from oais_platform.oais.views import check_allowed_path
 from rest_framework.test import APITestCase
+
+from oais_platform.oais.views import check_allowed_path
 
 
 class AnnouncePathAllowedTests(APITestCase):

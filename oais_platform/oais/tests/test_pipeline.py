@@ -1,8 +1,9 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Step, Steps, Status
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.serializers import ArchiveSerializer
 
 
@@ -97,11 +98,11 @@ class PipelineTests(APITestCase):
         url = reverse("archives-save-manifest", args=[self.archive.id])
         response = self.client.post(
             url,
-            {"manifest": {'test': 'test'}},
+            {"manifest": {"test": "test"}},
             format="json",
         )
 
         self.archive.refresh_from_db()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.manifest, {'test': 'test'})
+        self.assertEqual(self.archive.manifest, {"test": "test"})

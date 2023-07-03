@@ -3,11 +3,12 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tests.utils import TestSource
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks import process
+from oais_platform.oais.tests.utils import TestSource
 
 
 class HarvestTests(APITestCase):

@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User, Permission
+from django.contrib.auth.models import Permission, User
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
