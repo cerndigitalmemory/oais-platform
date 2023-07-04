@@ -79,12 +79,6 @@ urlpatterns = [
                     views.ArchiveViewSet.as_view({"post": "archive_create"}),
                     name="archives-create",
                 ),
-                # Retrieve labels for an Archive
-                path(
-                    "get-archive-information-labels/",
-                    views.get_archive_information_labels,
-                    name="get_archive_information_labels",
-                ),
                 # Check if a Resource has already Archives for it
                 path(
                     "records/check",

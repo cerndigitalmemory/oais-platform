@@ -1057,25 +1057,6 @@ def get_staged_archives(request):
     return Response(serializer.data)
 
 
-@api_view()
-@permission_classes([permissions.IsAuthenticated])
-def get_archive_information_labels(request):
-    """
-    Get archive
-    """
-    try:
-        user = request.user
-    except InvalidSource:
-        raise BadRequest("Invalid request")
-
-    staged_archives = Archive.objects.filter(staged=True, creator=user)
-    unstaged_archives = Archive.objects.filter(staged=False, creator=user)
-
-    return Response(
-        {"staged": len(staged_archives), "unstaged": len(unstaged_archives)}
-    )
-
-
 @extend_schema_view(
     post=extend_schema(
         description="""Creates an Archive given an UploadedFile
