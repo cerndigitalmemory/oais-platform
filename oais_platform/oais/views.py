@@ -1501,8 +1501,15 @@ def parse_url(request):
     return Response({"recid": recid, "source": source})
 
 
+@extend_schema(
+    request=LoginSerializer,
+    responses=UserSerializer
+)
 @api_view(["POST"])
 def login(request):
+    """
+    Local accounts login route. If successful, returns the logged in User and Profile.
+    """
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
         username = serializer.data["username"]
