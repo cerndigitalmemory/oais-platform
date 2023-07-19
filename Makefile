@@ -25,6 +25,10 @@ logs-django:
 shell:
 	docker exec -it oais_django sh
 
+# Spawn a django interactive shell and attach to it
+django-shell:
+	docker exec -it oais_django python manage.py shell
+
 # Prepare migrations and apply them
 migrations:
 	docker exec oais_django python manage.py makemigrations
@@ -36,8 +40,10 @@ clean:
 	rm -rf oais-data/*
 	rm *.tmp
 
+# Run tests according to the compose test setup
 test:
 	docker compose -f test-compose.yml up --exit-code-from django
 
+# Create API token
 add-token:
 	docker exec oais_django python manage.py drf_create_token $(foo)
