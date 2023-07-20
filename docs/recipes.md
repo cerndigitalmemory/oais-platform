@@ -1,10 +1,17 @@
 # Administration Recipes
 
-A django shell can be spawned with
+### Spawn a django shell
+
+A django shell can be spawned by running `python manage.py shell`.
+
+E.g. if you are on the local development setup with compose:
 
 ```sh
 docker exec -it oais_django python manage.py shell
 ```
+
+Or, if the instance is on OpenShift, go to **Pods** -> select the "oais-platform" one and on its **Terminal**, run `python manage.py shell`.
+
 
 ### Set every archive as private
 
