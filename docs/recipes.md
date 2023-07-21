@@ -1,5 +1,7 @@
 # Administration Recipes
 
+If not otherwise specified, the recipes report code that should be run in django shell.
+
 ### Spawn a django shell
 
 A django shell can be spawned by running `python manage.py shell`.
@@ -12,6 +14,14 @@ docker exec -it oais_django python manage.py shell
 
 Or, if the instance is on OpenShift, go to **Pods** -> select the "oais-platform" one and on its **Terminal**, run `python manage.py shell`.
 
+Some imports you may want:
+
+```python
+from oais_platform.oais.models import Archive
+from oais_platform.oais.models import Collection
+from django.contrib.auth.models import User
+
+```
 
 ### Set every archive as private
 
@@ -28,20 +38,6 @@ from django.contrib.auth.models import User
 user = User.objects.create_user(username='<USERNAME>',
                                  email='<EMAIL>',
                                  password='<PASSWORD>')
-```
-
-### Create or retrieve API token for user
-
-In a docker compose setup:
-
-```
-make user=USER_NAME add-token
-```
-
-In a shell:
-
-```
-python manage.py drf_create_token USER_NAME
 ```
 
 ### Find all Archive with a specific tag
@@ -65,7 +61,7 @@ ARCHIVE_ID_TO_DELETE = 1
 
 a = Archive.objects.get(pk=ARCHIVE_ID_TO_DELETE)
 
-a.last_set = None
+a.last_step = None
 
 a.save()
 
@@ -87,4 +83,30 @@ for a in tag.archives.values():
         print("Deleting Step ", s.id)
         s.delete()
     archive.delete()
+```
+
+### Set user as django superuser
+
+```python
+from django.contrib.auth.models import User
+user = User.objects.get(username="USER_NAME")
+user.is_staff = True
+user.is_admin = True
+user.save()
+```
+
+### Create or retrieve API token for user
+
+This recipe should be run in a normal shell in the pod/machine running the django server
+
+In a docker compose setup:
+
+```
+make user=USER_NAME add-token
+```
+
+In a shell:
+
+```
+python manage.py drf_create_token USER_NAME
 ```
