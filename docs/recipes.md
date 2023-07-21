@@ -32,13 +32,23 @@ user = User.objects.create_user(username='<USERNAME>',
 
 ### Create or retrieve API token for user
 
+In a docker compose setup:
+
 ```
 make user=USER_NAME add-token
+```
+
+In a shell:
+
+```
+python manage.py drf_create_token USER_NAME
 ```
 
 ### Find all Archive with a specific tag
 
 ```python
+from oais_platform.oais.models import Collection
+
 # Get tag from ID
 tag = Collection.objects.get(pk=4)
 
