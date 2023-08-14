@@ -299,6 +299,9 @@ CTA_BASE_PATH = environ.get(
     "root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/",
 )
 
+# CERNBox integration
+LOCAL_BASE_PATH = "/oais-data/cernbox/"
+
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa

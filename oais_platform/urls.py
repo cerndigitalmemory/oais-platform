@@ -112,6 +112,7 @@ urlpatterns = [
                     name="announce",
                 ),
                 path("stats/", views.statistics, name="statistics"),
+                path("cernbox/", views.cernbox_upload, name="cernbox_upload"),
             ]
         ),
     ),

@@ -70,6 +70,7 @@ from ..settings import (
     INVENIO_SERVER_URL,
 )
 from .tasks import announce_sip, create_step, process, run_next_step
+from oais_platform.settings import LOCAL_BASE_PATH
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -992,6 +993,35 @@ def statistics(request):
     }
     return Response(data)
 
+@api_view(["POST"])
+def cernbox_upload(request):
+    # MAX number of files allowed to download at once.
+    MAX = 10
+    data = {}
+    # TODO: check if try-catch is needed here.
+    try:
+        data = json.loads(request.body)
+    except:
+        # TODO: implement exception handle
+        pass
+
+    number_of_downloaded_files = 0
+    for name, url in data.items():
+        # TODO: check if try-catch is needed here.
+        try:
+            if number_of_downloaded_files == MAX:
+                break
+
+            response = requests.get(url)
+
+            with open(os.path.join(LOCAL_BASE_PATH, name), "wb") as file:
+                file.write(response.content)
+                number_of_downloaded_files += 1
+        except Exception as e:
+            # TODO: implement exception handle
+            pass
+
+    return Response({"message" : "Success!", "number of files send" : len(data), "number of successfully downloaded files" : number_of_downloaded_files, "your_data" : data})
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
