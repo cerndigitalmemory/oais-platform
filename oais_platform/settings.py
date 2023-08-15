@@ -2,18 +2,19 @@
 Django settings for oais_platform project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/3.1/topics/settings/
+https://docs.djangoproject.com/en/4.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/3.1/ref/settings/
+https://docs.djangoproject.com/en/4.2/ref/settings/
 
 This file provides the base configuration values for the
-various components of the project.
+various components of the project, suitable for a local
+development setup.
 
 Some of them can be easily customised by setting
 environment variables, however, for full control
-over this file (e.g. deployments), you can edit the
-`local_settings/__init__.py` file.
+over this file (e.g. production deployments),
+you can edit the `local_settings/__init__.py` file.
 
 That package is loaded at the end of this file and
 everything defined in local_settings *will override*
@@ -48,6 +49,8 @@ ALLOWED_HOSTS = []
 # Where are we being served from? No trailing slash here
 BASE_URL = "http://localhost"
 
+# Allow local accounts to login
+ALLOW_LOCAL_LOGIN = environ.get("ALLOW_LOCAL_LOGIN", False)
 
 ## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")

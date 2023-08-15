@@ -61,6 +61,7 @@ from oais_platform.oais.serializers import (
 from oais_platform.oais.sources import InvalidSource, get_source
 
 from ..settings import (
+    ALLOW_LOCAL_LOGIN,
     AM_ABS_DIRECTORY,
     AM_REL_DIRECTORY,
     AM_URL,
@@ -547,6 +548,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archives = Archive.objects.filter(staged=True, creator=request.user)
         pagination = request.GET.get("paginated", "true")
+
         if pagination == "false":
             return Response(ArchiveSerializer(archives, many=True).data)
         else:
@@ -1482,15 +1484,16 @@ def parse_url(request):
     return Response({"recid": recid, "source": source})
 
 
-@extend_schema(
-    request=LoginSerializer,
-    responses=UserSerializer
-)
+@extend_schema(request=LoginSerializer, responses=UserSerializer)
 @api_view(["POST"])
 def login(request):
     """
     Local accounts login route. If successful, returns the logged in User and Profile.
     """
+
+    if not ALLOW_LOCAL_LOGIN:
+        raise BadRequest("Local authentication disabled")
+
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
         username = serializer.data["username"]
@@ -1506,9 +1509,17 @@ def login(request):
     raise BadRequest("Missing username or password")
 
 
+@extend_schema(
+    request=None,
+    # TODO: provide a serializer for 403 here
+    responses=None,
+)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def logout(request):
+    """
+    Clean out session data for the current request and logs out the active user.
+    """
     auth.logout(request)
     return Response({"status": "success"})
 
