@@ -996,6 +996,7 @@ def statistics(request):
     }
     return Response(data)
 
+
 @api_view(["POST"])
 def cernbox_upload(request):
     data = {}
@@ -1023,6 +1024,7 @@ def cernbox_upload(request):
             pass
 
     return Response({"message" : "Your file have been succesfully uploaded."})
+
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
