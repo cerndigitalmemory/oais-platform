@@ -69,6 +69,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
       - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
+      - ALLOW_LOCAL_LOGIN=True
     env_file:
       - ./.env.dev
     depends_on:
