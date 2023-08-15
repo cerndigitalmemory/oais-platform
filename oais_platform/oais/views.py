@@ -1010,8 +1010,8 @@ def cernbox_upload(request):
     for name, url in data.items():
         # TODO: check if try-catch is needed here.
         try:
-            if number_of_downloaded_files == MAX:
-                break
+            if number_of_downloaded_files == FILE_LIMIT:
+                return Response({"message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."})
 
             response = requests.get(url)
 
@@ -1022,7 +1022,7 @@ def cernbox_upload(request):
             # TODO: implement exception handle
             pass
 
-    return Response({"message" : "Success!", "number of files send" : len(data), "number of successfully downloaded files" : number_of_downloaded_files, "your_data" : data})
+    return Response({"message" : "Your file have been succesfully uploaded."})
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
