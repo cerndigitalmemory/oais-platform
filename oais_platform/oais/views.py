@@ -70,7 +70,10 @@ from ..settings import (
     INVENIO_SERVER_URL,
 )
 from .tasks import announce_sip, create_step, process, run_next_step
-from oais_platform.settings import LOCAL_BASE_PATH
+from oais_platform.settings import (
+    LOCAL_BASE_PATH,
+    FILE_LIMIT,
+)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -995,8 +998,6 @@ def statistics(request):
 
 @api_view(["POST"])
 def cernbox_upload(request):
-    # MAX number of files allowed to download at once.
-    MAX = 10
     data = {}
     # TODO: check if try-catch is needed here.
     try:
