@@ -999,10 +999,14 @@ def statistics(request):
 
 @api_view(["POST"])
 def cernbox_upload(request):
+    return file_download(request.body)
+
+
+def file_download(file_list):
     data = {}
     # TODO: check if try-catch is needed here.
     try:
-        data = json.loads(request.body)
+        data = json.loads(file_list)
     except:
         # TODO: implement exception handle
         pass
