@@ -1016,7 +1016,7 @@ def file_download(file_list):
         # TODO: check if try-catch is needed here.
         try:
             if number_of_downloaded_files == FILE_LIMIT:
-                return Response({"message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."})
+                return Response({"message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."}, status=202)
 
             response = requests.get(url)
 
@@ -1027,7 +1027,7 @@ def file_download(file_list):
             # TODO: implement exception handle
             pass
 
-    return Response({"message" : "Your file have been succesfully uploaded."})
+    return Response({"message" : "Your file have been succesfully uploaded."}, status=200)
 
 
 @api_view(["POST"])
