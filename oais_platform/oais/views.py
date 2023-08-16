@@ -517,21 +517,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
         )
 
-    def arhive_created_for_cernbox(self, request):
-        """
-        Creates an Archive for files passed from the CERNBox.
-        """
-        Arhive.objects.create(
-            # recid is an unique value, created as a timestamp
-            # TODO: could timestamps be duplicated?
-            recid=int(time.time()),
-            source="CERNBox",
-            title="Upload from your personal CERNBox",
-            creator=request.user,
-        )
-
-        return Respone({"status" : 0, "errormsg": None})
-
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
@@ -1014,6 +999,23 @@ def statistics(request):
 
 @api_view(["POST"])
 def upload_cernbox(request):
+    # Creates a new Archive instance
+    archive = Arhive.objects.create(
+        # recid is an unique value, created as a timestamp
+        # TODO: could timestamps be duplicated?
+        recid=int(time.time()),
+        source="CERNBox",
+        title="Upload from your personal CERNBox",
+        creator=request.user,
+    )
+
+    step = Step.objects.create(
+        archive=archive, name=Steps.DOWNLOAD_ASSET, status=Status.NOT_RUN, input_data=request.body
+    )
+
+    # process.delay(step.archive.id, step.id)
+
+    # Old code
     return Response(file_download(request.body))
 
 
