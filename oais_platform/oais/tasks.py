@@ -1036,9 +1036,16 @@ def copy_sip(self, archive_id, step_id, input_data):
         return {"status": 1, "errormsg": e}
 
 
+# TODO: Do we need input_data parameter for this function?
 @shared_task(name="download_files", bind=True, ignore_result=True)
-def download_files(file_list):
-    data = json.loads(file_list)
+def download_files(self, archive_id, step_id):
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    
+    # TODO: Do we need to set Status to IN_PROGRESS?
+    # step.set_status(Status.IN_PROGRESS)
+
+    data = json.loads(step.input_data)
     number_of_downloaded_files = 0
     
     for name, url in data.items():

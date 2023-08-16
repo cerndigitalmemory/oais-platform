@@ -1011,7 +1011,6 @@ def upload_cernbox(request):
         archive=archive, name=Steps.DOWNLOAD_FILES_FROM_LINKS, status=Status.NOT_RUN, input_data=request.body
     )
     
-    # TODO: Update download_files to match this call
     download_files.delay(step.archive.id, step.id)
 
     # Old code
