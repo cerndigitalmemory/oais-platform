@@ -999,10 +999,8 @@ def statistics(request):
 
 @api_view(["POST"])
 def upload_cernbox(request):
-    # Creates a new Archive instance
-    archive = Arhive.objects.create(
-        # recid is an unique value, created as a timestamp
-        # TODO: could timestamps be duplicated?
+    # Creates a new Archive
+    Arhive.objects.create(
         recid=int(time.time()),
         source="CERNBox",
         title="Upload from your personal CERNBox",
@@ -1012,8 +1010,9 @@ def upload_cernbox(request):
     step = Step.objects.create(
         archive=archive, name=Steps.DOWNLOAD_FILES_FROM_LINKS, status=Status.NOT_RUN, input_data=request.body
     )
-
-    # process.delay(step.archive.id, step.id)
+    
+    # TODO: Update download_files to match this call
+    download_files.delay(step.archive.id, step.id)
 
     # Old code
     return Response(file_download(request.body))
