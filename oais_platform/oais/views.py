@@ -519,7 +519,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     def arhive_created_for_cernbox(self, request):
         """
-        Creates an Archive for files passed through the CERNBox.
+        Creates an Archive for files passed from the CERNBox.
         """
         Arhive.objects.create(
             # recid is an unique value, created as a timestamp
