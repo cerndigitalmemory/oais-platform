@@ -1023,9 +1023,8 @@ def file_download(file_list):
     # TODO: check if try-catch is needed here.
     try:
         data = json.loads(file_list)
-    except:
-        # TODO: implement exception handle
-        pass
+    except Exception as e:
+        return Response({"status" : 1, "errormsg" : e})
 
     number_of_downloaded_files = 0
     for name, url in data.items():
@@ -1040,8 +1039,7 @@ def file_download(file_list):
                 file.write(response.content)
                 number_of_downloaded_files += 1
         except Exception as e:
-            # TODO: implement exception handle
-            pass
+            return Resonse({"status" : 1, "errorMsg" : e})
 
     return Response({"message" : "Your file have been succesfully uploaded."}, status=200)
 
