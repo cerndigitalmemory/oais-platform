@@ -1055,7 +1055,7 @@ def download_files(self, archive_id, step_id):
 
         response = requests.get(url)
 
-        with open(os.path.join(LOCAL_BASE_PATH, name), "wb") as file:
+        with open(os.path.join(LOCAL_BASE_PATH, step.output_date, name), "wb") as file:
             file.write(response.content)
             number_of_downloaded_files += 1
 
