@@ -1019,32 +1019,6 @@ def upload_cernbox(request):
     return Response(file_download(request.body))
 
 
-def download_files(file_list):
-    data = {}
-    # TODO: check if try-catch is needed here.
-    try:
-        data = json.loads(file_list)
-    except Exception as e:
-        return {"status" : 1, "errormsg" : e}
-
-    number_of_downloaded_files = 0
-    for name, url in data.items():
-        # TODO: check if try-catch is needed here.
-        try:
-            if number_of_downloaded_files == FILE_LIMIT:
-                return {"status" : 0, "message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."}
-
-            response = requests.get(url)
-
-            with open(os.path.join(LOCAL_BASE_PATH, name), "wb") as file:
-                file.write(response.content)
-                number_of_downloaded_files += 1
-        except Exception as e:
-            return {"status" : 1, "errorMsg" : e}
-
-    return {"status" : 0, "message" : "Your file have been succesfully uploaded."}
-
-
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def check_archived_records(request):
