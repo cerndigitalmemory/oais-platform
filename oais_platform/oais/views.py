@@ -1014,7 +1014,7 @@ def statistics(request):
 
 @api_view(["POST"])
 def cernbox_upload(request):
-    return file_download(request.body)
+    return Response(file_download(request.body))
 
 
 def file_download(file_list):
@@ -1023,14 +1023,14 @@ def file_download(file_list):
     try:
         data = json.loads(file_list)
     except Exception as e:
-        return Response({"status" : 1, "errormsg" : e})
+        return {"status" : 1, "errormsg" : e}
 
     number_of_downloaded_files = 0
     for name, url in data.items():
         # TODO: check if try-catch is needed here.
         try:
             if number_of_downloaded_files == FILE_LIMIT:
-                return Response({"message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."}, status=202)
+                return {"status" : 0, "message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."}
 
             response = requests.get(url)
 
@@ -1038,9 +1038,9 @@ def file_download(file_list):
                 file.write(response.content)
                 number_of_downloaded_files += 1
         except Exception as e:
-            return Resonse({"status" : 1, "errorMsg" : e})
+            return {"status" : 1, "errorMsg" : e}
 
-    return Response({"message" : "Your file have been succesfully uploaded."}, status=200)
+    return {"status" : 0, "message" : "Your file have been succesfully uploaded."}
 
 
 @api_view(["POST"])
