@@ -89,6 +89,8 @@ urlpatterns = [
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 # Upload a SIP
                 path("upload/sip", views.upload_sip, name="upload-sip"),
+                # Upload from CERNBox
+                path("upload/cernbox", views.upload_cernbox, name="upload-cernbox"),
                 # Search
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -112,7 +114,6 @@ urlpatterns = [
                     name="announce",
                 ),
                 path("stats/", views.statistics, name="statistics"),
-                path("cernbox/", views.cernbox_upload, name="cernbox_upload"),
             ]
         ),
     ),

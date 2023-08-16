@@ -1013,7 +1013,7 @@ def statistics(request):
 
 
 @api_view(["POST"])
-def cernbox_upload(request):
+def upload_cernbox(request):
     return Response(file_download(request.body))
 
 
