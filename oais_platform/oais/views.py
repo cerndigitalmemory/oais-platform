@@ -1019,7 +1019,7 @@ def upload_cernbox(request):
     return Response(file_download(request.body))
 
 
-def file_download(file_list):
+def download_files(file_list):
     data = {}
     # TODO: check if try-catch is needed here.
     try:
