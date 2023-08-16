@@ -1001,6 +1001,7 @@ def statistics(request):
 @api_view(["POST"])
 def upload_cernbox(request):
     timestamp = time.time()
+
     # Creates a new Archive
     Arhive.objects.create(
         recid=int(timestamp),
@@ -1026,8 +1027,11 @@ def upload_cernbox(request):
     
     download_files.delay(step.archive.id, step.id)
 
-    # Old code
-    return Response(file_download(request.body))
+    serializer = ArchiveSerializer(
+            archive,
+            many=False,
+        )
+    return Response(serializer.data)
 
 
 @api_view(["POST"])
