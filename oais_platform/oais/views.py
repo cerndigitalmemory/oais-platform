@@ -517,6 +517,22 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
         )
 
+    def arhive_created_for_cernbox(self, request):
+        """
+        Creates an Archive for files passed through the CERNBox.
+        """
+        Arhive.objects.create(
+            # recid is an unique value, created as a timestamp
+            # TODO: could timestamps be duplicated?
+            recid=int(time.time()),
+            source="CERNBox",
+            title="Upload from your personal CERNBox",
+            creator=request.user,
+        )
+
+        return Respone({"status" : 0, "errormsg": None})
+
+
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
