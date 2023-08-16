@@ -1010,7 +1010,7 @@ def upload_cernbox(request):
     )
 
     step = Step.objects.create(
-        archive=archive, name=Steps.DOWNLOAD_ASSET, status=Status.NOT_RUN, input_data=request.body
+        archive=archive, name=Steps.DOWNLOAD_FILES_FROM_LINKS, status=Status.NOT_RUN, input_data=request.body
     )
 
     # process.delay(step.archive.id, step.id)
