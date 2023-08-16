@@ -1048,7 +1048,7 @@ def download_files(self, archive_id, step_id):
     data = json.loads(step.input_data)
     number_of_downloaded_files = 0
 
-    # Creates a subfolder needed for file storage
+    # Creates a subfolder needed for file storage in similar way as a `mkdir -p` command
     folder_name = os.path.join(LOCAL_BASE_PATH, step.output_data)
     os.makedirs(folder_name, exist_ok=True)
 
