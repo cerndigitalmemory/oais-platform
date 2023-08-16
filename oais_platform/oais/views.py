@@ -532,7 +532,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Respone({"status" : 0, "errormsg": None})
 
-
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
