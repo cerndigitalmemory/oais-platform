@@ -1036,27 +1036,20 @@ def copy_sip(self, archive_id, step_id, input_data):
         return {"status": 1, "errormsg": e}
 
 
+@shared_task(name="download_files", bind=True, ignore_result=True)
 def download_files(file_list):
-    data = {}
-    # TODO: check if try-catch is needed here.
-    try:
-        data = json.loads(file_list)
-    except Exception as e:
-        return {"status" : 1, "errormsg" : e}
-
+    data = json.loads(file_list)
     number_of_downloaded_files = 0
+    
     for name, url in data.items():
-        # TODO: check if try-catch is needed here.
-        try:
-            if number_of_downloaded_files == FILE_LIMIT:
-                return {"status" : 0, "message" : "First " + FILE_LIMIT + " have been successfully uploaded, the rest were ignored due to file number limit."}
+        if number_of_downloaded_files == FILE_LIMIT:
+            # TODO: Check what to do if user sends number of files that exceeds the FILE_LIMIT
+            return False
 
-            response = requests.get(url)
+        response = requests.get(url)
 
-            with open(os.path.join(LOCAL_BASE_PATH, name), "wb") as file:
-                file.write(response.content)
-                number_of_downloaded_files += 1
-        except Exception as e:
-            return {"status" : 1, "errorMsg" : e}
+        with open(os.path.join(LOCAL_BASE_PATH, name), "wb") as file:
+            file.write(response.content)
+            number_of_downloaded_files += 1
 
-    return {"status" : 0, "message" : "Your file have been succesfully uploaded."}
+    return True
