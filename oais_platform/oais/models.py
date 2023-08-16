@@ -62,6 +62,7 @@ class Steps(models.IntegerChoices):
     INVENIO_RDM_PUSH = 7
     ANNOUNCE = 8
     PUSH_SIP_TO_CTA = 9
+    DOWNLOAD_ASSET = 10
 
 
 class Status(models.IntegerChoices):
