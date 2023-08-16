@@ -1007,8 +1007,14 @@ def upload_cernbox(request):
         creator=request.user,
     )
 
+    # Creates a new Step instance, where input_data is used to store file links and output_data
+    # is used to store name of the subfolder which will be used for storing of the download files
     step = Step.objects.create(
-        archive=archive, name=Steps.DOWNLOAD_FILES_FROM_LINKS, status=Status.NOT_RUN, input_data=request.body
+        archive=archive,
+        name=Steps.DOWNLOAD_FILES_FROM_LINKS,
+        status=Status.NOT_RUN,
+        input_data=request.body,
+        # output_data=subfolder_name,
     )
     
     download_files.delay(step.archive.id, step.id)
