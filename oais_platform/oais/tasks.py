@@ -1047,15 +1047,19 @@ def download_files(self, archive_id, step_id):
 
     data = json.loads(step.input_data)
     number_of_downloaded_files = 0
-    
+
+    # Creates a subfolder needed for file storage
+    folder_name = os.path.join(LOCAL_BASE_PATH, step.output_data)
+    os.makedirs(folder_name, exist_ok=True)
+
     for name, url in data.items():
         if number_of_downloaded_files == FILE_LIMIT:
             # TODO: Check what to do if user sends number of files that exceeds the FILE_LIMIT
             return False
 
         response = requests.get(url)
-
-        with open(os.path.join(LOCAL_BASE_PATH, step.output_date, name), "wb") as file:
+        
+        with open(os.path.join(folder_name, name), "wb") as file:
             file.write(response.content)
             number_of_downloaded_files += 1
 
