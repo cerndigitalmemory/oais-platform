@@ -1055,7 +1055,7 @@ def download_files(self, archive_id, step_id):
     for file_name, url in data.items():
         if number_of_downloaded_files == FILE_LIMIT:
             # TODO: Check what to do if user sends number of files that exceeds the FILE_LIMIT
-            return False
+            break
 
         response = requests.get(url)
         
@@ -1063,4 +1063,4 @@ def download_files(self, archive_id, step_id):
             file.write(response.content)
             number_of_downloaded_files += 1
 
-    return True
+    return folder_name
