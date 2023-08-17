@@ -71,10 +71,7 @@ from ..settings import (
     INVENIO_SERVER_URL,
 )
 from .tasks import announce_sip, create_step, process, run_next_step
-from oais_platform.settings import (
-    LOCAL_BASE_PATH,
-    FILE_LIMIT,
-)
+from oais_platform.settings import FILE_LIMIT
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
