@@ -1038,7 +1038,7 @@ def copy_sip(self, archive_id, step_id, input_data):
 
 # TODO: Do we need input_data parameter for this function?
 @shared_task(name="download_files", bind=True, ignore_result=True)
-def download_files(self, archive_id, step_id):
+def process_files(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
     

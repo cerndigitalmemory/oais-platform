@@ -1025,7 +1025,7 @@ def upload_cernbox(request):
         output_data=subfolder_name,
     )
     
-    download_files.delay(step.archive.id, step.id)
+    process_files.delay(step.archive.id, step.id)
 
     serializer = ArchiveSerializer(
             archive,
