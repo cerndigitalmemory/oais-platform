@@ -1011,19 +1011,12 @@ def upload_cernbox(request):
         creator=request.user,
     )
 
-    # TODO: Should subfolder name creation be a separate function?
-    # Creates a unique subfolder name
-    date_time = datetime.fromtimestamp(timestamp)
-    subfolder_name = date_time.strftime("%d%m%Y_%S%M%H")
-
-    # Creates a new Step instance, where input_data is used to store file links and output_data
-    # is used to store name of the subfolder which will be used for storing of the download files
+    # Creates a new Step instance where input_data is used to store file links
     step = Step.objects.create(
         archive=archive,
         name=Steps.DOWNLOAD_FILES_FROM_LINKS,
         status=Status.NOT_RUN,
         input_data=request.body,
-        output_data=subfolder_name,
     )
     
     process_files.delay(step.archive.id, step.id)
