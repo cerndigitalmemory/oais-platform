@@ -38,6 +38,7 @@ from oais_platform.settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
+    LOCAL_BASE_PATH,
 )
 
 from .fts import FTS
