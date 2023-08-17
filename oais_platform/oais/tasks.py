@@ -1045,10 +1045,18 @@ def process_files(self, archive_id, step_id):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
+    download_files(step)
+    return step.output_data
+
+def download_files(step):
     data = json.loads(step.input_data)
 
+    # Creates a unique subfolder name
+    date_time = datetime.fromtimestamp(timestamp)
+    subfolder_name = date_time.strftime("%d%m%Y_%S%M%H")
+
     # Creates a subfolder needed for file storage in similar way as a `mkdir -p` command
-    folder_name = os.path.join(LOCAL_BASE_PATH, step.output_data)
+    folder_name = os.path.join(LOCAL_BASE_PATH, subfolder_name)
     os.makedirs(folder_name, exist_ok=True)
 
     for file_name, url in data.items():
@@ -1057,4 +1065,4 @@ def process_files(self, archive_id, step_id):
         with open(os.path.join(folder_name, file_name), "wb") as file:
             file.write(response.content)
 
-    return folder_name
+    step.output_data = subfolder_name
