@@ -1000,6 +1000,10 @@ def statistics(request):
 
 @api_view(["POST"])
 def upload_cernbox(request):
+    # Checks if the number of files exceeded the allowed maximum number of files permitted to be downloaded
+    if len(json.loads(request.body).keys()) > FILE_LIMIT:
+        raise BadRequest({"status": 1, "msg": "Too many files send for download"})
+
     timestamp = time.time()
 
     # Creates a new Archive
