@@ -1030,7 +1030,7 @@ def upload_cernbox(request):
     serializer = ArchiveSerializer(
             archive,
             many=False,
-        )
+    )
     return Response(serializer.data)
 
 
