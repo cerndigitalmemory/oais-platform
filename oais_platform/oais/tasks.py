@@ -1040,10 +1040,9 @@ def copy_sip(self, archive_id, step_id, input_data):
 @shared_task(name="download_files", bind=True, ignore_result=True)
 def process_files(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
+
     step = Step.objects.get(pk=step_id)
-    
-    # TODO: Do we need to set Status to IN_PROGRESS?
-    # step.set_status(Status.IN_PROGRESS)
+    step.set_status(Status.IN_PROGRESS)
 
     data = json.loads(step.input_data)
     number_of_downloaded_files = 0
