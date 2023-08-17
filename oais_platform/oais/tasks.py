@@ -1045,11 +1045,11 @@ def process_files(self, archive_id, step_id):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    download_files(step)
+    step.output_data = download_files(step.input_data)
     return step.output_data
 
-def download_files(step):
-    data = json.loads(step.input_data)
+def download_files(file_list):
+    data = json.loads(file_list)
 
     # Creates a unique subfolder name
     date_time = datetime.fromtimestamp(timestamp)
@@ -1065,4 +1065,4 @@ def download_files(step):
         with open(os.path.join(folder_name, file_name), "wb") as file:
             file.write(response.content)
 
-    step.output_data = subfolder_name
+    return subfolder_name
