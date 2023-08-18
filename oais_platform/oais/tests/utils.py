@@ -1,3 +1,5 @@
+import json
+
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
@@ -32,3 +34,14 @@ class TestSource(Source):
                 }
             ]
         }
+
+    def get_public_links_for_download(self, file_count):
+        FILE_PUBLIC_LINK = "https://gitlab.cern.ch/digitalmemory/oais-platform/-/raw/develop/README.md"
+        files = {}
+        
+        for i in range(file_count):
+            file_name = f"file{i}.md"
+            files[file_name] = FILE_PUBLIC_LINK
+
+        return json.dumps(files)    
+
