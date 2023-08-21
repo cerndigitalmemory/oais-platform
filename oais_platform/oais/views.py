@@ -70,7 +70,7 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import announce_sip, create_step, process, run_next_step
+from .tasks import announce_sip, create_step, process, run_next_step, process_files
 from oais_platform.settings import FILE_LIMIT
 
 
