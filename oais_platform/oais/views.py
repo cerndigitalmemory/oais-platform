@@ -998,14 +998,15 @@ def statistics(request):
 @api_view(["POST"])
 # TODO: Add permissions check
 def upload_cernbox(request):
+    data = json.loads(json.dumps(request.data))
     # Checks if the number of files exceeded the allowed maximum number of files permitted to be downloaded
-    if len(json.loads(request.body).keys()) > FILE_LIMIT:
+    if len(data.keys()) > FILE_LIMIT:
         raise BadRequest({"status": 1, "msg": "Too many files send for download"})
 
     timestamp = time.time()
 
     # Creates a new Archive
-    Arhive.objects.create(
+    archive = Archive.objects.create(
         recid=int(timestamp),
         source="CERNBox",
         title="Upload from your personal CERNBox",
@@ -1017,7 +1018,7 @@ def upload_cernbox(request):
         archive=archive,
         name=Steps.DOWNLOAD_FILES_FROM_LINKS,
         status=Status.NOT_RUN,
-        input_data=request.body,
+        input_data=data,
     )
     
     process_files.delay(step.archive.id, step.id)
