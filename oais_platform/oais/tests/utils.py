@@ -1,5 +1,3 @@
-import json
-
 from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.source import Source
 
