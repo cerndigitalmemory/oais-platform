@@ -32,7 +32,7 @@ class UploadCERNBoxTests(APITestCase):
         self.assertEqual(Step.objects.count(), 0)
 
     @staticmethod
-    def get_public_links_for_download(file_count):
+    def get_public_links(file_count):
         """
         Creates a mock JSON file that contains `file_count` number of public links.
         """
