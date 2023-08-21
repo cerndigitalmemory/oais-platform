@@ -1050,6 +1050,7 @@ def process_files(self, archive_id, step_id):
     step.set_status(Status.COMPLETED)
     return step.output_data
 
+
 def download_files(file_list):
     data = json.loads(file_list)
 
