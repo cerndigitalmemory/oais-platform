@@ -27,7 +27,7 @@ class UploadCERNBoxTests(APITestCase):
         response = self.client.post(url, UploadCERNBoxTests.get_public_links_for_download(FILE_LIMIT + 1))
 
         self.assertEqual(resonse.status_code, status.HTTP_400_BAD_REQUEST)
-        # No archives and not step should've been created
+        # No archives and no step should've been created
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Step.objects.count(), 0)
 
