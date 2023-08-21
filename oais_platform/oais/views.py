@@ -1018,7 +1018,7 @@ def upload_cernbox(request):
         archive=archive,
         name=Steps.DOWNLOAD_FILES_FROM_LINKS,
         status=Status.NOT_RUN,
-        input_data=data,
+        input_data=json.dumps(request.data),
     )
     
     process_files.delay(step.archive.id, step.id)
