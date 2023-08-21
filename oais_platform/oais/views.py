@@ -996,6 +996,7 @@ def statistics(request):
 
 
 @api_view(["POST"])
+# TODO: Add permissions check
 def upload_cernbox(request):
     # Checks if the number of files exceeded the allowed maximum number of files permitted to be downloaded
     if len(json.loads(request.body).keys()) > FILE_LIMIT:
