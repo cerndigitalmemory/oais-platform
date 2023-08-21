@@ -6,6 +6,7 @@ import shutil
 import time
 from datetime import timedelta
 from urllib.parse import urljoin
+from datetime import datetime as dt
 
 import bagit_create
 import requests
@@ -1044,16 +1045,16 @@ def process_files(self, archive_id, step_id):
 
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
-
     step.output_data = download_files(step.input_data)
     # TODO: Check if this will be done this way
     step.set_status(Status.COMPLETED)
     return step.output_data
 
 
-def download_files(data):
+def download_files(file_list):
+    data = json.loads(file_list)
     # Creates a unique subfolder name
-    date_time = datetime.fromtimestamp(timestamp)
+    date_time = dt.fromtimestamp(time.time())
     subfolder_name = date_time.strftime("%d%m%Y_%S%M%H")
 
     # Creates a subfolder needed for file storage in similar way as a `mkdir -p` command
