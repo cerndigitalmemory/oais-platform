@@ -300,7 +300,7 @@ CTA_BASE_PATH = environ.get(
 )
 
 # CERNBox integration
-LOCAL_BASE_PATH = "~/Desktop/oais-data/cernbox/"
+LOCAL_BASE_PATH = "oais-data/cernbox/"
 FILE_LIMIT = 10
 
 # Import local settings (overriding defaults and environment variables)
