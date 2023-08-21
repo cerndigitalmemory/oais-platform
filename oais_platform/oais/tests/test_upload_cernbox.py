@@ -24,7 +24,7 @@ from oais_platform.settings import LOCAL_BASE_PATH, FILE_LIMIT
 class UploadCERNBoxTests(APITestCase):
     def test_file_count_limit(self):
         url = reverse("upload-cernbox")
-        response = self.client.post(url, UploadCERNBoxTests.get_public_links_for_download(FILE_LIMIT + 1))
+        response = self.client.post(url, UploadCERNBoxTests.get_public_links(FILE_LIMIT + 1))
 
         self.assertEqual(resonse.status_code, status.HTTP_400_BAD_REQUEST)
         # No archives and no step should've been created
