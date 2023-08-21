@@ -1051,9 +1051,7 @@ def process_files(self, archive_id, step_id):
     return step.output_data
 
 
-def download_files(file_list):
-    data = json.loads(file_list)
-
+def download_files(data):
     # Creates a unique subfolder name
     date_time = datetime.fromtimestamp(timestamp)
     subfolder_name = date_time.strftime("%d%m%Y_%S%M%H")
