@@ -43,4 +43,4 @@ class UploadCERNBoxTests(APITestCase):
             file_name = f"file{i}.md"
             files[file_name] = FILE_PUBLIC_LINK
 
-        return json.dumps(files)
+        return files
