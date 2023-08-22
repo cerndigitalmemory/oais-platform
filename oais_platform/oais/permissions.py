@@ -1,5 +1,3 @@
-from itertools import chain
-
 from django.db.models import Q
 from guardian.shortcuts import get_objects_for_user
 

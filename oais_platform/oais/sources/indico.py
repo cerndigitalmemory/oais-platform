@@ -52,7 +52,7 @@ class Indico(Source):
         page = int(page)
 
         """
-        Indico search api always returns 10 results per call so in order to 
+        Indico search api always returns 10 results per call so in order to
         display 10,20 or 50 results we need to make 1, 2 or 5 api calls
         """
         number_of_api_calls = int(size) // 10

@@ -20,7 +20,6 @@ from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.sources import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
-    AM_ABS_DIRECTORY,
     AM_API_KEY,
     AM_REL_DIRECTORY,
     AM_SS_API_KEY,
@@ -568,16 +567,8 @@ def archivematica(self, archive_id, step_id, input_data):
     # Set task id
     current_step.set_task(self.request.id)
 
-    # This is the absolute directory of the archivematica-sampledata folder in the system
-    a3m_abs_directory = AM_ABS_DIRECTORY
     # This is the directory Archivematica "sees" on the local system
     a3m_rel_directory = AM_REL_DIRECTORY
-
-    # Get the destination folder of the system
-    system_dst = os.path.join(
-        a3m_abs_directory,
-        ntpath.basename(path_to_sip),
-    )
 
     # Get the destination folder of archivematica
     archivematica_dst = os.path.join(
