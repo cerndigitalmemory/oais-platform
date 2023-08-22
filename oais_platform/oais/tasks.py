@@ -1038,7 +1038,6 @@ def copy_sip(self, archive_id, step_id, input_data):
         return {"status": 1, "errormsg": e}
 
 
-# TODO: Do we need input_data parameter for this function?
 @shared_task(name="download_files", bind=True, ignore_result=True)
 def process_files(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
@@ -1046,12 +1045,12 @@ def process_files(self, archive_id, step_id):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
     step.output_data = download_files(step.input_data)
-    # TODO: Check if this will be done this way
     step.set_status(Status.COMPLETED)
 
 
 def download_files(file_list):
     data = json.loads(file_list)
+    
     # Creates a unique subfolder name
     date_time = dt.fromtimestamp(time.time())
     subfolder_name = date_time.strftime("%d%m%Y_%S%M%H")
