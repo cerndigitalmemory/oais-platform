@@ -3,6 +3,7 @@ import ntpath
 import os
 import tempfile
 import zipfile
+import shutil
 from cmath import log
 from unittest import mock
 from unittest.mock import patch
@@ -17,7 +18,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tests.utils import TestSource
+from oais_platform.oais.tasks import download_files
 from oais_platform.settings import LOCAL_BASE_PATH, FILE_LIMIT
 
 
@@ -30,6 +31,16 @@ class UploadCERNBoxTests(APITestCase):
         # No archives and no step should've been created
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Step.objects.count(), 0)
+
+    def test_file_download(self):
+        file_list = UploadCERNBoxTests.get_public_links(5)
+        subfolder_name = download_files(json.dumps(file_list))
+        path = os.path.join(LOCAL_BASE_PATH, subfolder_name)
+
+        for file_name in file_list.keys():
+            self.assertEqual(os.path.exists(os.path.join(path, file_name)), True)
+
+        shutil.rmtree(path)
 
     @staticmethod
     def get_public_links(file_count):
