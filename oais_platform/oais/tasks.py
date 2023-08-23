@@ -4,9 +4,9 @@ import ntpath
 import os
 import shutil
 import time
+from datetime import datetime as dt
 from datetime import timedelta
 from urllib.parse import urljoin
-from datetime import datetime as dt
 
 import bagit_create
 import requests
@@ -38,8 +38,8 @@ from oais_platform.settings import (
     FTS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
-    SIP_UPSTREAM_BASEPATH,
     LOCAL_BASE_PATH,
+    SIP_UPSTREAM_BASEPATH,
 )
 
 from .fts import FTS
@@ -1040,11 +1040,11 @@ def copy_sip(self, archive_id, step_id, input_data):
 
 @shared_task(name="download_files", bind=True, ignore_result=True)
 def process_files(self, archive_id, step_id):
-    archive = Archive.objects.get(pk=archive_id)
-
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
-    step.output_data = download_files(step.input_data)
+    step.output_data = json.dumps({ 
+        "download_location" : download_files(step.input_data)
+    })
     step.set_status(Status.COMPLETED)
 
 

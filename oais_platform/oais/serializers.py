@@ -1,4 +1,5 @@
 from django.contrib.auth.models import Group, User
+from drf_spectacular.utils import OpenApiExample, extend_schema_serializer
 from opensearch_dsl import utils
 from rest_framework import serializers
 
@@ -127,3 +128,20 @@ class LoginSerializer(serializers.Serializer):
 class SourceRecordSerializer(serializers.Serializer):
     source = serializers.CharField(max_length=150, required=True)
     recid = serializers.CharField(max_length=128, required=True)
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            "Example payload",
+            value={
+                "download_links": {
+                    "my_thesis.pdf": "http://a/download/link/for/my/thesis/1",
+                    "my_cat.nef": "http://my/cat/archive/1",
+                }
+            },
+        ),
+    ],
+)
+class LinksObjSerializer(serializers.Serializer):
+    download_links = serializers.DictField(child=serializers.CharField())

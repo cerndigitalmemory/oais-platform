@@ -5,11 +5,11 @@ import subprocess
 import tempfile
 import time
 import zipfile
+from datetime import datetime
 from pathlib import PurePosixPath
 from shutil import make_archive
 from urllib.parse import unquote, urlparse
 from wsgiref.util import FileWrapper
-from datetime import datetime
 
 from bagit_create import main as bic
 from django.conf import settings
@@ -53,6 +53,7 @@ from oais_platform.oais.serializers import (
     ArchiveSerializer,
     CollectionSerializer,
     GroupSerializer,
+    LinksObjSerializer,
     LoginSerializer,
     ProfileSerializer,
     SourceRecordSerializer,
@@ -60,6 +61,7 @@ from oais_platform.oais.serializers import (
     UserSerializer,
 )
 from oais_platform.oais.sources import InvalidSource, get_source
+from oais_platform.settings import FILE_LIMIT
 
 from ..settings import (
     AM_ABS_DIRECTORY,
@@ -70,8 +72,7 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import announce_sip, create_step, process, run_next_step, process_files
-from oais_platform.settings import FILE_LIMIT
+from .tasks import announce_sip, create_step, process, process_files, run_next_step
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -995,40 +996,53 @@ def statistics(request):
     return Response(data)
 
 
+@extend_schema(request=LinksObjSerializer, responses=ArchiveSerializer)
 @api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def upload_cernbox(request):
-    data = json.loads(json.dumps(request.data))
-    
-    # Checks if the number of files exceeded the allowed maximum number of files permitted
-    # to be downloaded
-    if len(data.keys()) > FILE_LIMIT:
-        raise BadRequest({"status": 1, "msg": "Too many files send for download"})
+    """
+    Given a list of file names and public links, sets up a new Archive and
+    prepares the platform to download them.
+    E.g. for selecting files on the CERNBox file picker.
+    """
+    files_links_serializer = LinksObjSerializer(data=request.data)
 
-    # Creates a new Archive
-    archive = Archive.objects.create(
-        recid=int(time.time()),
-        source="CERNBox",
-        title="Upload from your personal CERNBox",
-        creator=request.user,
-    )
+    if files_links_serializer.is_valid():
 
-    # Creates a new Step instance where input_data is used to store file links
-    step = Step.objects.create(
-        archive=archive,
-        name=Steps.DOWNLOAD_FILES_FROM_LINKS,
-        status=Status.NOT_RUN,
-        # Here we are using a text field to store JSON data, which needs to be serialized and
-        # deserialized later when using it
-        input_data=json.dumps(request.data),
-    )
-    
-    process_files.delay(step.archive.id, step.id)
+        files_links = files_links_serializer.data["download_links"]
 
-    serializer = ArchiveSerializer(
+        # Checks if the number of files exceeded the allowed maximum number of files permitted
+        # to be downloaded
+        if len(files_links.keys()) > FILE_LIMIT:
+            raise BadRequest({"status": 1, "msg": "Too many files send for download"})
+
+        # Creates a new Archive
+        archive = Archive.objects.create(
+            recid=int(time.time()),
+            source="CERNBox",
+            title="Upload from your personal CERNBox",
+            creator=request.user,
+        )
+
+        # Creates a new Step instance where input_data is used to store file links
+        step = Step.objects.create(
+            archive=archive,
+            name=Steps.DOWNLOAD_FILES_FROM_LINKS,
+            status=Status.NOT_RUN,
+            # Here we are using a text field to store JSON data, which needs to be serialized and
+            # deserialized later when using it
+            input_data=json.dumps(files_links),
+        )
+
+        process_files.delay(step.archive.id, step.id)
+
+        serializer = ArchiveSerializer(
             archive,
             many=False,
-    )
-    return Response(serializer.data)
+        )
+        return Response(serializer.data)
+    else:
+        raise BadRequest({"status": 1, "msg": "Malformed request"})
 
 
 @api_view(["POST"])
@@ -1520,10 +1534,7 @@ def parse_url(request):
     return Response({"recid": recid, "source": source})
 
 
-@extend_schema(
-    request=LoginSerializer,
-    responses=UserSerializer
-)
+@extend_schema(request=LoginSerializer, responses=UserSerializer)
 @api_view(["POST"])
 def login(request):
     """
