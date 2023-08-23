@@ -1017,6 +1017,8 @@ def upload_cernbox(request):
         archive=archive,
         name=Steps.DOWNLOAD_FILES_FROM_LINKS,
         status=Status.NOT_RUN,
+        # Here we are using a text field to store JSON data, which needs to be serialized and
+        # deserialized later when using it
         input_data=json.dumps(request.data),
     )
     
