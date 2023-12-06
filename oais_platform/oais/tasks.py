@@ -753,29 +753,24 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         # Needs to validate both because just status=complete does not guarantee that aip is stored
         if status == "COMPLETE" and microservice == "Remove the processing directory":
             """
-            Archivematica does not return the uuid of a package AIP so in order to find the AIP details we need to look to all the AIPs and find
-            the one with the same name. This way we can get the uuid and the path which are needed to access the AIP file
+            Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
             """
-            # Changes the :: to __ because archivematica by default does this transformation and this is needed so we can read the correct file
-            transfer_name_with_underscores = transfer_name.replace("::", "__")
-
-            aip_path = None
-            aip_uuid = None
-
-            aip_list = am.aips()  # Retrieves all the AIPs (needs AM_SS_* configuration)
             path_artifact = None
-            for aip in aip_list:
-                # Looks for aips with the same transfer name
-                if transfer_name_with_underscores in aip["current_path"]:
-                    aip_path = aip["current_path"]
-                    aip_uuid = aip["uuid"]
 
-                    am_status["aip_uuid"] = aip_uuid
-                    am_status["aip_path"] = aip_path
+            uuid = am_status["uuid"]
+            am.package_uuid = uuid
+            aip = am.get_package_details()
+            if type(aip) is dict:
+                aip_path = aip["current_path"]
+                aip_uuid = aip["uuid"]
+                am_status["aip_uuid"] = aip_uuid
+                am_status["aip_path"] = aip_path
 
-                    path_artifact = create_path_artifact(
-                        "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
-                    )
+                path_artifact = create_path_artifact(
+                    "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
+                )
+            else:
+                logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
 
             # If the path artifact is found return complete otherwise set in progress and try again
             if path_artifact:
