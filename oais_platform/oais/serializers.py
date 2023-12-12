@@ -2,7 +2,15 @@ from django.contrib.auth.models import Group, User
 from opensearch_dsl import utils
 from rest_framework import serializers
 
-from oais_platform.oais.models import Archive, Collection, Profile, Resource, Step
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Profile,
+    Resource,
+    Status,
+    Step,
+    Steps,
+)
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -76,7 +84,7 @@ class StepSerializer(serializers.ModelSerializer):
 class ArchiveSerializer(serializers.ModelSerializer):
     creator = UserSerializer()
     resource = ResourceSerializer()
-
+    
     class Meta:
         model = Archive
         fields = [
@@ -95,6 +103,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "restricted",
             "invenio_version",
             "resource",  # this points to the serialized resource
+            "status",
         ]
 
     def get_last_step(self, instance):

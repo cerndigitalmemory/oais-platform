@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
@@ -252,20 +253,28 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns Archives based on the visibility filter
         """
         visibility = self.request.GET.get("filter", "all")
+        q_status = self.request.GET.get("status", "all")
 
         if visibility == "public":
-            return filter_archives_public(super().get_queryset())
+            result = filter_archives_public(super().get_queryset())
         elif visibility == "owned":
-            return filter_archives_by_user_creator(
+            result = filter_archives_by_user_creator(
                 super().get_queryset(), self.request.user
             )
         elif visibility == "private":
-            return filter_archives_for_user(super().get_queryset(), self.request.user)
+            result = filter_archives_for_user(super().get_queryset(), self.request.user)
         else:
-            return filter_all_archives_user_has_access(
+            result = filter_all_archives_user_has_access(
                 super().get_queryset(), self.request.user
             )
 
+        if q_status == "all":
+            return result
+        else:
+            return result.filter(status=q_status.upper())
+        # elif q_status.upper() == "FAILED":
+        #    return result.filter(status="FAILED")
+        
     @action(detail=True, url_path="details", url_name="sgl-details")
     def archive_details(self, request, pk=None):
         """
@@ -1545,7 +1554,7 @@ def announce(request):
     The SIP will be validated, copied to the platform designated storage and
     an Archive will be created
     """
-
+    
     # Get the path passed in the request
     announce_path = request.data["announce_path"]
 
@@ -1571,7 +1580,76 @@ def announce(request):
         )
     # otherwise, return why the announce failed
     else:
-        raise BadRequest(announce_response["errormsg"])
+        raise BadRequest(announce_response["errormsg"])    
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def batch_announce(request):
+    """
+    Announce the path of folder containing SIP folders to import it into the system.
+    The SIPs will be validated, copied to the platform designated storage and
+    Archives will be created
+    """
+
+    # Get the path passed in the request
+    announce_path = request.data["batch_announce_path"]
+    batch_tag = request.data["batch_tag"]
+
+    is_duplicate = check_for_tag_name_duplicate(batch_tag, request.user)
+
+    if is_duplicate:
+        raise BadRequest("A tag with the same name already exists!")
+
+    # Check if the path is allowed (a user is only allowed to "announce" paths in their home folder on EOS)
+    if (
+        # Superusers are allowed to announce any path
+        request.user.is_superuser is False
+        and check_allowed_path(announce_path, request.user.username) is False
+    ):
+        raise BadRequest("You're not allowed to announce this path")
+
+    folder_exists = os.path.exists(announce_path)
+    if not folder_exists:
+        raise BadRequest("Folder does not exist")
+
+    # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
+    archives = []
+    failed_sips = ''
+    for f in os.scandir(announce_path):
+        if f.is_dir and f.path != announce_path:
+            announce_response = announce_sip(f.path, request.user, True)
+
+            # If the process was successful, redirect to the detail of the newly created Archive
+            if announce_response["status"] == 0:
+                archives.append(announce_response["archive"])
+            # otherwise, return why the announce failed
+            else:
+                failed_sips += f.path + ' - ' + announce_response["errormsg"] + ' '
+
+    # Create tag and add archives
+    if len(failed_sips) > 0:
+        tag_desc = "Failed SIP folders: " + failed_sips
+    else:
+        tag_desc = "Batch announce successful"
+    
+    if len(archives) > 0:
+        tag = Collection.objects.create(
+            title=batch_tag,
+            description=tag_desc,
+            creator=request.user,
+            internal=False,
+        )
+        tag.archives.set(archives)
+    else:
+        raise BadRequest(tag_desc)
+    
+    # In case of successful announce - show tag page
+    return redirect(
+        reverse(
+            "tags-detail", request=None, kwargs={"pk": tag.id}
+        )
+    )
 
 
 def check_allowed_path(path, username):

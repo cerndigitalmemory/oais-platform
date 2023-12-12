@@ -111,6 +111,12 @@ urlpatterns = [
                     views.announce,
                     name="announce",
                 ),
+                # Upload a batch of SIPs by announcing its location (e.g. EOS)
+                path(
+                    "upload/batch-announce/",
+                    views.batch_announce,
+                    name="batch-announce",
+                ),
                 path("stats/", views.statistics, name="statistics"),
             ]
         ),

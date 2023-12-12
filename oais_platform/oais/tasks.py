@@ -897,7 +897,7 @@ def prepare_invenio_payload(archive):
     return data
 
 
-def announce_sip(announce_path, creator):
+def announce_sip(announce_path, creator, return_archive=False):
     """
     Given a filesystem path and a user:
 
@@ -959,7 +959,10 @@ def announce_sip(announce_path, creator):
 
         # Let's copy the SIP to our storage
         copy_sip.delay(archive.id, step.id, output_data)
-        return {"status": 0, "archive_id": archive.id}
+        if return_archive:
+            return {"status": 0, "archive": archive}
+        else:
+            return {"status": 0, "archive_id": archive.id}
 
     else:
         return {"status": 1, "errormsg": "The given path is not a valid SIP."}
