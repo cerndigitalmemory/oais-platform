@@ -250,7 +250,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     def get_queryset(self):
         """
-        Returns Archives based on the visibility filter
+        Returns Archives based on the visibility filter and status
         """
         visibility = self.request.GET.get("filter", "all")
         q_status = self.request.GET.get("status", "all")
@@ -271,10 +271,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if q_status == "all":
             return result
         else:
-            return result.filter(status=q_status.upper())
-        # elif q_status.upper() == "FAILED":
-        #    return result.filter(status="FAILED")
-        
+            return result.filter(status=q_status)
+
     @action(detail=True, url_path="details", url_name="sgl-details")
     def archive_details(self, request, pk=None):
         """

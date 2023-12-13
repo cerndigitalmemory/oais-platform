@@ -74,6 +74,18 @@ class Status(models.IntegerChoices):
     WAITING = 7, "WAITING"
 
 
+class ArchiveStatus(models.IntegerChoices):
+    NOT_RUN = 1, "NOT_RUN"
+    IN_PROGRESS = 2, "IN_PROGRESS"
+    FAILED = 3, "FAILED"
+    COMPLETED = 4, "COMPLETED"
+    WAITING_APPROVAL = 5, "WAITING_APPROVAL"
+    REJECTED = 6, "REJECTED"
+    WAITING = 7, "WAITING"
+    SIP = 8, "SIP"
+    AIP = 9, "AIP"
+
+
 class Archive(models.Model):
     """
     An archival process of a single addressable record in a upstream
@@ -105,8 +117,8 @@ class Archive(models.Model):
     invenio_version = models.IntegerField(default=0)
     # Resource attached to the archive
     resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
-    status = models.CharField(max_length=50, default="")
-   
+    status = models.IntegerField(choices=ArchiveStatus.choices, null=True)
+
     class Meta:
         ordering = ["-id"]
         permissions = (
@@ -119,7 +131,6 @@ class Archive(models.Model):
         Set last_step to the given Step
         """
         self.last_step = step
-        self.set_status(step)
         self.save()
 
     def update_next_steps(self, current_step=None):
@@ -176,23 +187,21 @@ class Archive(models.Model):
     def set_status(self):
         last_step = self.last_step
         if last_step:
-            if last_step.status == Status.FAILED:
-                self.status = "FAILED"
-            elif last_step.status == Status.COMPLETED:  # SIP was created
+            if last_step.status == Status.COMPLETED:  # SIP was created
                 if last_step.name == Steps.CHECKSUM:
-                    self.status = "SIP"
+                    self.status = ArchiveStatus.SIP
                 elif last_step.name == Steps.ARCHIVE:
-                    self.status = "AIP"
+                    self.status = ArchiveStatus.AIP
                 else:
-                    self.status = "COMPLETED"
+                    self.status = ArchiveStatus.COMPLETED
             else:
-                self.status = Status(last_step.status).label
+                self.status = ArchiveStatus(last_step.status)
         else:
-            last_step = Step.objects.all().filter(archive=self.id).order_by("-start_date")[0]
-            if last_step:
-                self.status = Status(last_step.status).label
-            else:
-                self.status = ""
+            try:
+                last_step = Step.objects.all().filter(archive=self.id).order_by("-start_date")[0]  # If there was a step but it was not completed
+                self.status = ArchiveStatus(last_step.status)
+            except Exception:
+                self.status = None
 
 
 class Step(models.Model):
