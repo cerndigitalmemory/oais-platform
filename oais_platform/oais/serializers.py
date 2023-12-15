@@ -128,6 +128,16 @@ class CollectionSerializer(serializers.ModelSerializer):
         ]
 
 
+class CollectionNameSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Collection
+        fields = [
+            "id",
+            "title",
+        ]
+
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128)

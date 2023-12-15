@@ -51,6 +51,7 @@ from oais_platform.oais.permissions import (
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
+    CollectionNameSerializer,
     CollectionSerializer,
     GroupSerializer,
     LoginSerializer,
@@ -247,6 +248,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     queryset = Archive.objects.all()
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
+    default_page_size = 10
 
     def get_queryset(self):
         """
@@ -254,6 +256,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         visibility = self.request.GET.get("filter", "all")
         q_status = self.request.GET.get("status", "all")
+        source = self.request.GET.get("source", "all")
+        tag = self.request.GET.get("tag", "")
+        page = self.request.GET.get("page", "")
 
         if visibility == "public":
             result = filter_archives_public(super().get_queryset())
@@ -268,10 +273,24 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
-        if q_status == "all":
-            return result
+        if q_status != "all":
+            result = result.filter(status=q_status)
+
+        if source != "all":
+            result = result.filter(source=source)
+
+        if tag != "":
+            result = result.filter(archive_collections__id=tag)
+
+        if page == "all":
+            if not self.request.GET._mutable:
+                self.request.GET._mutable = True
+            self.request.GET['page'] = 1
+            self.pagination_class.page_size = len(result)
         else:
-            return result.filter(status=q_status)
+            self.pagination_class.page_size = self.default_page_size
+
+        return result
 
     @action(detail=True, url_path="details", url_name="sgl-details")
     def archive_details(self, request, pk=None):
@@ -822,6 +841,15 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Removes identified Tag from the passed Archives
         """
         return self.add_or_remove_arch(request, "oais.can_reject_archive", add=False)
+
+    @action(detail=False, methods=["GET"], url_path="names")
+    def get_name_list(self, request, pk=None):
+        """
+        Returns all Tag names and ids
+        """
+        tags = self.get_queryset().values("id", "title")
+        serializer = CollectionNameSerializer(tags, many=True)
+        return Response({"result" : serializer.data})
 
 
 class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
