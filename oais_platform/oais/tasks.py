@@ -86,7 +86,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
         # for returned errors
         if retval["status"] == 0:
             # Set last_step to the successful step
-            archive.set_step(step)
+            archive.set_last_completed_step(step)
 
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)

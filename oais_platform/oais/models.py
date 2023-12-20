@@ -74,16 +74,11 @@ class Status(models.IntegerChoices):
     WAITING = 7, "WAITING"
 
 
-class ArchiveStatus(models.IntegerChoices):
+class ArchiveState(models.IntegerChoices):
     NOT_RUN = 1, "NOT_RUN"
-    IN_PROGRESS = 2, "IN_PROGRESS"
-    FAILED = 3, "FAILED"
-    COMPLETED = 4, "COMPLETED"
-    WAITING_APPROVAL = 5, "WAITING_APPROVAL"
-    REJECTED = 6, "REJECTED"
-    WAITING = 7, "WAITING"
-    SIP = 8, "SIP"
-    AIP = 9, "AIP"
+    FAILED = 2, "FAILED"
+    SIP = 3, "SIP"
+    AIP = 4, "AIP"
 
 
 class Archive(models.Model):
@@ -100,6 +95,13 @@ class Archive(models.Model):
         User, on_delete=models.PROTECT, null=True, related_name="archives"
     )
     timestamp = models.DateTimeField(default=timezone.now)
+    last_completed_step = models.ForeignKey(
+        # Circular reference, use quoted string used to get a lazy reference
+        "Step",
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="last_completed_step",
+    )
     last_step = models.ForeignKey(
         # Circular reference, use quoted string used to get a lazy reference
         "Step",
@@ -117,7 +119,7 @@ class Archive(models.Model):
     invenio_version = models.IntegerField(default=0)
     # Resource attached to the archive
     resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
-    status = models.IntegerField(choices=ArchiveStatus.choices, null=True)
+    state = models.IntegerField(choices=ArchiveState.choices, null=True)
 
     class Meta:
         ordering = ["-id"]
@@ -126,7 +128,15 @@ class Archive(models.Model):
             ("can_unstage", "Can unstage a record and start the pipeline"),
         )
 
-    def set_step(self, step):
+    def set_last_completed_step(self, step):
+        """
+        Set last_step to the given Step
+        """
+        self.last_completed_step = step
+        self.last_step = step
+        self.save()
+
+    def set_last_step(self, step):
         """
         Set last_step to the given Step
         """
@@ -140,7 +150,7 @@ class Archive(models.Model):
         if current_step:
             self.next_steps = pipeline.get_next_steps(current_step)
         else:
-            self.next_steps = pipeline.get_next_steps(self.last_step.name)
+            self.next_steps = pipeline.get_next_steps(self.last_completed_step.name)
         self.save()
 
         return self.next_steps
@@ -180,28 +190,32 @@ class Archive(models.Model):
             # The resource now exists, so I attach it to the archive
             self.resource = resource
 
-        self.set_status()
+        self.set_state()
         # Normal logic of the save method
         super(Archive, self).save(*args, **kwargs)
 
-    def set_status(self):
-        last_step = self.last_step
-        if last_step:
-            if last_step.status == Status.COMPLETED:  # SIP was created
-                if last_step.name == Steps.CHECKSUM:
-                    self.status = ArchiveStatus.SIP
-                elif last_step.name == Steps.ARCHIVE:
-                    self.status = ArchiveStatus.AIP
-                else:
-                    self.status = ArchiveStatus.COMPLETED
-            else:
-                self.status = ArchiveStatus(last_step.status)
-        else:
-            try:
-                last_step = Step.objects.all().filter(archive=self.id).order_by("-start_date")[0]  # If there was a step but it was not completed
-                self.status = ArchiveStatus(last_step.status)
-            except Exception:
-                self.status = None
+    def set_state(self):
+        try:
+            steps = self.steps.all().order_by("-start_date")
+            if len(steps) > 0:
+                self.last_step = steps[0]
+            state = None
+            for step in steps:
+                if step.status == Status.COMPLETED:
+                    if step.name == Steps.CHECKSUM:
+                        state = ArchiveState.SIP
+                        break
+                    elif step.name == Steps.ARCHIVE:
+                        state = ArchiveState.AIP
+                        break
+            if len(steps) > 0 and steps[0].status == Status.FAILED and state is None:
+                state = ArchiveState.FAILED
+            elif state is None:
+                state = ArchiveState.NOT_RUN
+            self.state = state
+        except Exception as e:
+            print(e)
+            self.state = None
 
 
 class Step(models.Model):
@@ -254,6 +268,10 @@ class Step(models.Model):
     def set_finish_date(self):
         self.finish_date = timezone.now()
         self.save()
+
+    def save(self, *args, **kwargs):
+        super(Step, self).save(*args, **kwargs)
+        Archive.objects.get(id=self.archive.id).first().save()
 
 
 class Resource(models.Model):

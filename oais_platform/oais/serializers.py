@@ -81,9 +81,22 @@ class StepSerializer(serializers.ModelSerializer):
         ]
 
 
+class LastStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Step
+        fields = [
+            "id",
+            "name",
+            "start_date",
+            "finish_date",
+            "status",
+        ]
+
+
 class ArchiveSerializer(serializers.ModelSerializer):
     creator = UserSerializer()
     resource = ResourceSerializer()
+    last_step = LastStepSerializer(many=False, read_only=True)
     
     class Meta:
         model = Archive
@@ -95,6 +108,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "creator",
             "timestamp",
             "last_step",
+            "last_completed_step",
             "path_to_sip",
             "next_steps",
             "manifest",
@@ -103,7 +117,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "restricted",
             "invenio_version",
             "resource",  # this points to the serialized resource
-            "status",
+            "state",
         ]
 
     def get_last_step(self, instance):

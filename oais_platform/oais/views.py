@@ -255,10 +255,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns Archives based on the visibility filter and status
         """
         visibility = self.request.GET.get("filter", "all")
-        q_status = self.request.GET.get("status", "all")
+        archive_state = self.request.GET.get("state", "all")
         source = self.request.GET.get("source", "all")
-        tag = self.request.GET.get("tag", "")
-        page = self.request.GET.get("page", "")
+        tag = self.request.GET.get("tag", None)
+        page = self.request.GET.get("page", None)
+        step_name = self.request.GET.get("step_name", None)
+        step_status = self.request.GET.get("step_status", None)
 
         if visibility == "public":
             result = filter_archives_public(super().get_queryset())
@@ -273,14 +275,20 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 super().get_queryset(), self.request.user
             )
 
-        if q_status != "all":
-            result = result.filter(status=q_status)
+        if archive_state != "all":
+            result = result.filter(state=archive_state)
 
         if source != "all":
             result = result.filter(source=source)
 
-        if tag != "":
+        if tag:
             result = result.filter(archive_collections__id=tag)
+
+        if step_name:
+            result = result.filter(last_step__name=step_name)
+
+        if step_status:
+            result = result.filter(last_step__status=step_status)
 
         if page == "all":
             if not self.request.GET._mutable:
@@ -289,7 +297,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             self.pagination_class.page_size = len(result)
         else:
             self.pagination_class.page_size = self.default_page_size
-
+        
         return result
 
     @action(detail=True, url_path="details", url_name="sgl-details")
@@ -386,7 +394,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             step = Step.objects.create(
                 archive=archive,
                 name=Steps.EDIT_MANIFEST,
-                input_step=archive.last_step,
+                input_step=archive.last_completed_step,
                 # change to waiting/not run
                 status=Status.IN_PROGRESS,
                 input_data=archive.manifest,
@@ -559,7 +567,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if int(next_step) in Steps:
             if has_user_archive_edit_rights(pk, request.user):
-                next_step = create_step(next_step, pk, archive["last_step"])
+                next_step = create_step(next_step, pk, archive["last_completed_step"])
             else:
                 raise Exception("User has no rights to perform a step for this archive")
         else:
@@ -958,7 +966,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             step = Step.objects.create(
                 archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
             )
-            archive.set_step(step)
+            archive.set_last_completed_step(step)
 
             # Uploading completed
             step.set_status(Status.COMPLETED)
@@ -1146,7 +1154,7 @@ def upload_sip(request):
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
 
-        archive.set_step(step)
+        archive.set_last_completed_step(step)
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
