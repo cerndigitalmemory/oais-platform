@@ -271,7 +271,7 @@ class Step(models.Model):
 
     def save(self, *args, **kwargs):
         super(Step, self).save(*args, **kwargs)
-        Archive.objects.get(id=self.archive.id).first().save()
+        Archive.objects.get(id=self.archive.id).save()
 
 
 class Resource(models.Model):
