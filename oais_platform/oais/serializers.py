@@ -97,6 +97,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
     creator = UserSerializer()
     resource = ResourceSerializer()
     last_step = LastStepSerializer(many=False, read_only=True)
+    last_update = serializers.CharField(source='last_modification_timestamp')
     
     class Meta:
         model = Archive
@@ -118,6 +119,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "invenio_version",
             "resource",  # this points to the serialized resource
             "state",
+            "last_update"
         ]
 
     def get_last_step(self, instance):

@@ -95,6 +95,7 @@ class Archive(models.Model):
         User, on_delete=models.PROTECT, null=True, related_name="archives"
     )
     timestamp = models.DateTimeField(default=timezone.now)
+    last_modification_timestamp = models.DateTimeField(default=timezone.now)
     last_completed_step = models.ForeignKey(
         # Circular reference, use quoted string used to get a lazy reference
         "Step",
@@ -191,6 +192,7 @@ class Archive(models.Model):
             self.resource = resource
 
         self.set_state()
+        self.last_modification_timestamp = timezone.now()
         # Normal logic of the save method
         super(Archive, self).save(*args, **kwargs)
 
@@ -208,13 +210,13 @@ class Archive(models.Model):
                     elif step.name == Steps.ARCHIVE:
                         state = ArchiveState.AIP
                         break
-            if len(steps) > 0 and steps[0].status == Status.FAILED and state is None:
-                state = ArchiveState.FAILED
-            elif state is None:
-                state = ArchiveState.NOT_RUN
+            if state is None:
+                if len(steps) > 0 and steps[0].status == Status.FAILED:
+                    state = ArchiveState.FAILED
+                else:
+                    state = ArchiveState.NOT_RUN
             self.state = state
-        except Exception as e:
-            print(e)
+        except Exception:
             self.state = None
 
 
@@ -271,7 +273,7 @@ class Step(models.Model):
 
     def save(self, *args, **kwargs):
         super(Step, self).save(*args, **kwargs)
-        Archive.objects.get(id=self.archive.id).save()
+        self.archive.save()
 
 
 class Resource(models.Model):

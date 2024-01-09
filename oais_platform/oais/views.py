@@ -297,6 +297,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             self.pagination_class.page_size = len(result)
         else:
             self.pagination_class.page_size = self.default_page_size
+
+        result = result.order_by("-last_modification_timestamp")
         
         return result
 

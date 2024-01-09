@@ -13,8 +13,13 @@ def save_archives(apps, schema_editor):
         obj.last_completed_step = obj.last_step
         try:
             archive_steps = steps.filter(archive_id=obj.id).order_by("-start_date")
+            obj.last_modification_timestamp = obj.timestamp
             if len(archive_steps) > 0:
                 obj.last_step = archive_steps[0]
+                if archive_steps[0].finish_date:
+                    obj.last_modification_timestamp = archive_steps[0].finish_date
+                else:
+                    obj.last_modification_timestamp = archive_steps[0].start_date
             obj.state = None
             for step in archive_steps:
                 if step.status == Status.COMPLETED:
@@ -60,6 +65,11 @@ class Migration(migrations.Migration):
             model_name='step',
             name='status',
             field=models.IntegerField(choices=[(1, 'NOT_RUN'), (2, 'IN_PROGRESS'), (3, 'FAILED'), (4, 'COMPLETED'), (5, 'WAITING_APPROVAL'), (6, 'REJECTED'), (7, 'WAITING')], default=1),
+        ),
+        migrations.AddField(
+            model_name='archive',
+            name='last_modification_timestamp',
+            field=models.DateTimeField(default=django.utils.timezone.now),
         ),
         migrations.RunPython(save_archives, backwards),
         migrations.RunSQL(migrations.RunSQL.noop, reverse_sql='SET CONSTRAINTS ALL IMMEDIATE'),
