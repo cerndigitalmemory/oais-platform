@@ -75,10 +75,9 @@ class Status(models.IntegerChoices):
 
 
 class ArchiveState(models.IntegerChoices):
-    NOT_RUN = 1, "NOT_RUN"
-    FAILED = 2, "FAILED"
-    SIP = 3, "SIP"
-    AIP = 4, "AIP"
+    NONE = 1, "NONE"
+    SIP = 2, "SIP"
+    AIP = 3, "AIP"
 
 
 class Archive(models.Model):
@@ -201,7 +200,7 @@ class Archive(models.Model):
             steps = self.steps.all().order_by("-start_date")
             if len(steps) > 0:
                 self.last_step = steps[0]
-            state = None
+            state = ArchiveState.NONE
             for step in steps:
                 if step.status == Status.COMPLETED:
                     if step.name == Steps.CHECKSUM:
@@ -210,14 +209,9 @@ class Archive(models.Model):
                     elif step.name == Steps.ARCHIVE:
                         state = ArchiveState.AIP
                         break
-            if state is None:
-                if len(steps) > 0 and steps[0].status == Status.FAILED:
-                    state = ArchiveState.FAILED
-                else:
-                    state = ArchiveState.NOT_RUN
             self.state = state
         except Exception:
-            self.state = None
+            self.state = ArchiveState.NONE
 
 
 class Step(models.Model):

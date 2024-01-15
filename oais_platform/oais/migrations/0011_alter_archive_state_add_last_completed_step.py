@@ -20,7 +20,7 @@ def save_archives(apps, schema_editor):
                     obj.last_modification_timestamp = archive_steps[0].finish_date
                 else:
                     obj.last_modification_timestamp = archive_steps[0].start_date
-            obj.state = None
+            obj.state = ArchiveState.NONE
             for step in archive_steps:
                 if step.status == Status.COMPLETED:
                     if step.name == Steps.CHECKSUM:
@@ -29,13 +29,8 @@ def save_archives(apps, schema_editor):
                     elif step.name == Steps.ARCHIVE:
                         obj.state = ArchiveState.AIP
                         break
-            if obj.state is None:
-                if len(archive_steps) > 0 and archive_steps[0].status == Status.FAILED:
-                    obj.state = ArchiveState.FAILED
-                else:
-                    obj.state = ArchiveState.NOT_RUN
         except Exception:
-            obj.state = None
+            obj.state = ArchiveState.NONE
         obj.save()
 
 
@@ -59,7 +54,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='archive',
             name='state',
-            field=models.IntegerField(choices=[(1, 'NOT_RUN'), (2, 'FAILED'), (3, 'SIP'), (4, 'AIP')], null=True),
+            field=models.IntegerField(choices=[(1, 'NONE'), (2, 'SIP'), (3, 'AIP')], null=True),
         ),
         migrations.AlterField(
             model_name='step',
