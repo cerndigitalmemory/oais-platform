@@ -1645,23 +1645,29 @@ def batch_announce(request):
     ):
         raise BadRequest("You're not allowed to announce this path")
 
-    folder_exists = os.path.exists(announce_path)
-    if not folder_exists:
-        raise BadRequest("Folder does not exist")
+    try:
+        folder_exists = os.path.exists(announce_path)
+        if not folder_exists:
+            raise BadRequest("Folder does not exist")
+    except Exception:
+        raise BadRequest("Folder does not exist or the oais user has no access")
 
     # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
     archives = []
     failed_sips = ''
-    for f in os.scandir(announce_path):
-        if f.is_dir and f.path != announce_path:
-            announce_response = announce_sip(f.path, request.user, True)
+    try:
+        for f in os.scandir(announce_path):
+            if f.is_dir and f.path != announce_path:
+                announce_response = announce_sip(f.path, request.user, True)
 
-            # If the process was successful, redirect to the detail of the newly created Archive
-            if announce_response["status"] == 0:
-                archives.append(announce_response["archive"])
-            # otherwise, return why the announce failed
-            else:
-                failed_sips += f.path + ' - ' + announce_response["errormsg"] + ' '
+                # If the process was successful, redirect to the detail of the newly created Archive
+                if announce_response["status"] == 0:
+                    archives.append(announce_response["archive"])
+                # otherwise, return why the announce failed
+                else:
+                    failed_sips += f.path + ' - ' + announce_response["errormsg"] + ' '
+    except Exception:
+        raise BadRequest("Folder does not exist or the oais user has no access")
 
     # Create tag and add archives
     if len(failed_sips) > 0:
