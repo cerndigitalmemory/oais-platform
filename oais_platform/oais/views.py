@@ -18,7 +18,6 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
@@ -1590,7 +1589,7 @@ def announce(request):
     The SIP will be validated, copied to the platform designated storage and
     an Archive will be created
     """
-    
+
     # Get the path passed in the request
     announce_path = request.data["announce_path"]
 
@@ -1655,15 +1654,20 @@ def batch_announce(request):
     # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
     archives = []
     failed_sips = ''
+    subfolder_count = 0
+    subfolder_count_limit = 20
     try:
         for f in os.scandir(announce_path):
             if f.is_dir and f.path != announce_path:
+                subfolder_count += 1
+                if subfolder_count > subfolder_count_limit:
+                    raise BadRequest("Number of subfolder limit reached (" + subfolder_count_limit + ")")
+
                 announce_response = announce_sip(f.path, request.user, True)
 
-                # If the process was successful, redirect to the detail of the newly created Archive
                 if announce_response["status"] == 0:
                     archives.append(announce_response["archive"])
-                # otherwise, return why the announce failed
+                # concat the announce failed messages
                 else:
                     failed_sips += f.path + ' - ' + announce_response["errormsg"] + ' '
     except Exception:
@@ -1674,7 +1678,7 @@ def batch_announce(request):
         tag_desc = "Failed SIP folders: " + failed_sips
     else:
         tag_desc = "Batch announce successful"
-    
+
     if len(archives) > 0:
         tag = Collection.objects.create(
             title=batch_tag,
@@ -1685,7 +1689,7 @@ def batch_announce(request):
         tag.archives.set(archives)
     else:
         raise BadRequest(tag_desc)
-    
+
     # In case of successful announce - show tag page
     return redirect(
         reverse(
@@ -1695,8 +1699,8 @@ def batch_announce(request):
 
 
 def check_allowed_path(path, username):
-    allowed_starting_path = f"/eos/home-{username[0]}/{username}/"
-    if path.startswith(allowed_starting_path):
+    allowed_starting_paths = [f"/eos/home-{username[0]}/{username}/", f"/eos/user/{username[0]}/{username}/"]
+    if path.startswith(tuple(allowed_starting_paths)):
         return True
     else:
         return False

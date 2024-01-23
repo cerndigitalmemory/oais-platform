@@ -89,6 +89,12 @@ urlpatterns = [
                 path("harvest/<int:id>/", views.harvest, name="harvest"),
                 # Upload a SIP
                 path("upload/sip", views.upload_sip, name="upload-sip"),
+                # Parse full URL of a supported source to find the record ID
+                path(
+                    "search/parse-url/",
+                    views.parse_url,
+                    name="parse_url",
+                ),
                 # Search
                 path("search/<str:source>/", views.search, name="search"),
                 path(
@@ -99,12 +105,6 @@ urlpatterns = [
                 path("search-query/", views.search_query, name="search_query"),
                 # Retrieve system settings
                 path("settings/", views.get_settings, name="get_settings"),
-                # Parse full URL of a supported source to find the record ID
-                path(
-                    "search/parse-url/",
-                    views.parse_url,
-                    name="parse_url",
-                ),
                 # Upload a SIP by announcing its location (e.g. EOS)
                 path(
                     "upload/announce/",
