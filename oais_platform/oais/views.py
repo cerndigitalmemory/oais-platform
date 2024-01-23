@@ -1654,15 +1654,14 @@ def batch_announce(request):
     # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
     archives = []
     failed_sips = ''
-    subfolder_count = 0
     subfolder_count_limit = 20
+
+    if len(next(os.walk(announce_path))[1]) > subfolder_count_limit:
+        raise BadRequest(f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})")
+
     try:
         for f in os.scandir(announce_path):
-            if f.is_dir and f.path != announce_path:
-                subfolder_count += 1
-                if subfolder_count > subfolder_count_limit:
-                    raise BadRequest("Number of subfolder limit reached (" + subfolder_count_limit + ")")
-
+            if f.is_dir() and f.path != announce_path:
                 announce_response = announce_sip(f.path, request.user, True)
 
                 if announce_response["status"] == 0:
