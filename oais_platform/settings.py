@@ -302,6 +302,9 @@ CTA_BASE_PATH = environ.get(
     "root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/",
 )
 
+# Batch announce number of subfolders limit
+BATCH_ANNOUNCE_LIMIT = 20
+
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa
