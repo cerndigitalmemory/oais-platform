@@ -1648,16 +1648,17 @@ def batch_announce(request):
         folder_exists = os.path.exists(announce_path)
         if not folder_exists:
             raise BadRequest("Folder does not exist")
+        subfolder_count = len(next(os.walk(announce_path))[1])
     except Exception:
         raise BadRequest("Folder does not exist or the oais user has no access")
+
+    subfolder_count_limit = settings.BATCH_ANNOUNCE_LIMIT
+    if subfolder_count > subfolder_count_limit:
+        raise BadRequest(f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})")
 
     # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
     archives = []
     failed_sips = ''
-    subfolder_count_limit = settings.BATCH_ANNOUNCE_LIMIT
-
-    if len(next(os.walk(announce_path))[1]) > subfolder_count_limit:
-        raise BadRequest(f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})")
 
     try:
         for f in os.scandir(announce_path):
