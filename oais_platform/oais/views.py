@@ -292,13 +292,13 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if page == "all":
             if not self.request.GET._mutable:
                 self.request.GET._mutable = True
-            self.request.GET['page'] = 1
+            self.request.GET["page"] = 1
             self.pagination_class.page_size = len(result)
         else:
             self.pagination_class.page_size = self.default_page_size
 
         result = result.order_by("-last_modification_timestamp")
-        
+
         return result
 
     @action(detail=True, url_path="details", url_name="sgl-details")
@@ -858,7 +858,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         tags = self.get_queryset().values("id", "title")
         serializer = CollectionNameSerializer(tags, many=True)
-        return Response({"result" : serializer.data})
+        return Response({"result": serializer.data})
 
 
 class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1590,6 +1590,9 @@ def announce(request):
     an Archive will be created
     """
 
+    if not request.user.is_superuser:
+        raise BadRequest("Unauthorized")
+
     # Get the path passed in the request
     announce_path = request.data["announce_path"]
 
@@ -1615,7 +1618,7 @@ def announce(request):
         )
     # otherwise, return why the announce failed
     else:
-        raise BadRequest(announce_response["errormsg"])    
+        raise BadRequest(announce_response["errormsg"])
 
 
 @api_view(["POST"])
@@ -1627,9 +1630,16 @@ def batch_announce(request):
     Archives will be created
     """
 
+    if not request.user.is_superuser:
+        raise BadRequest("Unauthorized")
+
     # Get the path passed in the request
     announce_path = request.data["batch_announce_path"]
     batch_tag = request.data["batch_tag"]
+
+    max_title_length = Collection._meta.get_field("title").max_length
+    if len(batch_tag) > max_title_length:
+        raise BadRequest(f"Tag name length exceeded (limit: {max_title_length})")
 
     is_duplicate = check_for_tag_name_duplicate(batch_tag, request.user)
 
@@ -1654,11 +1664,13 @@ def batch_announce(request):
 
     subfolder_count_limit = settings.BATCH_ANNOUNCE_LIMIT
     if subfolder_count > subfolder_count_limit:
-        raise BadRequest(f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})")
+        raise BadRequest(
+            f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})"
+        )
 
     # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
     archives = []
-    failed_sips = ''
+    failed_sips = ""
 
     try:
         for f in os.scandir(announce_path):
@@ -1669,17 +1681,22 @@ def batch_announce(request):
                     archives.append(announce_response["archive"])
                 # concat the announce failed messages
                 else:
-                    failed_sips += f.path + ' - ' + announce_response["errormsg"] + ' '
+                    failed_sips += f.path + " - " + announce_response["errormsg"] + " "
     except Exception:
         raise BadRequest("Folder does not exist or the oais user has no access")
 
     # Create tag and add archives
     if len(failed_sips) > 0:
         tag_desc = "Failed SIP folders: " + failed_sips
+    elif len(archives) > 0:
+        tag_desc = "Batch Announce successful"
     else:
-        tag_desc = "Batch announce successful"
+        tag_desc = "No folders found to announce"
 
     if len(archives) > 0:
+        max_desc_length = Collection._meta.get_field("description").max_length
+        if len(tag_desc) > max_desc_length:
+            tag_desc = tag_desc[0 : max_desc_length - 3] + "..."
         tag = Collection.objects.create(
             title=batch_tag,
             description=tag_desc,
@@ -1691,15 +1708,14 @@ def batch_announce(request):
         raise BadRequest(tag_desc)
 
     # In case of successful announce - show tag page
-    return redirect(
-        reverse(
-            "tags-detail", request=None, kwargs={"pk": tag.id}
-        )
-    )
+    return redirect(reverse("tags-detail", request=None, kwargs={"pk": tag.id}))
 
 
 def check_allowed_path(path, username):
-    allowed_starting_paths = [f"/eos/home-{username[0]}/{username}/", f"/eos/user/{username[0]}/{username}/"]
+    allowed_starting_paths = [
+        f"/eos/home-{username[0]}/{username}/",
+        f"/eos/user/{username[0]}/{username}/",
+    ]
     if path.startswith(tuple(allowed_starting_paths)):
         return True
     else:

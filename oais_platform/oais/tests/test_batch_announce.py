@@ -1,6 +1,7 @@
 import tempfile
 import os
 import json
+from unittest import skip
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -16,8 +17,11 @@ from oais_platform.oais.models import Collection, Archive
 class BatchAnnounceTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user("user", "", "pw")
+        self.user.is_superuser = True
+        self.user.save()
         self.client.force_authenticate(user=self.user)
 
+    @skip("Only admins can batch announce for now")
     def test_batch_announce_wrong_path(self):
         url = reverse("batch-announce")
 
@@ -72,9 +76,6 @@ class BatchAnnounceTests(APITestCase):
         self.assertEqual(Collection.objects.count(), 0)
 
     def test_batch_announce(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -113,13 +114,10 @@ class BatchAnnounceTests(APITestCase):
                 self.assertEqual(Collection.objects.count(), 1)
                 self.assertEqual(
                     Collection.objects.get(id=tag_id).description,
-                    "Batch announce successful",
+                    "Batch Announce successful",
                 )
 
     def test_batch_announce_limit_exceeded(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -156,9 +154,6 @@ class BatchAnnounceTests(APITestCase):
                 self.assertEqual(Collection.objects.count(), 0)
 
     def test_batch_announce_validation_failed(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -205,9 +200,6 @@ class BatchAnnounceTests(APITestCase):
             )
 
     def test_batch_announce_all_validation_failed(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:

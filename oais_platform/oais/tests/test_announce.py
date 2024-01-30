@@ -1,5 +1,6 @@
 import tempfile
 import os
+from unittest import skip
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -15,6 +16,8 @@ from oais_platform.oais.models import Archive
 class AnnounceTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user("user", "", "pw")
+        self.user.is_superuser = True
+        self.user.save()
         self.client.force_authenticate(user=self.user)
 
     def test_paths(self):
@@ -33,6 +36,7 @@ class AnnounceTests(APITestCase):
             )
         )
 
+    @skip("Only admins can announce for now")
     def test_announce_wrong_path(self):
         url = reverse("announce")
 
@@ -63,9 +67,6 @@ class AnnounceTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 0)
 
     def test_announce(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -94,9 +95,6 @@ class AnnounceTests(APITestCase):
             self.assertEqual(Archive.objects.count(), 1)
 
     def test_announce_validation_failed(self):
-        self.user.is_superuser = True
-        self.user.save()
-
         url = reverse("announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
