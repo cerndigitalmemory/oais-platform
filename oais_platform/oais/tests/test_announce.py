@@ -1,7 +1,6 @@
 import tempfile
 import os
 from unittest import skip
-from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -20,9 +19,6 @@ class AnnounceTests(APITestCase):
         self.user.is_superuser = True
         self.user.save()
         self.client.force_authenticate(user=self.user)
-
-        patch("celery.app.task.Task.delay", return_value=1)
-        patch("celery.app.task.Task.apply_async", return_value=1)
 
     def test_paths(self):
         self.assertFalse(check_allowed_path("/a/path/123", "standarduser"))

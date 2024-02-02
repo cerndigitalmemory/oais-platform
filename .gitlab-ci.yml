@@ -17,4 +17,7 @@ django-tests:
     
 trigger-deploy:
   stage: deploy
+  only:
+    - develop
+    - main
   trigger: digitalmemory/openshift-deploy
