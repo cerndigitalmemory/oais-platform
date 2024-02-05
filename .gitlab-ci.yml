@@ -19,5 +19,6 @@ trigger-deploy:
   stage: deploy
   only:
     - develop
+    - qa
     - main
   trigger: digitalmemory/openshift-deploy
