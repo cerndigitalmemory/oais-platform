@@ -718,17 +718,32 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                     step.set_status(Status.IN_PROGRESS)
                     logging.info(f"Current unit status for {am_status}")
                 else:
+                    is_failed = True
+                    try:
+                        # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
+                        am.unit_uuid = message["id"]
+                        executed_jobs = am.get_jobs()
+                        if executed_jobs != 1:
+                            is_failed = False
+                            am_status["status"] = "PROCESSING"
+                            am_status["microservice"] = "Waiting for archivematica to respond"
+                            logging.info("Archivematica package has executed jobs - waiting for continuation of processing")
+                    except requests.HTTPError as e:
+                        is_failed = True
+                        logging.info(f"Error {e.response.status_code} for archivematica retreiving jobs")
+
                     # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
                     # This is usually because archivematica may not have access to the file or the transfer source is not correct.
-                    am_status["status"] = "FAILED"
-                    am_status["microsrver"] = "Archivematica delayed to respond."
-                    step.set_output_data(
-                        {
-                            "status": 1,
-                            "errormsg": "Archivematica did not respond to package creation. Check transfer file and transfer source configuration",
-                        }
-                    )
-                    remove_periodic_task(periodic_task, step)
+                    if is_failed:
+                        am_status["status"] = "FAILED"
+                        am_status["microservice"] = "Archivematica delayed to respond."
+                        step.set_output_data(
+                            {
+                                "status": 1,
+                                "errormsg": "Archivematica did not respond to package creation. Check transfer file and transfer source configuration",
+                            }
+                        )
+                        remove_periodic_task(periodic_task, step)
             else:
                 # If there is other type of error code then archivematica connection could not be establissed.
                 step.set_output_data(
