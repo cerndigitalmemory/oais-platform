@@ -727,7 +727,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                             is_failed = False
                             am_status["status"] = "PROCESSING"
                             am_status["microservice"] = "Waiting for archivematica to respond"
-                            logging.info("Archivematica package has executed jobs - waiting for continuation of processing")
+                            logging.info("Archivematica package has executed jobs - waiting for the continuation of the processing")
+                        else:
+                            logging.info("No executed jobs for the given Archivematica package - consider failed")
                     except requests.HTTPError as e:
                         is_failed = True
                         logging.info(f"Error {e.response.status_code} for archivematica retreiving jobs")
