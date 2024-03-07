@@ -723,6 +723,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
                         am.unit_uuid = message["id"]
                         executed_jobs = am.get_jobs()
+                        logging.debug(f"Executed jobs for given id({message['id']}): {executed_jobs}")
                         if executed_jobs != 1:
                             is_failed = False
                             am_status["status"] = "PROCESSING"
