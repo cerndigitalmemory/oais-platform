@@ -10,8 +10,9 @@ check-isort:
     - pip install --upgrade pip
     - pip install isort
   script:
-    - isort --diff .
-    - exit $?
+    - isort --profile black -c .
+    - exit_code=$?
+    - exit $exit_code
     
 django-tests:
   stage: test
