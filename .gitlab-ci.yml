@@ -7,8 +7,8 @@ check-isort:
   stage: isort
   image: ubuntu:20.04
   before_script:
-    - pip install --upgrade pip
-    - pip install isort
+    - apt-get update
+    - apt-get install isort
   script:
     - isort --diff .
     - exit $?
