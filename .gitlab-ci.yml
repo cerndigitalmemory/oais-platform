@@ -5,10 +5,10 @@ stages:
 
 check-isort:
   stage: isort
-  image: ubuntu:20.04
+  image: python:3.11
   before_script:
-    - apt-get update
-    - apt-get install -y isort
+    - pip install --upgrade pip
+    - pip install isort
   script:
     - isort --diff .
     - exit $?
