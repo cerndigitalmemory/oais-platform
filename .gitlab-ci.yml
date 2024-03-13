@@ -8,7 +8,7 @@ check-isort:
   image: ubuntu:20.04
   before_script:
     - apt-get update
-    - apt-get install isort
+    - apt-get install -y isort
   script:
     - isort --diff .
     - exit $?
