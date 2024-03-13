@@ -1,7 +1,18 @@
 stages:
+  - isort
   - test
   - deploy
 
+check-isort:
+  stage: isort
+  image: ubuntu-20.04
+  before_script:
+    - pip install --upgrade pip
+    - pip install isort
+  script:
+    - isort --diff .
+    - exit $?
+    
 django-tests:
   stage: test
   image: docker/compose:1.27.4
