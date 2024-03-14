@@ -22,6 +22,7 @@ everything specified here, including values set via
 environment values.
 
 """
+
 from os import environ
 from pathlib import Path
 
@@ -304,6 +305,9 @@ CTA_BASE_PATH = environ.get(
 
 # Batch announce number of subfolders limit
 BATCH_ANNOUNCE_LIMIT = 20
+
+# Max waiting time in AM queue for upload (mins)
+AM_WAITING_TIME_LIMIT = 5
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file

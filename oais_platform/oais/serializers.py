@@ -97,8 +97,8 @@ class ArchiveSerializer(serializers.ModelSerializer):
     creator = UserSerializer()
     resource = ResourceSerializer()
     last_step = LastStepSerializer(many=False, read_only=True)
-    last_update = serializers.CharField(source='last_modification_timestamp')
-    
+    last_update = serializers.CharField(source="last_modification_timestamp")
+
     class Meta:
         model = Archive
         fields = [
@@ -119,7 +119,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "invenio_version",
             "resource",  # this points to the serialized resource
             "state",
-            "last_update"
+            "last_update",
         ]
 
     def get_last_step(self, instance):
@@ -145,7 +145,6 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Collection
         fields = [

@@ -1,16 +1,15 @@
-import tempfile
 import os
+import tempfile
 from unittest import skip
 
+from bagit_create import main as bic
 from django.contrib.auth.models import User
 from django.urls import reverse
-
-from rest_framework.test import APITestCase
 from rest_framework import status
-from bagit_create import main as bic
+from rest_framework.test import APITestCase
 
-from oais_platform.oais.views import check_allowed_path
 from oais_platform.oais.models import Archive
+from oais_platform.oais.views import check_allowed_path
 
 
 class AnnounceTests(APITestCase):
@@ -88,9 +87,12 @@ class AnnounceTests(APITestCase):
             self.assertRedirects(
                 response,
                 response.wsgi_request.build_absolute_uri(
-                    reverse("archives-sgl-details", kwargs={"pk": Archive.objects.latest("id").id})
+                    reverse(
+                        "archives-sgl-details",
+                        kwargs={"pk": Archive.objects.latest("id").id},
+                    )
                 ),
-                status_code=302
+                status_code=302,
             )
             self.assertEqual(Archive.objects.count(), 1)
 

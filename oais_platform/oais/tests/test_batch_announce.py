@@ -1,17 +1,16 @@
-import tempfile
-import os
 import json
+import os
+import tempfile
 from unittest import skip
 
-from django.contrib.auth.models import User
-from django.urls import reverse
-from django.test import override_settings
-
-from rest_framework.test import APITestCase
-from rest_framework import status
 from bagit_create import main as bic
+from django.contrib.auth.models import User
+from django.test import override_settings
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Collection, Archive
+from oais_platform.oais.models import Archive, Collection
 
 
 class BatchAnnounceTests(APITestCase):
@@ -108,7 +107,9 @@ class BatchAnnounceTests(APITestCase):
                 response = self.client.post(url, post_data, format="json")
                 tag_id = Collection.objects.latest("id").id
                 self.assertRedirects(
-                    response, reverse("tags-detail", kwargs={"pk": tag_id}), status_code=302
+                    response,
+                    reverse("tags-detail", kwargs={"pk": tag_id}),
+                    status_code=302,
                 )
                 self.assertEqual(Archive.objects.count(), 2)
                 self.assertEqual(Collection.objects.count(), 1)

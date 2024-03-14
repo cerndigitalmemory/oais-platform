@@ -673,9 +673,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(path_to_zip, "rb")),
                         content_type="application/zip",
                     )
-                    response[
-                        "Content-Disposition"
-                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
+                    response["Content-Disposition"] = (
+                        'attachment; filename="{filename}"'.format(filename=file_name)
+                    )
                     return response
                 elif output_data["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
@@ -685,9 +685,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(files_path, "rb")),
                         content_type="application/x-7z-compressed",
                     )
-                    response[
-                        "Content-Disposition"
-                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
+                    response["Content-Disposition"] = (
+                        'attachment; filename="{filename}"'.format(filename=file_name)
+                    )
                     return response
         return HttpResponse(status=404)
 

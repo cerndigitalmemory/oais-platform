@@ -28,6 +28,7 @@ from oais_platform.settings import (
     AM_TRANSFER_SOURCE,
     AM_URL,
     AM_USERNAME,
+    AM_WAITING_TIME_LIMIT,
     BASE_URL,
     BIC_UPLOAD_PATH,
     FILES_URL,
@@ -580,14 +581,9 @@ def archivematica(self, archive_id, step_id, input_data):
     transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
-    am = AMClient()
-    am.am_url = AM_URL
-    am.am_user_name = AM_USERNAME
-    am.am_api_key = AM_API_KEY
-    am.transfer_source = AM_TRANSFER_SOURCE
+    am = get_am_client()
     am.transfer_directory = archivematica_dst
     am.transfer_name = transfer_name
-    am.processing_config = "automated"
 
     # Create archivematica package
     logging.info(
@@ -684,19 +680,10 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
 
-    # Get the current configuration
-    am = AMClient()
-    am.am_url = AM_URL
-    am.am_user_name = AM_USERNAME
-    am.am_api_key = AM_API_KEY
-    am.transfer_source = AM_TRANSFER_SOURCE
-    am.ss_url = AM_SS_URL
-    am.ss_user_name = AM_SS_USERNAME
-    am.ss_api_key = AM_SS_API_KEY
+    am = get_am_client()
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
-        am_status = {"status": "PROCESSING", "microservice": "Waiting for upload"}
 
         try:
             am_status = am.get_unit_status(message["id"])
@@ -707,7 +694,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 if step.status == Status.WAITING:
                     # As long as the package is in queue to upload get_unit_status returns nothing so a mock response is passed
                     am_status = {
-                        "status": "PROCESSING",
+                        "status": "WAITING",
                         "microservice": "Waiting for archivematica to respond",
                         "path": "",
                         "directory": "",
@@ -715,53 +702,66 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         "uuid": "Pending...",
                         "message": "Waiting for upload to Archivematica",
                     }
-                    step.set_status(Status.IN_PROGRESS)
-                    logging.info(f"Current unit status for {am_status}")
+                    # step.set_status(Status.IN_PROGRESS)
+                    # If step has been waiting for more than the declared mins in AM_WAITING_TIME_LIMIT, delete task
+                    logging.info(
+                        f"Waiting in queue, time passed: {(timezone.now() - step.start_date).seconds}s"
+                    )
+                    if (
+                        timezone.now() - step.start_date
+                    ).seconds > 60 * AM_WAITING_TIME_LIMIT:
+                        logging.info(
+                            f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
+                        )
+                        am_status = {
+                            "status": "FAILED",
+                            "microservice": "Archivematica delayed to respond.",
+                        }
                 else:
                     is_failed = True
                     try:
                         # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
                         am.unit_uuid = message["id"]
                         executed_jobs = am.get_jobs()
-                        logging.debug(f"Executed jobs for given id({message['id']}): {executed_jobs}")
-                        if executed_jobs != 1:
+                        logging.debug(
+                            f"Executed jobs for given id({message['id']}): {executed_jobs}"
+                        )
+                        if executed_jobs != 1 and len(executed_jobs) > 0:
                             is_failed = False
-                            am_status["status"] = "PROCESSING"
-                            am_status["microservice"] = "Waiting for archivematica to respond"
-                            logging.info("Archivematica package has executed jobs - waiting for the continuation of the processing")
+                            am_status = {
+                                "status": "PROCESSING",
+                                "microservice": "Waiting for archivematica to continue the processing",
+                            }
+                            logging.info(
+                                "Archivematica package has executed jobs - waiting for the continuation of the processing"
+                            )
                         else:
-                            logging.info("No executed jobs for the given Archivematica package - consider failed")
+                            logging.info(
+                                "No executed jobs for the given Archivematica package - consider failed"
+                            )
                     except requests.HTTPError as e:
-                        is_failed = True
-                        logging.info(f"Error {e.response.status_code} for archivematica retreiving jobs")
+                        logging.info(
+                            f"Error {e.response.status_code} for archivematica retreiving jobs"
+                        )
 
                     # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
                     # This is usually because archivematica may not have access to the file or the transfer source is not correct.
                     if is_failed:
-                        am_status["status"] = "FAILED"
-                        am_status["microservice"] = "Archivematica delayed to respond."
-                        step.set_output_data(
-                            {
-                                "status": 1,
-                                "errormsg": "Archivematica did not respond to package creation. Check transfer file and transfer source configuration",
-                            }
-                        )
-                        remove_periodic_task(periodic_task, step)
+                        am_status = {
+                            "status": "FAILED",
+                            "microservice": "Archivematica delayed to respond.",
+                        }
             else:
                 # If there is other type of error code then archivematica connection could not be establissed.
-                step.set_output_data(
-                    {
-                        "status": 1,
-                        "errormsg": "Error: Could not connect to archivematica",
-                    }
-                )
-                remove_periodic_task(periodic_task, step)
+                am_status = {
+                    "status": "FAILED",
+                    "microservice": "Error: Could not connect to archivematica",
+                }
         except Exception as e:
             """
             In any other case make task fail (Archivematica crashed or not responding)
             """
-            step.set_output_data({"status": 1, "errormsg": e})
-            remove_periodic_task(periodic_task, step)
+            am_status = {"status": "FAILED", "microservice": e}
 
         status = am_status["status"]
         microservice = am_status["microservice"]
@@ -770,49 +770,12 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
         # Needs to validate both because just status=complete does not guarantee that aip is stored
         if status == "COMPLETE" and microservice == "Remove the processing directory":
-            """
-            Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
-            """
-            path_artifact = None
+            am_status = handle_completed_am_package(
+                self, step, am_status, task_name, archive_id
+            )
 
-            uuid = am_status["uuid"]
-            am.package_uuid = uuid
-            aip = am.get_package_details()
-            if type(aip) is dict:
-                aip_path = aip["current_path"]
-                aip_uuid = aip["uuid"]
-                am_status["aip_uuid"] = aip_uuid
-                am_status["aip_path"] = aip_path
-
-                path_artifact = create_path_artifact(
-                    "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
-                )
-            else:
-                logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
-
-            # If the path artifact is found return complete otherwise set in progress and try again
-            if path_artifact:
-                am_status["artifact"] = path_artifact
-
-                finalize(
-                    self=self,
-                    status=states.SUCCESS,
-                    retval={"status": 0},
-                    task_id=None,
-                    args=[archive_id, step_id],
-                    kwargs=None,
-                    einfo=None,
-                )
-
-                step.set_finish_date()
-                step.set_status(Status.COMPLETED)
-
-                periodic_task = PeriodicTask.objects.get(name=task_name)
-                periodic_task.delete()
-            else:
-                step.set_status(Status.IN_PROGRESS)
-
-        elif status == "FAILED" and microservice == "Move to the failed directory":
+        elif status == "FAILED":
+            step.set_status(Status.FAILED)
             remove_periodic_task(periodic_task, step)
 
         elif status == "PROCESSING":
@@ -826,6 +789,68 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         )
         logger.warning(e)
         remove_periodic_task(periodic_task, step)
+
+
+def get_am_client():
+    # Get the current configuration
+    am = AMClient()
+    am.am_url = AM_URL
+    am.am_user_name = AM_USERNAME
+    am.am_api_key = AM_API_KEY
+    am.transfer_source = AM_TRANSFER_SOURCE
+    am.ss_url = AM_SS_URL
+    am.ss_user_name = AM_SS_USERNAME
+    am.ss_api_key = AM_SS_API_KEY
+    am.processing_config = "automated"
+
+    return am
+
+
+def handle_completed_am_package(self, step, am_status, task_name, archive_id):
+    """
+    Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
+    """
+    path_artifact = None
+
+    uuid = am_status["uuid"]
+    am = get_am_client()
+    am.package_uuid = uuid
+    aip = am.get_package_details()
+    if type(aip) is dict:
+        aip_path = aip["current_path"]
+        aip_uuid = aip["uuid"]
+        am_status["aip_uuid"] = aip_uuid
+        am_status["aip_path"] = aip_path
+
+        path_artifact = create_path_artifact(
+            "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
+        )
+    else:
+        logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
+
+    # If the path artifact is found return complete otherwise set in progress and try again
+    if path_artifact:
+        am_status["artifact"] = path_artifact
+
+        finalize(
+            self=self,
+            status=states.SUCCESS,
+            retval={"status": 0},
+            task_id=None,
+            args=[archive_id, step.id],
+            kwargs=None,
+            einfo=None,
+        )
+
+        step.set_finish_date()
+        step.set_status(Status.COMPLETED)
+
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+        periodic_task.delete()
+    else:
+        step.set_status(Status.IN_PROGRESS)
+
+    return am_status
 
 
 def remove_periodic_task(periodic_task, step):

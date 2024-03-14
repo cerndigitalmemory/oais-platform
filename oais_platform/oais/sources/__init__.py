@@ -10,7 +10,7 @@ sources = {
     "zenodo": Invenio("zenodo", "https://zenodo.org/api"),
     "inveniordm": Invenio("inveniordm", "https://inveniordm.web.cern.ch/api"),
     "cod": Invenio("cod", "https://opendata.cern.ch/api"),
-    "local": Local()
+    "local": Local(),
     # "indico": Indico("indico", "https://indico.cern.ch"),
     # "codimd": CodiMD("codimd", "https://codimd.web.cern.ch")
 }
