@@ -606,8 +606,7 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_output_data({"status": 1, "errormsg": errormsg})
             return {"status": 1, "errormsg": errormsg}
         else:
-            step = Step.objects.get(pk=step_id)
-            step.set_status(Status.WAITING)
+            current_step.set_status(Status.WAITING)
 
             # Create the scheduler
             schedule = IntervalSchedule.objects.create(
@@ -647,12 +646,12 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_output_data(
                 {
                     "status": 1,
-                    "errormsg": "Check your archivematica settings configuration. ({e.request.status_code})",
+                    "errormsg": f"Check your archivematica settings configuration. ({e.request.status_code})",
                 }
             )
             return {
                 "status": 1,
-                "errormsg": "Check your archivematica settings configuration. ({e.request.status_code})",
+                "errormsg": f"Check your archivematica settings configuration. ({e.request.status_code})",
             }
 
     except Exception as e:
@@ -660,8 +659,8 @@ def archivematica(self, archive_id, step_id, input_data):
             f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
         )
         current_step.set_status(Status.FAILED)
-        current_step.set_output_data({"status": 1, "errormsg": e})
-        return {"status": 1, "errormsg": e}
+        current_step.set_output_data({"status": 1, "errormsg": str(e)})
+        return {"status": 1, "errormsg": str(e)}
 
     return {"status": 0, "errormsg": "Uploaded to Archivematica"}
 
