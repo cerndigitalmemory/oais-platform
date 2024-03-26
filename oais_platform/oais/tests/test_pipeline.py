@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
 from rest_framework import status
@@ -18,7 +20,8 @@ class PipelineTests(APITestCase):
             recid="1", source="test", source_url="", creator=self.creator
         )
 
-    def test_create_step_harvest(self):
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_create_step_harvest(self, process_delay):
         self.client.force_authenticate(user=self.creator)
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
@@ -30,13 +33,19 @@ class PipelineTests(APITestCase):
             format="json",
         )
 
+        latest_step = Step.objects.latest("id")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.HARVEST)
         self.assertEqual(response.data["status"], Status.WAITING)
+        process_delay.assert_called_once_with(
+            self.archive.id, latest_step.id, latest_step.output_data
+        )
 
-    def test_create_step_validate(self):
+    @patch("oais_platform.oais.tasks.validate.delay")
+    def test_create_step_validate(self, validate_delay):
         self.client.force_authenticate(user=self.creator)
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
@@ -48,13 +57,19 @@ class PipelineTests(APITestCase):
             format="json",
         )
 
+        latest_step = Step.objects.latest("id")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.VALIDATION)
         self.assertEqual(response.data["status"], Status.WAITING)
+        validate_delay.assert_called_once_with(
+            self.archive.id, latest_step.id, latest_step.output_data
+        )
 
-    def test_create_step_checksum(self):
+    @patch("oais_platform.oais.tasks.checksum.delay")
+    def test_create_step_checksum(self, checksum_delay):
         self.client.force_authenticate(user=self.creator)
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
@@ -66,13 +81,19 @@ class PipelineTests(APITestCase):
             format="json",
         )
 
+        latest_step = Step.objects.latest("id")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.CHECKSUM)
         self.assertEqual(response.data["status"], Status.WAITING)
+        checksum_delay.assert_called_once_with(
+            self.archive.id, latest_step.id, latest_step.output_data
+        )
 
-    def test_create_step_archivematica(self):
+    @patch("oais_platform.oais.tasks.archivematica.delay")
+    def test_create_step_archivematica(self, am_delay):
         self.client.force_authenticate(user=self.creator)
 
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
@@ -84,11 +105,16 @@ class PipelineTests(APITestCase):
             format="json",
         )
 
+        latest_step = Step.objects.latest("id")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Step.objects.count(), 1)
         self.assertEqual(response.data["name"], Steps.ARCHIVE)
         self.assertEqual(response.data["status"], Status.WAITING)
+        am_delay.assert_called_once_with(
+            self.archive.id, latest_step.id, latest_step.output_data
+        )
 
     def test_edit_manifests(self):
         self.client.force_authenticate(user=self.creator)

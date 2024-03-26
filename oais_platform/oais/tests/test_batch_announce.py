@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 from unittest import skip
+from unittest.mock import patch
 
 from bagit_create import main as bic
 from django.contrib.auth.models import User
@@ -74,7 +75,8 @@ class BatchAnnounceTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 0)
 
-    def test_batch_announce(self):
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce(self, copy_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -105,18 +107,20 @@ class BatchAnnounceTests(APITestCase):
 
             with override_settings(BATCH_ANNOUNCE_LIMIT=2):
                 response = self.client.post(url, post_data, format="json")
-                tag_id = Collection.objects.latest("id").id
-                self.assertRedirects(
-                    response,
-                    reverse("tags-detail", kwargs={"pk": tag_id}),
-                    status_code=302,
-                )
-                self.assertEqual(Archive.objects.count(), 2)
-                self.assertEqual(Collection.objects.count(), 1)
-                self.assertEqual(
-                    Collection.objects.get(id=tag_id).description,
-                    "Batch Announce successful",
-                )
+
+            tag_id = Collection.objects.latest("id").id
+            self.assertRedirects(
+                response,
+                reverse("tags-detail", kwargs={"pk": tag_id}),
+                status_code=302,
+            )
+            self.assertEqual(Archive.objects.count(), 2)
+            self.assertEqual(Collection.objects.count(), 1)
+            self.assertEqual(
+                Collection.objects.get(id=tag_id).description,
+                "Batch Announce successful",
+            )
+            self.assertEqual(len(copy_delay.mock_calls), 2)
 
     def test_batch_announce_limit_exceeded(self):
         url = reverse("batch-announce")

@@ -56,7 +56,8 @@ class UploadTests(APITestCase):
 
         f1.close()
 
-    def test_upload_sip(self):
+    @patch("oais_platform.oais.tasks.validate.delay")
+    def test_upload_sip(self, validate_delay):
         with override_settings(BIC_UPLOAD_PATH=None):
             # Prepare a temp folder to save the results
             with tempfile.TemporaryDirectory() as tmpdir2:
@@ -95,4 +96,10 @@ class UploadTests(APITestCase):
                 self.assertEqual(response.data["status"], 0)
                 self.assertEqual(
                     response.data["msg"], "SIP uploaded, see Archives page"
+                )
+                latest_step = Step.objects.latest("id")
+                validate_delay.assert_called_once_with(
+                    Archive.objects.latest("id").id,
+                    latest_step.id,
+                    latest_step.output_data,
                 )
