@@ -686,7 +686,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
         try:
             am_status = am.get_unit_status(message["id"])
-            logging.info(f"Current unit status for {am_status['status']}")
+            logging.info(f"Current unit status for {am_status}")
         except requests.HTTPError as e:
             logging.info(f"Error {e.response.status_code} for archivematica")
             if e.response.status_code == 400:
@@ -709,7 +709,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         )
                     else:
                         logging.info(
-                            "No executed jobs for the given Archivematica package - consider failed"
+                            "No executed jobs for the given Archivematica package."
                         )
                 except requests.HTTPError as e:
                     logging.info(
@@ -740,7 +740,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         "microservice": "Archivematica delayed to respond.",
                     }
             else:
-                # If there is other type of error code then archivematica connection could not be establissed.
+                # If there is other type of error code then archivematica connection could not be established.
                 am_status = {
                     "status": "FAILED",
                     "microservice": "Error: Could not connect to archivematica",

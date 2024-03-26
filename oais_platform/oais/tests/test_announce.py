@@ -87,28 +87,29 @@ class AnnounceTests(APITestCase):
             }
 
             response = self.client.post(url, post_data, format="json")
-            latest_archive_id = Archive.objects.latest("id").id
-            self.assertRedirects(
-                response,
-                response.wsgi_request.build_absolute_uri(
-                    reverse(
-                        "archives-sgl-details",
-                        kwargs={"pk": latest_archive_id},
-                    )
-                ),
-                status_code=302,
-            )
-            self.assertEqual(Archive.objects.count(), 1)
-            copy_delay.assert_called_once_with(
-                latest_archive_id,
-                Step.objects.latest("id").id,
-                {
-                    "foldername": ntpath.basename(path_to_sip),
-                    "announce_path": path_to_sip,
-                },
-            )
+        latest_archive_id = Archive.objects.latest("id").id
+        self.assertRedirects(
+            response,
+            response.wsgi_request.build_absolute_uri(
+                reverse(
+                    "archives-sgl-details",
+                    kwargs={"pk": latest_archive_id},
+                )
+            ),
+            status_code=302,
+        )
+        self.assertEqual(Archive.objects.count(), 1)
+        copy_delay.assert_called_once_with(
+            latest_archive_id,
+            Step.objects.latest("id").id,
+            {
+                "foldername": ntpath.basename(path_to_sip),
+                "announce_path": path_to_sip,
+            },
+        )
 
-    def test_announce_validation_failed(self):
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_announce_validation_failed(self, copy_delay):
         url = reverse("announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -129,9 +130,10 @@ class AnnounceTests(APITestCase):
             }
 
             response = self.client.post(url, post_data, format="json")
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(
-                response.data["detail"],
-                "The given path is not a valid SIP.",
-            )
-            self.assertEqual(Archive.objects.count(), 0)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "The given path is not a valid SIP.",
+        )
+        self.assertEqual(Archive.objects.count(), 0)
+        self.assertEqual(len(copy_delay.mock_calls), 0)

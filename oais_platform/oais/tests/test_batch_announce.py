@@ -108,21 +108,22 @@ class BatchAnnounceTests(APITestCase):
             with override_settings(BATCH_ANNOUNCE_LIMIT=2):
                 response = self.client.post(url, post_data, format="json")
 
-            tag_id = Collection.objects.latest("id").id
-            self.assertRedirects(
-                response,
-                reverse("tags-detail", kwargs={"pk": tag_id}),
-                status_code=302,
-            )
-            self.assertEqual(Archive.objects.count(), 2)
-            self.assertEqual(Collection.objects.count(), 1)
-            self.assertEqual(
-                Collection.objects.get(id=tag_id).description,
-                "Batch Announce successful",
-            )
-            self.assertEqual(len(copy_delay.mock_calls), 2)
+        tag_id = Collection.objects.latest("id").id
+        self.assertRedirects(
+            response,
+            reverse("tags-detail", kwargs={"pk": tag_id}),
+            status_code=302,
+        )
+        self.assertEqual(Archive.objects.count(), 2)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(
+            Collection.objects.get(id=tag_id).description,
+            "Batch Announce successful",
+        )
+        self.assertEqual(len(copy_delay.mock_calls), 2)
 
-    def test_batch_announce_limit_exceeded(self):
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce_limit_exceeded(self, copy_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -150,15 +151,17 @@ class BatchAnnounceTests(APITestCase):
 
             with override_settings(BATCH_ANNOUNCE_LIMIT=1):
                 response = self.client.post(url, post_data, format="json")
-                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertEqual(
-                    response.data["detail"],
-                    "Number of subfolder limit exceeded (limit: 1)",
-                )
-                self.assertEqual(Archive.objects.count(), 0)
-                self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "Number of subfolder limit exceeded (limit: 1)",
+        )
+        self.assertEqual(Archive.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(len(copy_delay.mock_calls), 0)
 
-    def test_batch_announce_validation_failed(self):
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce_validation_failed(self, copy_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -189,22 +192,24 @@ class BatchAnnounceTests(APITestCase):
             }
 
             response = self.client.post(url, post_data, format="json")
-            tag_id = Collection.objects.latest("id").id
-            self.assertRedirects(
-                response, reverse("tags-detail", kwargs={"pk": tag_id}), status_code=302
-            )
-            self.assertEqual(Archive.objects.count(), 1)
-            self.assertEqual(Collection.objects.count(), 1)
-            self.assertEqual(
-                Collection.objects.get(id=tag_id).description,
-                "Failed SIP folders: "
-                + path_to_sip
-                + " - "
-                + "The given path is not a valid SIP."
-                + " ",
-            )
+        tag_id = Collection.objects.latest("id").id
+        self.assertRedirects(
+            response, reverse("tags-detail", kwargs={"pk": tag_id}), status_code=302
+        )
+        self.assertEqual(Archive.objects.count(), 1)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(
+            Collection.objects.get(id=tag_id).description,
+            "Failed SIP folders: "
+            + path_to_sip
+            + " - "
+            + "The given path is not a valid SIP."
+            + " ",
+        )
+        self.assertEqual(len(copy_delay.mock_calls), 1)
 
-    def test_batch_announce_all_validation_failed(self):
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce_all_validation_failed(self, copy_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -248,15 +253,16 @@ class BatchAnnounceTests(APITestCase):
             }
 
             response = self.client.post(url, post_data, format="json")
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertIn("Failed SIP folders: ", response.data["detail"])
-            self.assertIn(
-                path_to_sip + " - " + "The given path is not a valid SIP." + " ",
-                response.data["detail"],
-            )
-            self.assertIn(
-                path_to_sip2 + " - " + "Error while reading sip.json" + " ",
-                response.data["detail"],
-            )
-            self.assertEqual(Archive.objects.count(), 0)
-            self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Failed SIP folders: ", response.data["detail"])
+        self.assertIn(
+            path_to_sip + " - " + "The given path is not a valid SIP." + " ",
+            response.data["detail"],
+        )
+        self.assertIn(
+            path_to_sip2 + " - " + "Error while reading sip.json" + " ",
+            response.data["detail"],
+        )
+        self.assertEqual(Archive.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(len(copy_delay.mock_calls), 0)
