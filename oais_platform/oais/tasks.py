@@ -581,7 +581,7 @@ def archivematica(self, archive_id, step_id, input_data):
     transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
-    am = get_am_client()
+    am = _get_am_client()
     am.transfer_directory = archivematica_dst
     am.transfer_name = transfer_name
 
@@ -679,7 +679,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
     step = Step.objects.get(pk=step_id)
     task_name = f"Archivematica status for step: {step_id}"
 
-    am = get_am_client()
+    am = _get_am_client()
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
@@ -705,7 +705,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                             "microservice": "Waiting for archivematica to continue the processing",
                         }
                         logging.info(
-                            "Archivematica package has executed jobs - waiting for the continuation of the processing"
+                            f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
                         )
                     else:
                         logging.info(
@@ -758,13 +758,14 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
         # Needs to validate both because just status=complete does not guarantee that aip is stored
         if status == "COMPLETE" and microservice == "Remove the processing directory":
-            am_status = handle_completed_am_package(
+            am_status, step_status = _handle_completed_am_package(
                 self, am, step, am_status, task_name, archive_id
             )
+            step.set_status(step_status)
 
         elif status == "FAILED":
             step.set_status(Status.FAILED)
-            remove_periodic_task(periodic_task, step)
+            _remove_periodic_task_on_failure(periodic_task, step)
 
         elif status == "PROCESSING" or status == "COMPLETE":
             step.set_status(Status.IN_PROGRESS)
@@ -779,7 +780,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         step.set_status(Status.FAILED)
 
 
-def get_am_client():
+def _get_am_client():
     # Get the current configuration
     am = AMClient()
     am.am_url = AM_URL
@@ -794,11 +795,10 @@ def get_am_client():
     return am
 
 
-def handle_completed_am_package(self, am, step, am_status, task_name, archive_id):
+def _handle_completed_am_package(self, am, step, am_status, task_name, archive_id):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
-    path_artifact = None
 
     uuid = am_status["uuid"]
     am.package_uuid = uuid
@@ -809,15 +809,9 @@ def handle_completed_am_package(self, am, step, am_status, task_name, archive_id
         am_status["aip_uuid"] = aip_uuid
         am_status["aip_path"] = aip_path
 
-        path_artifact = create_path_artifact(
+        am_status["artifact"] = create_path_artifact(
             "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
         )
-    else:
-        logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
-
-    # If the path artifact is found return complete otherwise set in progress and try again
-    if path_artifact:
-        am_status["artifact"] = path_artifact
 
         finalize(
             self=self,
@@ -830,21 +824,22 @@ def handle_completed_am_package(self, am, step, am_status, task_name, archive_id
         )
 
         step.set_finish_date()
-        step.set_status(Status.COMPLETED)
+        step_status = Status.COMPLETED
 
         periodic_task = PeriodicTask.objects.get(name=task_name)
         periodic_task.delete()
     else:
-        step.set_status(Status.IN_PROGRESS)
+        logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
+        # If the path artifact is not complete try again
+        step_status = Status.IN_PROGRESS
 
-    return am_status
+    return am_status, step_status
 
 
-def remove_periodic_task(periodic_task, step):
+def _remove_periodic_task_on_failure(periodic_task, step):
     """
     Set step as failed and remove the scheduled task
     """
-    step.set_status(Status.FAILED)
     logger.warning(f"Step {step.id} failed. Step status: {step.status}")
     periodic_task.delete()
 
