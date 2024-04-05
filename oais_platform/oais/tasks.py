@@ -142,7 +142,7 @@ def run_next_step(archive_id, previous_step_id):
     create_step(step_name, archive_id, previous_step_id)
 
 
-def create_step(step_name, archive_id, input_step_id=None):
+def create_step(step_name, archive_id, input_step_id=None, user_profile=None):
     """
     Create a new Step of the desired type
     for the given Archive and spawn Celery tasks for it
@@ -171,7 +171,7 @@ def create_step(step_name, archive_id, input_step_id=None):
 
     # TODO: Consider switching this to "eval" or something similar
     if step_name == Steps.HARVEST:
-        process.delay(step.archive.id, step.id, step.input_data)
+        process.delay(step.archive.id, step.id, user_profile, input_data=step.input_data)
     elif step_name == Steps.VALIDATION:
         validate.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.CHECKSUM:
@@ -415,7 +415,7 @@ def invenio(self, archive_id, step_id, input_data=None):
 
 
 @shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
-def process(self, archive_id, step_id, input_data=None):
+def process(self, archive_id, step_id, user_profile=None, input_data=None):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
@@ -431,19 +431,15 @@ def process(self, archive_id, step_id, input_data=None):
 
     api_token = None
 
-    if archive.source == "indico":
-        try:
-            user = archive.creator
-            api_token = user.profile.indico_api_key
-        except Exception as e:
-            return {"status": 1, "errormsg": e}
-
-    if archive.source == "codimd":
-        try:
-            user = archive.creator
-            api_token = user.profile.codimd_api_key
-        except Exception as e:
-            return {"status": 1, "errormsg": e}
+    try:
+        if archive.source == "indico":
+            api_token = user_profile["indico_api_key"]
+        elif archive.source == "codimd":
+            api_token = user_profile["codimd_api_key"]
+        elif archive.source == "cds" or archive.source == "cds-rdm":
+            api_token = user_profile["sso_comp_token"]
+    except Exception:
+        logger.warning(f"The given source({archive.source}) might requires an API key which was not provided.")
 
     try:
         bagit_result = bagit_create.main.process(
@@ -454,13 +450,13 @@ def process(self, archive_id, step_id, input_data=None):
             token=api_token,
         )
     except Exception as e:
-        return {"status": 1, "errormsg": e}
+        return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
 
     # If bagit returns an error return the error message
     if bagit_result["status"] == 1:
-        return {"status": 1, "errormsg": bagit_result["errormsg"]}
+        return {"status": 1, "errormsg": str(bagit_result["errormsg"])}
 
     sip_folder_name = bagit_result["foldername"]
 

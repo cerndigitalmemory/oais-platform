@@ -22,7 +22,7 @@ class ConfigFileUnavailable(Exception):
 
 
 class Invenio(Source):
-    def __init__(self, source, baseURL):
+    def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL
 
@@ -42,13 +42,21 @@ class Invenio(Source):
         if not self.config:
             raise ValueError("No configuration found")
 
+        self.headers = {
+            "Content-Type": "application/json",
+        }
+
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
+
     def get_record_url(self, recid):
         return f"{self.baseURL}/records/{recid}"
 
     def search(self, query, page=1, size=20):
         try:
             req = requests.get(
-                f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
+                f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}",
+                headers=self.headers,
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
@@ -101,7 +109,7 @@ class Invenio(Source):
         result = []
 
         try:
-            req = requests.get(self.get_record_url(recid))
+            req = requests.get(self.get_record_url(recid), headers=self.headers)
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
 

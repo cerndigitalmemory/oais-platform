@@ -10,9 +10,15 @@ from oais_platform.oais.sources.source import Source
 
 
 class CDS(Source):
-    def __init__(self, source, baseURL):
+    def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL
+        self.headers = {
+            "Content-Type": "application/json",
+        }
+
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
 
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
@@ -29,6 +35,7 @@ class CDS(Source):
                     "rg": size,
                     "jrec": int(size) * (int(page) - 1) + 1,
                 },
+                headers=self.headers,
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
@@ -58,7 +65,7 @@ class CDS(Source):
         try:
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
-            req = requests.get(self.get_record_url(recid), params={"of": "xm"})
+            req = requests.get(self.get_record_url(recid), params={"of": "xm"}, headers=self.headers)
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
 
