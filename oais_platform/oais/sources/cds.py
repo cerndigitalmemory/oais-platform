@@ -65,7 +65,9 @@ class CDS(Source):
         try:
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
-            req = requests.get(self.get_record_url(recid), params={"of": "xm"}, headers=self.headers)
+            req = requests.get(
+                self.get_record_url(recid), params={"of": "xm"}, headers=self.headers
+            )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
 

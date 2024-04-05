@@ -41,7 +41,10 @@ class PipelineTests(APITestCase):
         self.assertEqual(response.data["name"], Steps.HARVEST)
         self.assertEqual(response.data["status"], Status.WAITING)
         process_delay.assert_called_once_with(
-            self.archive.id, latest_step.id, ProfileSerializer(self.creator.profile).data, input_data=latest_step.output_data
+            self.archive.id,
+            latest_step.id,
+            ProfileSerializer(self.creator.profile).data,
+            input_data=latest_step.output_data,
         )
 
     @patch("oais_platform.oais.tasks.validate.delay")

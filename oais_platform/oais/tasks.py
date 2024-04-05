@@ -171,7 +171,9 @@ def create_step(step_name, archive_id, input_step_id=None, user_profile=None):
 
     # TODO: Consider switching this to "eval" or something similar
     if step_name == Steps.HARVEST:
-        process.delay(step.archive.id, step.id, user_profile, input_data=step.input_data)
+        process.delay(
+            step.archive.id, step.id, user_profile, input_data=step.input_data
+        )
     elif step_name == Steps.VALIDATION:
         validate.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.CHECKSUM:
@@ -439,7 +441,9 @@ def process(self, archive_id, step_id, user_profile=None, input_data=None):
         elif archive.source == "cds" or archive.source == "cds-rdm":
             api_token = user_profile["sso_comp_token"]
     except Exception:
-        logger.warning(f"The given source({archive.source}) might requires an API key which was not provided.")
+        logger.warning(
+            f"The given source({archive.source}) might requires an API key which was not provided."
+        )
 
     try:
         bagit_result = bagit_create.main.process(
