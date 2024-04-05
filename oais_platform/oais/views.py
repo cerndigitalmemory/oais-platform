@@ -209,10 +209,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         NEEDS_CONFIG = 3
 
         data = {
-            "zenodo": {"status": READY, "name": "Zenodo"},
+            "zenodo": {"name": "Zenodo"},
             "indico": {"name": "Indico"},
             "codimd": {"name": "CodiMD"},
             "cds": {"name": "CERN Document Server"},
+            "cds-rdm": {"name": "CERN Document Server RDM"},
         }
 
         data["zenodo"]["status"] = READY
@@ -227,8 +228,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             data["codimd"]["status"] = NEEDS_CONFIG
         if sso_comp_token:
             data["cds"]["status"] = READY
+            data["cds-rdm"]["status"] = READY
         else:
             data["cds"]["status"] = NEEDS_CONFIG_PRIVATE
+            data["cds-rdm"]["status"] = NEEDS_CONFIG_PRIVATE
 
         # TODO: Additional checks can be added here to verify the functioning
         # (e.g. pinging an endpoint to see if it can be authenticated)
@@ -456,7 +459,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
         )
 
-        process.delay(step.archive.id, step.id)
+        user_serialized = UserSerializer(request.user).data
+        process.delay(step.archive.id, step.id, user_serialized["profile"])
 
         serializer = ArchiveSerializer(
             archive,
@@ -492,7 +496,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
             )
             # Step is auto-approved and harvest step runs
-            process.delay(step.archive.id, step.id)
+            user_serialized = UserSerializer(request.user).data
+            process.delay(step.archive.id, step.id, user_serialized["profile"])
 
         serializer = CollectionSerializer(
             job_tag,
@@ -574,7 +579,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if int(next_step) in Steps:
             if has_user_archive_edit_rights(pk, request.user):
-                next_step = create_step(next_step, pk, archive["last_completed_step"])
+                user_serialized = UserSerializer(request.user).data
+                next_step = create_step(next_step, pk, archive["last_completed_step"], user_serialized["profile"])
             else:
                 raise Exception("User has no rights to perform a step for this archive")
         else:
@@ -649,7 +655,8 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         if approved:
             if step.name == Steps.HARVEST:
                 step.set_status(Status.NOT_RUN)
-                process.delay(step.archive.id, step.id)
+                user_serialized = UserSerializer(request.user).data
+                process.delay(step.archive.id, step.id, user_serialized["profile"])
 
         serializer = self.get_serializer(step)
         return Response(serializer.data)
@@ -679,9 +686,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(path_to_zip, "rb")),
                         content_type="application/zip",
                     )
-                    response["Content-Disposition"] = (
-                        'attachment; filename="{filename}"'.format(filename=file_name)
-                    )
+                    response[
+                        "Content-Disposition"
+                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
                     return response
                 elif output_data["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
@@ -691,9 +698,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(files_path, "rb")),
                         content_type="application/x-7z-compressed",
                     )
-                    response["Content-Disposition"] = (
-                        'attachment; filename="{filename}"'.format(filename=file_name)
-                    )
+                    response[
+                        "Content-Disposition"
+                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
                     return response
         return HttpResponse(status=404)
 
@@ -1217,6 +1224,8 @@ def search(request, source):
             api_token = request.user.profile.indico_api_key
         elif source == "codimd":
             api_token = request.user.profile.codimd_api_key
+        elif source == "cds" or source == "cds-rdm":
+            api_token = request.user.profile.sso_comp_token
         else:
             api_token = None
         results = get_source(source, api_token).search(query, page, size)
@@ -1234,6 +1243,8 @@ def search_by_id(request, source, recid):
             api_token = request.user.profile.indico_api_key
         elif source == "codimd":
             api_token = request.user.profile.codimd_api_key
+        elif source == "cds" or source == "cds-rdm":
+            api_token = request.user.profile.sso_comp_token
         else:
             api_token = None
         result = get_source(source, api_token).search_by_id(recid.strip())
@@ -1259,7 +1270,7 @@ def search_query(request):
     More info:
     https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
     """
-    sources = ["indico", "cds", "inveniordm", "zenodo", "cod", "cds-test", "local"]
+    sources = ["indico", "cds", "inveniordm", "zenodo", "cod", "cds-test", "local", "cds-rdm"]
     visibilities = ["private", "public", "owned"]
     source_buckets = list()
     visibility_buckets = list()
@@ -1515,15 +1526,16 @@ def parse_url(request):
         source = "cod"
     elif o.hostname == "zenodo.org":
         source = "zenodo"
+    elif o.hostname == "new-cds.cern.ch":
+        source = "cds-rdm"
     else:
         raise BadRequest(
             "Unable to parse the given URL. Try manually passing the source and the record ID."
         )
 
     path_parts = PurePosixPath(unquote(urlparse(url).path)).parts
-
     # Ensures the path is in the form /record/<RECORD_ID>
-    if path_parts[0] == "/" and path_parts[1] == "record":
+    if path_parts[0] == "/" and (path_parts[1] == "record" or path_parts[1] == "records"):
         # The ID is the second part of the path
         recid = path_parts[2]
     else:

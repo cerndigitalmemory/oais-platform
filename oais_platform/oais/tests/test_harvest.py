@@ -99,7 +99,7 @@ class HarvestTests(APITestCase):
         # This part will simulate what approving an Harvest step does
         # Let's execute directly what the Harvest step would do (but without celery)
         # Run bagit-create
-        result = process(archive_id, steps[0].id)
+        result = process(archive_id, steps[0].id, None)
 
         # Check that BagIt Create succeded
         self.assertEqual(result["status"], 0)
