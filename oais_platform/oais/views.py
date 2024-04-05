@@ -580,7 +580,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if int(next_step) in Steps:
             if has_user_archive_edit_rights(pk, request.user):
                 user_serialized = UserSerializer(request.user).data
-                next_step = create_step(next_step, pk, archive["last_completed_step"], user_serialized["profile"])
+                next_step = create_step(
+                    next_step,
+                    pk,
+                    archive["last_completed_step"],
+                    user_serialized["profile"],
+                )
             else:
                 raise Exception("User has no rights to perform a step for this archive")
         else:
@@ -686,9 +691,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(path_to_zip, "rb")),
                         content_type="application/zip",
                     )
-                    response[
-                        "Content-Disposition"
-                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
+                    response["Content-Disposition"] = (
+                        'attachment; filename="{filename}"'.format(filename=file_name)
+                    )
                     return response
                 elif output_data["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
@@ -698,9 +703,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         FileWrapper(open(files_path, "rb")),
                         content_type="application/x-7z-compressed",
                     )
-                    response[
-                        "Content-Disposition"
-                    ] = 'attachment; filename="{filename}"'.format(filename=file_name)
+                    response["Content-Disposition"] = (
+                        'attachment; filename="{filename}"'.format(filename=file_name)
+                    )
                     return response
         return HttpResponse(status=404)
 
@@ -1270,7 +1275,16 @@ def search_query(request):
     More info:
     https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
     """
-    sources = ["indico", "cds", "inveniordm", "zenodo", "cod", "cds-test", "local", "cds-rdm"]
+    sources = [
+        "indico",
+        "cds",
+        "inveniordm",
+        "zenodo",
+        "cod",
+        "cds-test",
+        "local",
+        "cds-rdm",
+    ]
     visibilities = ["private", "public", "owned"]
     source_buckets = list()
     visibility_buckets = list()
@@ -1535,7 +1549,9 @@ def parse_url(request):
 
     path_parts = PurePosixPath(unquote(urlparse(url).path)).parts
     # Ensures the path is in the form /record/<RECORD_ID>
-    if path_parts[0] == "/" and (path_parts[1] == "record" or path_parts[1] == "records"):
+    if path_parts[0] == "/" and (
+        path_parts[1] == "record" or path_parts[1] == "records"
+    ):
         # The ID is the second part of the path
         recid = path_parts[2]
     else:
