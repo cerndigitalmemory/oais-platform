@@ -16,7 +16,12 @@ from oais_platform.oais.models import (
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ["indico_api_key", "codimd_api_key", "sso_comp_token"]
+        fields = [
+            "indico_api_key",
+            "codimd_api_key",
+            "sso_comp_token",
+            "cds_rdm_api_key",
+        ]
 
 
 class ResourceSerializer(serializers.ModelSerializer):

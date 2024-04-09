@@ -198,6 +198,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         indico_api_key = profile.indico_api_key
         codimd_api_key = profile.codimd_api_key
         sso_comp_token = profile.sso_comp_token
+        cds_rdm_api_key = profile.codimd_api_key
 
         data = {}
 
@@ -214,6 +215,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             "codimd": {"name": "CodiMD"},
             "cds": {"name": "CERN Document Server"},
             "cds-rdm": {"name": "CERN Document Server RDM"},
+            "cds-rdm-sandbox": {"name": "CERN Document Server RDM Sandbox"},
         }
 
         data["zenodo"]["status"] = READY
@@ -228,10 +230,14 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             data["codimd"]["status"] = NEEDS_CONFIG
         if sso_comp_token:
             data["cds"]["status"] = READY
-            data["cds-rdm"]["status"] = READY
         else:
             data["cds"]["status"] = NEEDS_CONFIG_PRIVATE
-            data["cds-rdm"]["status"] = NEEDS_CONFIG_PRIVATE
+        if cds_rdm_api_key:
+            data["cds-rdm"]["status"] = READY
+            data["cds-rdm-sandbox"]["status"] = READY
+        else:
+            data["cds-rdm"]["status"] = NEEDS_CONFIG
+            data["cds-rdm-sandbox"]["status"] = NEEDS_CONFIG
 
         # TODO: Additional checks can be added here to verify the functioning
         # (e.g. pinging an endpoint to see if it can be authenticated)
@@ -459,8 +465,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
         )
 
-        user_serialized = UserSerializer(request.user).data
-        process.delay(step.archive.id, step.id, user_serialized["profile"])
+        api_key = request.user.profile.get_api_key_by_source(archive.source)
+        process.delay(step.archive.id, step.id, api_key)
 
         serializer = ArchiveSerializer(
             archive,
@@ -496,8 +502,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
             )
             # Step is auto-approved and harvest step runs
-            user_serialized = UserSerializer(request.user).data
-            process.delay(step.archive.id, step.id, user_serialized["profile"])
+            api_key = request.user.profile.get_api_key_by_source(archive.source)
+            process.delay(step.archive.id, step.id, api_key)
 
         serializer = CollectionSerializer(
             job_tag,
@@ -660,8 +666,8 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         if approved:
             if step.name == Steps.HARVEST:
                 step.set_status(Status.NOT_RUN)
-                user_serialized = UserSerializer(request.user).data
-                process.delay(step.archive.id, step.id, user_serialized["profile"])
+                api_key = user.profile.get_api_key_by_source(step.archive.source)
+                process.delay(step.archive.id, step.id, api_key)
 
         serializer = self.get_serializer(step)
         return Response(serializer.data)
@@ -1225,15 +1231,8 @@ def search(request, source):
         size = request.GET["s"]
 
     try:
-        if source == "indico":
-            api_token = request.user.profile.indico_api_key
-        elif source == "codimd":
-            api_token = request.user.profile.codimd_api_key
-        elif source == "cds" or source == "cds-rdm":
-            api_token = request.user.profile.sso_comp_token
-        else:
-            api_token = None
-        results = get_source(source, api_token).search(query, page, size)
+        api_key = request.user.profile.get_api_key_by_source(source)
+        results = get_source(source, api_key).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
 
@@ -1244,15 +1243,8 @@ def search(request, source):
 @permission_classes([permissions.IsAuthenticated])
 def search_by_id(request, source, recid):
     try:
-        if source == "indico":
-            api_token = request.user.profile.indico_api_key
-        elif source == "codimd":
-            api_token = request.user.profile.codimd_api_key
-        elif source == "cds" or source == "cds-rdm":
-            api_token = request.user.profile.sso_comp_token
-        else:
-            api_token = None
-        result = get_source(source, api_token).search_by_id(recid.strip())
+        api_key = request.user.profile.get_api_key_by_source(source)
+        result = get_source(source, api_key).search_by_id(recid.strip())
     except InvalidSource:
         raise BadRequest("Invalid source")
 
@@ -1284,6 +1276,7 @@ def search_query(request):
         "cds-test",
         "local",
         "cds-rdm",
+        "cds-rdm-sandbox",
     ]
     visibilities = ["private", "public", "owned"]
     source_buckets = list()
@@ -1542,6 +1535,8 @@ def parse_url(request):
         source = "zenodo"
     elif o.hostname == "new-cds.cern.ch":
         source = "cds-rdm"
+    elif o.hostname == "sandbox-cds-rdm.web.cern.ch":
+        source = "cds-rdm-sandbox"
     else:
         raise BadRequest(
             "Unable to parse the given URL. Try manually passing the source and the record ID."
