@@ -87,9 +87,7 @@ class ApprovalTests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.step.status, Status.NOT_RUN)
-        process_delay.assert_called_once_with(
-            self.archive.id, self.step.id, ProfileSerializer(self.creator.profile).data
-        )
+        process_delay.assert_called_once_with(self.archive.id, self.step.id, None)
 
     def test_reject_not_waiting_approval(self):
         self.creator.user_permissions.add(self.reject_permission)
@@ -140,9 +138,7 @@ class ApprovalTests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.step.status, Status.NOT_RUN)
-        process_delay.assert_called_once_with(
-            self.archive.id, self.step.id, ProfileSerializer(self.creator.profile).data
-        )
+        process_delay.assert_called_once_with(self.archive.id, self.step.id, None)
 
     def test_reject_other_user_without_access_perm(self):
         self.other_user.user_permissions.add(self.reject_permission)

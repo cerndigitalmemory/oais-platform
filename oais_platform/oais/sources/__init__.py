@@ -7,7 +7,6 @@ from oais_platform.oais.sources.local import Local
 sources = {
     "cds": CDS("cds", "https://cds.cern.ch"),
     "cds-test": CDS("cds-test", "https://cds-test.cern.ch"),
-    "cds-rdm": Invenio("cds-rdm", "https://new-cds.cern.ch/api"),
     "zenodo": Invenio("zenodo", "https://zenodo.org/api"),
     "inveniordm": Invenio("inveniordm", "https://inveniordm.web.cern.ch/api"),
     "cod": Invenio("cod", "https://opendata.cern.ch/api"),
@@ -26,10 +25,14 @@ def get_source(source, api_token=None):
         return Indico("indico", "https://indico.cern.ch", api_token)
     if source == "codimd":
         return CodiMD("codimd", "https://codimd.web.cern.ch", api_token)
-    if source == "cds" and api_token:
+    if source == "cds":
         return CDS("cds", "https://cds.cern.ch", api_token)
-    if source == "cds-rdm" and api_token:
+    if source == "cds-rdm":
         return Invenio("cds-rdm", "https://new-cds.cern.ch/api", api_token)
+    if source == "cds-rdm-sandbox":
+        return Invenio(
+            "cds-rdm-sandbox", "https://sandbox-cds-rdm.web.cern.ch/api", api_token
+        )
 
     if source not in sources:
         raise InvalidSource(f"Invalid source: {source}")

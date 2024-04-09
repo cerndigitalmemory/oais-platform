@@ -71,31 +71,7 @@ class Invenio(Source):
 
         results = []
         for record in records:
-            recid_key_list = self.config["recid"].split(",")
-            recid = get_dict_value(record, recid_key_list)
-            if not isinstance(recid, str):
-                recid = str(recid)
-
-            authors_key_list = self.config["authors"].split(",")
-            authors_list = get_dict_value(record, authors_key_list)
-            authors = []
-            if authors_list:
-                for author in authors_list:
-                    author_name_key_list = self.config["author_name"].split(",")
-                    authors.append(get_dict_value(author, author_name_key_list))
-
-            url_key_list = self.config["url"].split(",")
-            title_key_list = self.config["title"].split(",")
-
-            results.append(
-                {
-                    "source_url": get_dict_value(record, url_key_list),
-                    "recid": recid,
-                    "title": get_dict_value(record, title_key_list),
-                    "authors": authors,
-                    "source": self.source,
-                }
-            )
+            results.append(self.parse_record(record))
 
         # Get total number of hits
         total_num_hits = data["hits"]["total"]
@@ -136,10 +112,17 @@ class Invenio(Source):
         url_key_list = self.config["url"].split(",")
         title_key_list = self.config["title"].split(",")
 
+        status = None
+        if self.config["status"]:
+            status = get_dict_value(record, self.config["status"].split(","))
+            if status not in ["open", "embargoed", "restricted", "metadata-only"]:
+                status = None
+
         return {
             "source_url": get_dict_value(record, url_key_list),
             "recid": recid,
             "title": get_dict_value(record, title_key_list),
             "authors": authors,
             "source": self.source,
+            "status": status,
         }

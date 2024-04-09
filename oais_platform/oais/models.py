@@ -22,6 +22,7 @@ class Profile(models.Model):
     indico_api_key = models.TextField(max_length=500, blank=True)
     codimd_api_key = models.TextField(max_length=500, blank=True)
     sso_comp_token = models.TextField(max_length=500, blank=True)
+    cds_rdm_api_key = models.TextField(max_length=500, blank=True)
     # make sure default here is a callable returning a list
     cern_roles = ArrayField(models.CharField(max_length=500), default=list, blank=True)
 
@@ -38,6 +39,18 @@ class Profile(models.Model):
     def update_roles(self, data):
         setattr(self, "cern_roles", data)
         self.save()
+
+    def get_api_key_by_source(self, source):
+        if source == "indico":
+            return self.indico_api_key
+        elif source == "codimd":
+            return self.codimd_api_key
+        elif source == "cds":
+            return self.sso_comp_token
+        elif source == "cds-rdm" or source == "cds-rdm-sandbox":
+            return self.cds_rdm_api_key
+        else:
+            return None
 
 
 @receiver(post_save, sender=User)
