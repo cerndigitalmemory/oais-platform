@@ -584,6 +584,7 @@ def archivematica(self, archive_id, step_id, input_data):
     am = _get_am_client()
     am.transfer_directory = archivematica_dst
     am.transfer_name = transfer_name
+    am.transfer_type = "unzipped bag"
 
     # Create archivematica package
     logging.info(
