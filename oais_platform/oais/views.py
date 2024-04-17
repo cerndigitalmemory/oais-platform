@@ -1672,8 +1672,8 @@ def batch_announce(request):
     archives = []
     failed_sips = ""
 
-    try:
-        for f in os.scandir(announce_path):
+    for f in os.scandir(announce_path):
+        try:
             if f.is_dir() and f.path != announce_path:
                 announce_response = announce_sip(f.path, request.user, True)
 
@@ -1682,8 +1682,8 @@ def batch_announce(request):
                 # concat the announce failed messages
                 else:
                     failed_sips += f.path + " - " + announce_response["errormsg"] + " "
-    except Exception:
-        raise BadRequest("Folder does not exist or the oais user has no access")
+        except Exception as e:
+            failed_sips += f"f.path - Error: {str(e)}. "
 
     # Create tag and add archives
     if len(failed_sips) > 0:
