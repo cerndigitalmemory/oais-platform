@@ -1681,7 +1681,7 @@ def batch_announce(request):
                     archives.append(announce_response["archive"])
                 # concat the announce failed messages
                 else:
-                    failed_sips += f"{f.path} - {announce_response['errormsg']}. "
+                    failed_sips += f"{f.path} - {announce_response['errormsg']} "
         except Exception as e:
             failed_sips += f"{f.path} - Error: {str(e)}. "
 
