@@ -1681,9 +1681,9 @@ def batch_announce(request):
                     archives.append(announce_response["archive"])
                 # concat the announce failed messages
                 else:
-                    failed_sips += f.path + " - " + announce_response["errormsg"] + " "
+                    failed_sips += f"{f.path} - {announce_response['errormsg']}. "
         except Exception as e:
-            failed_sips += f"f.path - Error: {str(e)}. "
+            failed_sips += f"{f.path} - Error: {str(e)}. "
 
     # Create tag and add archives
     if len(failed_sips) > 0:
@@ -1691,7 +1691,7 @@ def batch_announce(request):
     elif len(archives) > 0:
         tag_desc = "Batch Announce successful"
     else:
-        tag_desc = "No folders found to announce"
+        tag_desc = "No folders found to be announced"
 
     if len(archives) > 0:
         max_desc_length = Collection._meta.get_field("description").max_length
