@@ -1,10 +1,10 @@
 from django.contrib.auth.models import Permission, User
-from django.urls import reverse
 from django.db import IntegrityError
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step, Resource
+from oais_platform.oais.models import Archive, Resource, Step
 
 
 class ArchiveTests(APITestCase):
@@ -205,7 +205,4 @@ class ArchiveTests(APITestCase):
         self.assertEqual(Resource.objects.all().count(), 2)
 
         with self.assertRaises(IntegrityError):
-            Resource.objects.create(
-                recid="2",
-                source="test"
-            )
+            Resource.objects.create(recid="2", source="test")
