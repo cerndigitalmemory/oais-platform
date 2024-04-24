@@ -341,7 +341,18 @@ class Collection(models.Model):
         self.save()
 
     def set_description(self, description):
+        max_desc_length = self._meta.get_field("description").max_length
+        if len(description) > max_desc_length:
+            description = description[0 : max_desc_length - 3] + "..."
         self.description = description
+        self.save()
+
+    def append_to_description(self, description):
+        max_desc_length = Collection._meta.get_field("description").max_length
+        new_description = self.description + description
+        if len(new_description) > max_desc_length:
+            new_description = new_description[0 : max_desc_length - 3] + "..."
+        self.description = new_description
         self.save()
 
     def set_modification_timestamp(self):

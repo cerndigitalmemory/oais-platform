@@ -71,7 +71,13 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
-from .tasks import announce_sip, create_step, process, run_next_step
+from .tasks import (
+    announce_sip,
+    batch_announce_task,
+    create_step,
+    process,
+    run_next_step,
+)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1667,47 +1673,18 @@ def batch_announce(request):
         raise BadRequest(
             f"Number of subfolder limit exceeded (limit: {subfolder_count_limit})"
         )
+    elif subfolder_count < 1:
+        raise BadRequest("No subfolders found")
 
-    # Run the "announce" procedure for every subfolder(validate, copy, create an Archive)
-    archives = []
-    failed_sips = ""
+    tag = Collection.objects.create(
+        title=batch_tag,
+        description="Batch Announce processing...",
+        creator=request.user,
+        internal=False,
+    )
 
-    for f in os.scandir(announce_path):
-        try:
-            if f.is_dir() and f.path != announce_path:
-                announce_response = announce_sip(f.path, request.user, True)
+    batch_announce_task.delay(announce_path, tag.id, request.user.id)
 
-                if announce_response["status"] == 0:
-                    archives.append(announce_response["archive"])
-                # concat the announce failed messages
-                else:
-                    failed_sips += f"{f.path} - {announce_response['errormsg']} "
-        except Exception as e:
-            failed_sips += f"{f.path} - Error: {str(e)}. "
-
-    # Create tag and add archives
-    if len(failed_sips) > 0:
-        tag_desc = "Failed SIP folders: " + failed_sips
-    elif len(archives) > 0:
-        tag_desc = "Batch Announce successful"
-    else:
-        tag_desc = "No folders found to be announced"
-
-    if len(archives) > 0:
-        max_desc_length = Collection._meta.get_field("description").max_length
-        if len(tag_desc) > max_desc_length:
-            tag_desc = tag_desc[0 : max_desc_length - 3] + "..."
-        tag = Collection.objects.create(
-            title=batch_tag,
-            description=tag_desc,
-            creator=request.user,
-            internal=False,
-        )
-        tag.archives.set(archives)
-    else:
-        raise BadRequest(tag_desc)
-
-    # In case of successful announce - show tag page
     return redirect(reverse("tags-detail", request=None, kwargs={"pk": tag.id}))
 
 
