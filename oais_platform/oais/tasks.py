@@ -1085,5 +1085,5 @@ def _add_error_to_tag_description(tag, path, errormsg):
         )
     else:
         if tag.description.find("ERRORS:") == -1:
-            tag.append_to_description(" ERRORS:")
-        tag.append_to_description(f" {errormsg}:{path}.")
+            tag.set_description(tag.description + " ERRORS:")
+        tag.set_description(tag.description + f" {errormsg}:{path}.")

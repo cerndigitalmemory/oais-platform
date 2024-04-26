@@ -187,6 +187,7 @@ class ArchiveTests(APITestCase):
 
     def test_resource_created(self):
         self.assertEqual(Resource.objects.all().count(), 1)
+        # This recid already exists. Therefore, the number of objects should not increase
         Archive.objects.create(
             recid="1",
             source="test",
