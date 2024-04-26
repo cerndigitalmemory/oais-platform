@@ -12,11 +12,12 @@ import requests
 from amclient import AMClient
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
 from oais_platform.oais.sources import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
@@ -991,7 +992,7 @@ def announce_sip(announce_path, creator, return_archive=False):
             return {"status": 0, "archive_id": archive.id}
 
     else:
-        return {"status": 1, "errormsg": "The given path is not a valid SIP."}
+        return {"status": 1, "errormsg": "The given path is not a valid SIP"}
 
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
@@ -1049,3 +1050,40 @@ def copy_sip(self, archive_id, step_id, input_data):
         # In case of exception delete the target folder
         shutil.rmtree(target_path)
         return {"status": 1, "errormsg": e}
+
+
+@shared_task(name="batch_announce_task", bind=True, ignore_result=True)
+def batch_announce_task(self, announce_path, tag_id, user_id):
+    # Run the "announce" procedure for every subfolder(validate, create an Archive, copy)
+    user = User.objects.get(pk=user_id)
+    tag = Collection.objects.get(pk=tag_id)
+
+    for f in os.scandir(announce_path):
+        try:
+            if f.is_dir() and f.path != announce_path:
+                announce_response = announce_sip(f.path, user, True)
+                if announce_response["status"] == 0:
+                    tag.add_archive(announce_response["archive"])
+                else:
+                    _add_error_to_tag_description(
+                        tag, f.path, announce_response["errormsg"]
+                    )
+        except Exception as e:
+            _add_error_to_tag_description(tag, f.path, f"Exception {str(e)}")
+
+    tag.set_description(tag.description.replace("Batch Announce processing...", ""))
+    if len(tag.description) == 0:
+        tag.set_description("Batch Announce completed successfully")
+
+
+def _add_error_to_tag_description(tag, path, errormsg):
+    start_ind = tag.description.find(errormsg)
+    if start_ind != -1:
+        end_ind = start_ind + len(errormsg) + 1
+        tag.set_description(
+            tag.description[:end_ind] + path + "," + tag.description[end_ind:]
+        )
+    else:
+        if tag.description.find("ERRORS:") == -1:
+            tag.set_description(tag.description + " ERRORS:")
+        tag.set_description(tag.description + f" {errormsg}:{path}.")

@@ -133,7 +133,7 @@ class AnnounceTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
             response.data["detail"],
-            "The given path is not a valid SIP.",
+            "The given path is not a valid SIP",
         )
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(len(copy_delay.mock_calls), 0)

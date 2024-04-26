@@ -12,6 +12,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Collection
+from oais_platform.oais.tasks import batch_announce_task
 
 
 class BatchAnnounceTests(APITestCase):
@@ -20,6 +21,13 @@ class BatchAnnounceTests(APITestCase):
         self.user.is_superuser = True
         self.user.save()
         self.client.force_authenticate(user=self.user)
+
+        self.tag = Collection.objects.create(
+            title="celery_test",
+            description="Batch Announce processing...",
+            creator=self.user,
+            internal=False,
+        )
 
     @skip("Only admins can batch announce for now")
     def test_batch_announce_wrong_path(self):
@@ -36,14 +44,12 @@ class BatchAnnounceTests(APITestCase):
             response.data["detail"], "You're not allowed to announce this path"
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 1)
 
     def test_batch_announce_duplicate_tag(self):
         url = reverse("batch-announce")
 
-        self.collection = Collection.objects.create(
-            title="test_tag", internal=False, creator=self.user
-        )
+        Collection.objects.create(title="test_tag", internal=False, creator=self.user)
 
         post_data = {
             "batch_announce_path": "/eos/user/u/user/announce",
@@ -56,7 +62,7 @@ class BatchAnnounceTests(APITestCase):
             response.data["detail"], "A tag with the same name already exists!"
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(Collection.objects.count(), 2)
 
     def test_batch_announce_folder_does_not_exist(self):
         url = reverse("batch-announce")
@@ -73,10 +79,10 @@ class BatchAnnounceTests(APITestCase):
             "Folder does not exist or the oais user has no access",
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 1)
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce(self, copy_delay):
+    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    def test_batch_announce(self, batch_announce_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -108,22 +114,23 @@ class BatchAnnounceTests(APITestCase):
             with override_settings(BATCH_ANNOUNCE_LIMIT=2):
                 response = self.client.post(url, post_data, format="json")
 
-        tag_id = Collection.objects.latest("id").id
+        tag = Collection.objects.latest("id")
         self.assertRedirects(
             response,
-            reverse("tags-detail", kwargs={"pk": tag_id}),
+            reverse("tags-detail", kwargs={"pk": tag.id}),
             status_code=302,
         )
-        self.assertEqual(Archive.objects.count(), 2)
-        self.assertEqual(Collection.objects.count(), 1)
         self.assertEqual(
-            Collection.objects.get(id=tag_id).description,
-            "Batch Announce successful",
+            tag.description,
+            "Batch Announce processing...",
         )
-        self.assertEqual(len(copy_delay.mock_calls), 2)
+        self.assertEqual(tag.title, "test_tag")
+        batch_announce_delay.assert_called_once_with(
+            batch_announce_folder, tag.id, self.user.id
+        )
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_limit_exceeded(self, copy_delay):
+    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    def test_batch_announce_limit_exceeded(self, batch_announce_delay):
         url = reverse("batch-announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -157,13 +164,63 @@ class BatchAnnounceTests(APITestCase):
             "Number of subfolder limit exceeded (limit: 1)",
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(Collection.objects.count(), 0)
-        self.assertEqual(len(copy_delay.mock_calls), 0)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(len(batch_announce_delay.mock_calls), 0)
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_validation_failed(self, copy_delay):
+    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    def test_batch_announce_no_subfolders(self, batch_announce_delay):
         url = reverse("batch-announce")
 
+        with tempfile.TemporaryDirectory() as tmpdir:
+            batch_announce_folder = os.path.join(tmpdir, "sips")
+            os.mkdir(batch_announce_folder)
+
+            post_data = {
+                "batch_announce_path": batch_announce_folder,
+                "batch_tag": "test_tag",
+            }
+
+            with override_settings(BATCH_ANNOUNCE_LIMIT=1):
+                response = self.client.post(url, post_data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "No subfolders found",
+        )
+        self.assertEqual(Archive.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(len(batch_announce_delay.mock_calls), 0)
+
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce_task(self, copy_delay):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            batch_announce_folder = os.path.join(tmpdir, "sips")
+            os.mkdir(batch_announce_folder)
+
+            bic.process(
+                recid="2728246",
+                source="cds",
+                target=batch_announce_folder,
+                loglevel=0,
+            )
+
+            bic.process(
+                recid="2779856",
+                source="cds",
+                target=batch_announce_folder,
+                loglevel=0,
+            )
+
+            batch_announce_task(batch_announce_folder, self.tag.id, self.user.id)
+
+        self.tag.refresh_from_db()
+        self.assertEqual(Archive.objects.count(), 2)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(self.tag.description, "Batch Announce completed successfully")
+        self.assertEqual(len(copy_delay.mock_calls), 2)
+
+    @patch("oais_platform.oais.tasks.copy_sip.delay")
+    def test_batch_announce_task_one_validation_failed(self, copy_delay):
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_announce_folder = os.path.join(tmpdir, "sips")
             os.mkdir(batch_announce_folder)
@@ -186,32 +243,19 @@ class BatchAnnounceTests(APITestCase):
                 loglevel=0,
             )
 
-            post_data = {
-                "batch_announce_path": batch_announce_folder,
-                "batch_tag": "test_tag",
-            }
+            batch_announce_task(batch_announce_folder, self.tag.id, self.user.id)
 
-            response = self.client.post(url, post_data, format="json")
-        tag_id = Collection.objects.latest("id").id
-        self.assertRedirects(
-            response, reverse("tags-detail", kwargs={"pk": tag_id}), status_code=302
-        )
+        self.tag.refresh_from_db()
         self.assertEqual(Archive.objects.count(), 1)
         self.assertEqual(Collection.objects.count(), 1)
         self.assertEqual(
-            Collection.objects.get(id=tag_id).description,
-            "Failed SIP folders: "
-            + path_to_sip
-            + " - "
-            + "The given path is not a valid SIP."
-            + " ",
+            self.tag.description,
+            " ERRORS: The given path is not a valid SIP:" + path_to_sip + ".",
         )
         self.assertEqual(len(copy_delay.mock_calls), 1)
 
     @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_all_validation_failed(self, copy_delay):
-        url = reverse("batch-announce")
-
+    def test_batch_announce_task_all_validation_failed(self, copy_delay):
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_announce_folder = os.path.join(tmpdir, "sips")
             os.mkdir(batch_announce_folder)
@@ -247,22 +291,18 @@ class BatchAnnounceTests(APITestCase):
                 del sip_json["source"]
                 json.dump(sip_json, json_file)
 
-            post_data = {
-                "batch_announce_path": batch_announce_folder,
-                "batch_tag": "test_tag",
-            }
+            batch_announce_task(batch_announce_folder, self.tag.id, self.user.id)
 
-            response = self.client.post(url, post_data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Failed SIP folders: ", response.data["detail"])
+        self.tag.refresh_from_db()
+        self.assertIn("ERRORS:", self.tag.description)
         self.assertIn(
-            path_to_sip + " - " + "The given path is not a valid SIP." + " ",
-            response.data["detail"],
+            "The given path is not a valid SIP:" + path_to_sip,
+            self.tag.description,
         )
         self.assertIn(
-            path_to_sip2 + " - " + "Error while reading sip.json" + " ",
-            response.data["detail"],
+            "Error while reading sip.json:" + path_to_sip2,
+            self.tag.description,
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(Collection.objects.count(), 0)
+        self.assertEqual(Collection.objects.count(), 1)
         self.assertEqual(len(copy_delay.mock_calls), 0)

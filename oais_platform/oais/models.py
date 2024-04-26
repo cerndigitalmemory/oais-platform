@@ -303,6 +303,13 @@ class Resource(models.Model):
         self.invenio_parent_url = f"{INVENIO_SERVER_URL}/search?q=parent.id:{invenio_parent_id}&f=allversions:true"
         self.save()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "recid"], name="resource_source_recid_unique"
+            )
+        ]
+
 
 class Collection(models.Model):
     """
@@ -334,6 +341,9 @@ class Collection(models.Model):
         self.save()
 
     def set_description(self, description):
+        max_desc_length = self._meta.get_field("description").max_length
+        if len(description) > max_desc_length:
+            description = description[0 : max_desc_length - 3] + "..."
         self.description = description
         self.save()
 
