@@ -249,7 +249,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
         args=json.dumps([archive.id, step.id, submitted_job]),
-        expires=timezone.now() + timedelta(minutes=600),
+        expire_seconds=2.0,
     )
 
     step.set_output_data(
@@ -622,7 +622,7 @@ def archivematica(self, archive_id, step_id, input_data):
                 args=json.dumps(
                     [package, current_step.id, archive_id.id, transfer_name]
                 ),
-                expires=timezone.now() + timedelta(minutes=600),
+                expire_seconds=60.0,
             )
     except requests.HTTPError as e:
         if e.request.status_code == 403:
