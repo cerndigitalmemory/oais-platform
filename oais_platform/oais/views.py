@@ -199,6 +199,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         codimd_api_key = profile.codimd_api_key
         sso_comp_token = profile.sso_comp_token
         cds_rdm_api_key = profile.codimd_api_key
+        cds_rdm_sandbox_api_key = profile.cds_rdm_sandbox_api_key
 
         data = {}
 
@@ -234,9 +235,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             data["cds"]["status"] = NEEDS_CONFIG_PRIVATE
         if cds_rdm_api_key:
             data["cds-rdm"]["status"] = READY
-            data["cds-rdm-sandbox"]["status"] = READY
         else:
             data["cds-rdm"]["status"] = NEEDS_CONFIG
+        if cds_rdm_sandbox_api_key:
+            data["cds-rdm-sandbox"]["status"] = READY
+        else:
             data["cds-rdm-sandbox"]["status"] = NEEDS_CONFIG
 
         # TODO: Additional checks can be added here to verify the functioning

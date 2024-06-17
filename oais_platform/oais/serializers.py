@@ -21,6 +21,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "codimd_api_key",
             "sso_comp_token",
             "cds_rdm_api_key",
+            "cds_rdm_sandbox_api_key",
         ]
 
 
