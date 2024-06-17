@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('oais', '0011_alter_archive_state_add_last_completed_step'),
+        ('oais', '0012_resource_resource_source_recid_unique'),
     ]
 
     operations = [
