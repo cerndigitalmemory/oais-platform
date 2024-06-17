@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.serializers import ArchiveSerializer, ProfileSerializer
+from oais_platform.oais.serializers import ArchiveSerializer
 
 
 class PipelineTests(APITestCase):
@@ -43,7 +43,7 @@ class PipelineTests(APITestCase):
         process_delay.assert_called_once_with(
             self.archive.id,
             latest_step.id,
-            ProfileSerializer(self.creator.profile).data,
+            self.creator.profile.get_api_key_by_source(self.archive.source),
             input_data=latest_step.output_data,
         )
 
