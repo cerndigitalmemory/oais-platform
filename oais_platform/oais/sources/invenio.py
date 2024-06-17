@@ -115,8 +115,6 @@ class Invenio(Source):
         status = None
         if self.config["status"]:
             status = get_dict_value(record, self.config["status"].split(","))
-            if status not in ["open", "embargoed", "restricted", "metadata-only"]:
-                status = None
 
         return {
             "source_url": get_dict_value(record, url_key_list),
