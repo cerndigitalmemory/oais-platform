@@ -236,11 +236,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if cds_rdm_api_key:
             data["cds-rdm"]["status"] = READY
         else:
-            data["cds-rdm"]["status"] = NEEDS_CONFIG
+            data["cds-rdm"]["status"] = NEEDS_CONFIG_PRIVATE
         if cds_rdm_sandbox_api_key:
             data["cds-rdm-sandbox"]["status"] = READY
         else:
-            data["cds-rdm-sandbox"]["status"] = NEEDS_CONFIG
+            data["cds-rdm-sandbox"]["status"] = NEEDS_CONFIG_PRIVATE
 
         # TODO: Additional checks can be added here to verify the functioning
         # (e.g. pinging an endpoint to see if it can be authenticated)
@@ -588,12 +588,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if int(next_step) in Steps:
             if has_user_archive_edit_rights(pk, request.user):
-                user_serialized = UserSerializer(request.user).data
                 next_step = create_step(
                     next_step,
                     pk,
                     archive["last_completed_step"],
-                    user_serialized["profile"],
+                    request.user.profile.get_api_key_by_source(archive["source"]),
                 )
             else:
                 raise Exception("User has no rights to perform a step for this archive")
