@@ -5,14 +5,14 @@ import os
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
 class ConfigFileUnavailable(Exception):
     pass
 
 
-class Indico(Source):
+class Indico(AbstractSource):
     def __init__(self, source, baseURL, api_key=None):
         self.source = source
         self.baseURL = baseURL

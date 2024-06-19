@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class Source(ABC):
+class AbstractSource(ABC):
     @abstractmethod
     def get_record_url(self, recid):
         pass

@@ -1,8 +1,8 @@
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
-class TestSource(Source):
+class TestSource(AbstractSource):
     def get_record_url(self, recid):
         return f"https://example.com/record/{recid}"
 

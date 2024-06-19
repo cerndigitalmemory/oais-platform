@@ -1,7 +1,7 @@
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
-class Local(Source):
+class Local(AbstractSource):
     def __init__(self):
         pass
 

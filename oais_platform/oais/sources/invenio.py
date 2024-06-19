@@ -5,7 +5,7 @@ import os
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
 def get_dict_value(dct, keys):
@@ -21,7 +21,7 @@ class ConfigFileUnavailable(Exception):
     pass
 
 
-class Invenio(Source):
+class Invenio(AbstractSource):
     def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL

@@ -6,10 +6,10 @@ import pymarc
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
-class CDS(Source):
+class CDS(AbstractSource):
     def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL

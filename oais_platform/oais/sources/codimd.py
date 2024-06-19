@@ -4,10 +4,10 @@ from operator import itemgetter
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.sources.source import Source
+from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
-class CodiMD(Source):
+class CodiMD(AbstractSource):
     def __init__(self, source, baseURL, session_id):
         self.source = source
         self.baseURL = baseURL

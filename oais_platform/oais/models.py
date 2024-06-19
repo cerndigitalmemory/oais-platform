@@ -8,6 +8,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+from oais_platform.oais.sources.abstract_source import AbstractSource
 from oais_platform.settings import INVENIO_SERVER_URL
 
 from . import pipeline
@@ -405,3 +406,21 @@ class UploadJob(models.Model):
     def set_sip_dir(self, sip_dir):
         self.sip_dir = sip_dir
         self.save(update_fields=["sip_dir"])
+
+
+def get_source_classnames():
+    return [cls.__name__ for cls in AbstractSource.__subclasses__()]
+
+
+class Source(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=50, null=False, unique=True)
+    longname = models.CharField(max_length=100, null=False, unique=True)
+    api_url = models.CharField(max_length=250, null=False, unique=True)
+    enabled = models.BooleanField(default=True)
+    timestamp = models.DateTimeField(default=timezone.now)
+    classname = models.CharField(choices=get_source_classnames, null=False)
+    has_restricted_records = models.BooleanField(default=True)
+    has_public_records = models.BooleanField(default=True)
+    how_to_get_key = models.TextField(max_length=500, null=True)
+    description = models.TextField(max_length=500, null=True)
