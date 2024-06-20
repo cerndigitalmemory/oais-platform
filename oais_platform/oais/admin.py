@@ -4,10 +4,12 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from oais_platform.oais.models import (
+    ApiKey,
     Archive,
     Collection,
     Profile,
     Resource,
+    Source,
     Step,
     UploadJob,
 )
@@ -126,3 +128,41 @@ class UploadJobAdmin(admin.ModelAdmin):
         return None
 
     creator_name.short_description = "Creator"
+
+
+@admin.register(Source)
+class SourceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "longname",
+        "timestamp",
+        "api_url",
+        "enabled",
+        "classname",
+        "has_restricted_records",
+        "has_public_records",
+        "how_to_get_key",
+        "description",
+    )
+
+
+@admin.register(ApiKey)
+class APIKeyAdmin(admin.ModelAdmin):
+    list_display = ["user_name", "source_link", "key"]
+
+    def user_name(self, obj):
+        if obj.user:
+            return obj.user.username
+        return None
+
+    user_name.short_description = "Username"
+
+    def source_link(self, obj):
+        related_obj = obj.source
+        if related_obj:
+            url = reverse("admin:oais_source_change", args=[related_obj.id])
+            return format_html('<a href="{}">{}</a>', url, related_obj)
+        return None
+
+    source_link.short_description = "Source"

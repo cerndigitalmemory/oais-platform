@@ -30,9 +30,11 @@ from rest_framework.reverse import reverse
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
+    ApiKey,
     Archive,
     Collection,
     Profile,
+    Source,
     Status,
     Step,
     Steps,
@@ -54,12 +56,11 @@ from oais_platform.oais.serializers import (
     CollectionSerializer,
     GroupSerializer,
     LoginSerializer,
-    ProfileSerializer,
     SourceRecordSerializer,
     StepSerializer,
     UserSerializer,
 )
-from oais_platform.oais.sources import InvalidSource, get_source
+from oais_platform.oais.sources.utils import InvalidSource, get_source
 
 from ..settings import (
     ALLOW_LOCAL_LOGIN,
@@ -108,22 +109,27 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns information and settings about the User or,
         updates its profile using the passed values to overwrite
         """
+        user = request.user
         if request.method == "POST":
-            user = request.user
+            source = request.data["source"]
+            new_key = request.data["key"]
+            try:
+                source_obj = Source.objects.get(longname=source)
+                api_key = ApiKey.objects.get(user=user, source=source_obj)
+                api_key.key = new_key
+                api_key.save()
+            except ApiKey.DoesNotExist:
+                ApiKey.objects.create(user=user, source=source_obj, key=new_key)
+            except Source.DoesNotExist:
+                raise BadRequest("Source does not exist")
 
-            serializer = ProfileSerializer(data=request.data)
-            if serializer.is_valid():
-                user.profile.update(serializer.data)
-                user.save()
-
-            # TODO: compare the serialized values to comunicate back if some values where ignored/what was actually taken into consideration
+            # TODO: compare the serialized values to communicate back if some values where ignored/what was actually taken into consideration
             # if (serializer.data == request.data)
 
             serializer = self.get_serializer(user)
             return Response(serializer.data)
 
         elif request.method == "GET":
-            user = request.user
             serializer = self.get_serializer(user)
 
             # Serializer is immutable, so let's copy it to another dict
@@ -134,6 +140,17 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 user_data["api_token"] = Token.objects.get(user=user).key
             except Exception:
                 pass
+
+            sources = Source.objects.filter(enabled=True, has_restricted_records=True)
+            user_data["api_key"] = []
+            for source in sources:
+                entry = {"source": source.longname, "info": source.how_to_get_key}
+                try:
+                    api_key = ApiKey.objects.get(user=user, source=source)
+                    entry["key"] = api_key.key
+                except ApiKey.DoesNotExist:
+                    entry["key"] = None
+                user_data["api_key"].append(entry)
 
             return Response(user_data)
 
@@ -193,57 +210,36 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         the platform.
         """
 
-        profile = Profile.objects.get(user=request.user)
-
-        indico_api_key = profile.indico_api_key
-        codimd_api_key = profile.codimd_api_key
-        sso_comp_token = profile.sso_comp_token
-        cds_rdm_api_key = profile.codimd_api_key
-        cds_rdm_sandbox_api_key = profile.cds_rdm_sandbox_api_key
-
-        data = {}
-
-        # Ready means that the source is configure for both private and public records
+        # Ready means that the source is configure for both restricted and public records
         READY = 1
-        # The source works, but for it to return private results to it needs additional configuration
+        # The source works for public records, but it needs additional configuration for restricted ones
         NEEDS_CONFIG_PRIVATE = 2
         # The source is lacking mandatory configuration values and it won't work in this state
         NEEDS_CONFIG = 3
+        # The source configuration is invalid (no public and no restricted records)
+        INVALID = 4
 
-        data = {
-            "zenodo": {"name": "Zenodo"},
-            "indico": {"name": "Indico"},
-            "codimd": {"name": "CodiMD"},
-            "cds": {"name": "CERN Document Server"},
-            "cds-rdm": {"name": "CERN Document Server RDM"},
-            "cds-rdm-sandbox": {"name": "CERN Document Server RDM Sandbox"},
-        }
+        data = {}
+        sources = Source.objects.filter(enabled=True)
+        for source in sources:
+            has_api_key = ApiKey.objects.filter(
+                user=request.user, source=source
+            ).exists()
+            status = READY
+            if source.has_restricted_records and not has_api_key:
+                if source.has_public_records:
+                    status = NEEDS_CONFIG_PRIVATE
+                else:
+                    status = NEEDS_CONFIG
+            elif not source.has_public_records and not source.has_restricted_records:
+                status = INVALID
+            entry = {
+                "name": source.name,
+                "longname": source.longname,
+                "status": status,
+            }
+            data[source.name] = entry
 
-        data["zenodo"]["status"] = READY
-
-        if indico_api_key:
-            data["indico"]["status"] = READY
-        else:
-            data["indico"]["status"] = NEEDS_CONFIG_PRIVATE
-        if codimd_api_key:
-            data["codimd"]["status"] = READY
-        else:
-            data["codimd"]["status"] = NEEDS_CONFIG
-        if sso_comp_token:
-            data["cds"]["status"] = READY
-        else:
-            data["cds"]["status"] = NEEDS_CONFIG_PRIVATE
-        if cds_rdm_api_key:
-            data["cds-rdm"]["status"] = READY
-        else:
-            data["cds-rdm"]["status"] = NEEDS_CONFIG_PRIVATE
-        if cds_rdm_sandbox_api_key:
-            data["cds-rdm-sandbox"]["status"] = READY
-        else:
-            data["cds-rdm-sandbox"]["status"] = NEEDS_CONFIG_PRIVATE
-
-        # TODO: Additional checks can be added here to verify the functioning
-        # (e.g. pinging an endpoint to see if it can be authenticated)
         return Response(data)
 
 
@@ -468,7 +464,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
         )
 
-        api_key = request.user.profile.get_api_key_by_source(archive.source)
+        try:
+            api_key = ApiKey.objects.get(
+                source__name=archive.source, user=request.user
+            ).key
+        except Exception:
+            api_key = None
         process.delay(step.archive.id, step.id, api_key)
 
         serializer = ArchiveSerializer(
@@ -505,7 +506,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
             )
             # Step is auto-approved and harvest step runs
-            api_key = request.user.profile.get_api_key_by_source(archive.source)
+            try:
+                api_key = ApiKey.objects.get(
+                    source__name=archive.source, user=request.user
+                ).key
+            except Exception:
+                api_key = None
             process.delay(step.archive.id, step.id, api_key)
 
         serializer = CollectionSerializer(
@@ -588,11 +594,18 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         if int(next_step) in Steps:
             if has_user_archive_edit_rights(pk, request.user):
+                try:
+                    api_key = ApiKey.objects.get(
+                        source__name=archive.source, user=request.user
+                    ).key
+                except Exception:
+                    api_key = None
+
                 next_step = create_step(
                     next_step,
                     pk,
                     archive["last_completed_step"],
-                    request.user.profile.get_api_key_by_source(archive["source"]),
+                    api_key,
                 )
             else:
                 raise Exception("User has no rights to perform a step for this archive")
@@ -668,7 +681,12 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         if approved:
             if step.name == Steps.HARVEST:
                 step.set_status(Status.NOT_RUN)
-                api_key = user.profile.get_api_key_by_source(step.archive.source)
+                try:
+                    api_key = ApiKey.objects.get(
+                        source__name=step.archive.source, user=request.user
+                    ).key
+                except Exception:
+                    api_key = None
                 process.delay(step.archive.id, step.id, api_key)
 
         serializer = self.get_serializer(step)
@@ -1233,7 +1251,10 @@ def search(request, source):
         size = request.GET["s"]
 
     try:
-        api_key = request.user.profile.get_api_key_by_source(source)
+        try:
+            api_key = ApiKey.objects.get(source__name=source, user=request.user).key
+        except Exception:
+            api_key = None
         results = get_source(source, api_key).search(query, page, size)
     except InvalidSource:
         raise BadRequest("Invalid source")
@@ -1245,7 +1266,10 @@ def search(request, source):
 @permission_classes([permissions.IsAuthenticated])
 def search_by_id(request, source, recid):
     try:
-        api_key = request.user.profile.get_api_key_by_source(source)
+        try:
+            api_key = ApiKey.objects.get(source__name=source, user=request.user).key
+        except Exception:
+            api_key = None
         result = get_source(source, api_key).search_by_id(recid.strip())
     except InvalidSource:
         raise BadRequest("Invalid source")
@@ -1269,17 +1293,7 @@ def search_query(request):
     More info:
     https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
     """
-    sources = [
-        "indico",
-        "cds",
-        "inveniordm",
-        "zenodo",
-        "cod",
-        "cds-test",
-        "local",
-        "cds-rdm",
-        "cds-rdm-sandbox",
-    ]
+    sources = Source.objects.all().values_list("name", flat=True)
     visibilities = ["private", "public", "owned"]
     source_buckets = list()
     visibility_buckets = list()
@@ -1529,17 +1543,10 @@ def parse_url(request):
 
     # To be replaced by utils
     o = urlparse(url)
-    if o.hostname == "cds.cern.ch":
-        source = "cds"
-    elif o.hostname == "opendata.cern.ch":
-        source = "cod"
-    elif o.hostname == "zenodo.org":
-        source = "zenodo"
-    elif o.hostname == "new-cds.cern.ch":
-        source = "cds-rdm"
-    elif o.hostname == "sandbox-cds-rdm.web.cern.ch":
-        source = "cds-rdm-sandbox"
-    else:
+
+    try:
+        source = Source.objects.get(api_url__contains=o.hostname).name
+    except Exception:
         raise BadRequest(
             "Unable to parse the given URL. Try manually passing the source and the record ID."
         )
@@ -1722,3 +1729,10 @@ def check_allowed_path(path, username):
         return True
     else:
         return False
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def sources(request):
+    sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
+    return Response(sources)

@@ -18,7 +18,7 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
 from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
-from oais_platform.oais.sources import get_source
+from oais_platform.oais.sources.utils import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,

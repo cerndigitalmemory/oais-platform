@@ -20,11 +20,6 @@ class Profile(models.Model):
     #  (e.g. configuration, preferences, API tokens)
     #  accessible as user.profile.VALUE
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
-    indico_api_key = models.TextField(max_length=500, blank=True)
-    codimd_api_key = models.TextField(max_length=500, blank=True)
-    sso_comp_token = models.TextField(max_length=500, blank=True)
-    cds_rdm_api_key = models.TextField(max_length=500, blank=True)
-    cds_rdm_sandbox_api_key = models.TextField(max_length=500, blank=True)
     # make sure default here is a callable returning a list
     cern_roles = ArrayField(models.CharField(max_length=500), default=list, blank=True)
 
@@ -41,20 +36,6 @@ class Profile(models.Model):
     def update_roles(self, data):
         setattr(self, "cern_roles", data)
         self.save()
-
-    def get_api_key_by_source(self, source):
-        if source == "indico":
-            return self.indico_api_key
-        elif source == "codimd":
-            return self.codimd_api_key
-        elif source == "cds":
-            return self.sso_comp_token
-        elif source == "cds-rdm":
-            return self.cds_rdm_api_key
-        elif source == "cds-rdm-sandbox":
-            return self.cds_rdm_sandbox_api_key
-        else:
-            return None
 
 
 @receiver(post_save, sender=User)
@@ -409,7 +390,7 @@ class UploadJob(models.Model):
 
 
 def get_source_classnames():
-    return [cls.__name__ for cls in AbstractSource.__subclasses__()]
+    return [(cls.__name__, cls.__name__) for cls in AbstractSource.__subclasses__()]
 
 
 class Source(models.Model):
@@ -424,3 +405,18 @@ class Source(models.Model):
     has_public_records = models.BooleanField(default=True)
     how_to_get_key = models.TextField(max_length=500, null=True)
     description = models.TextField(max_length=500, null=True)
+
+
+class ApiKey(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, null=False, related_name="api_key"
+    )
+    source = models.ForeignKey(Source, on_delete=models.CASCADE, null=False)
+    key = models.TextField(max_length=500, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "source"], name="unique_user_source"
+            )
+        ]

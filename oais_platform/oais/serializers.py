@@ -3,13 +3,13 @@ from opensearch_dsl import utils
 from rest_framework import serializers
 
 from oais_platform.oais.models import (
+    ApiKey,
     Archive,
     Collection,
     Profile,
     Resource,
-    Status,
+    Source,
     Step,
-    Steps,
 )
 
 
@@ -17,11 +17,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = [
-            "indico_api_key",
-            "codimd_api_key",
-            "sso_comp_token",
-            "cds_rdm_api_key",
-            "cds_rdm_sandbox_api_key",
+            "cern_roles",
         ]
 
 
@@ -38,11 +34,22 @@ class ResourceSerializer(serializers.ModelSerializer):
         ]
 
 
+class SourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Source
+        fields = "__all__"
+
+
+class APIKeySerializer(serializers.ModelSerializer):
+    source = serializers.SlugRelatedField(read_only=True, slug_field="name")
+
+    class Meta:
+        model = ApiKey
+        fields = ["source", "key"]
+
+
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
-
-    # Serialize the additional profile values
-    profile = ProfileSerializer(required=True)
 
     class Meta:
         model = User
@@ -52,7 +59,6 @@ class UserSerializer(serializers.ModelSerializer):
             "permissions",
             "first_name",
             "last_name",
-            "profile",  # this points to the serialized profile
         ]
 
     def get_permissions(self, obj):

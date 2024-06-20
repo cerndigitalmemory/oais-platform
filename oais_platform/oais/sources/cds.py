@@ -13,12 +13,10 @@ class CDS(AbstractSource):
     def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL
-        self.headers = {
-            "Content-Type": "application/json",
-        }
+        self.cookies = None
 
         if token:
-            self.headers["Authorization"] = f"Bearer {token}"
+            self.cookies = {"INVENIOSESSION": token}
 
     def get_record_url(self, recid):
         return f"{self.baseURL}/record/{recid}"
@@ -35,7 +33,7 @@ class CDS(AbstractSource):
                     "rg": size,
                     "jrec": int(size) * (int(page) - 1) + 1,
                 },
-                headers=self.headers,
+                cookies=self.cookies,
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
@@ -66,7 +64,7 @@ class CDS(AbstractSource):
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
             req = requests.get(
-                self.get_record_url(recid), params={"of": "xm"}, headers=self.headers
+                self.get_record_url(recid), params={"of": "xm"}, cookies=self.cookies
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")

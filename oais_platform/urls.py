@@ -118,6 +118,7 @@ urlpatterns = [
                     name="batch-announce",
                 ),
                 path("stats/", views.statistics, name="statistics"),
+                path("sources/", views.sources, name="sources"),
             ]
         ),
     ),
