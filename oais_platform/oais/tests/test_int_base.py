@@ -48,6 +48,5 @@ class IntegrationAPITests(APITestCase):
             "/api/users/me/staging-area/", post_data, format="json"
         )
 
-        print(response.data)
         self.assertEqual(response.data["results"][0]["source"], "cds")
         self.assertEqual(response.data["results"][0]["recid"], "2798105")

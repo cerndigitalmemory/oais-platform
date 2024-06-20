@@ -144,7 +144,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             sources = Source.objects.filter(enabled=True, has_restricted_records=True)
             user_data["api_key"] = []
             for source in sources:
-                entry = {"source": source.longname, "info": source.how_to_get_key}
+                entry = {"source": source.longname, "how_to": source.how_to_get_key}
                 try:
                     api_key = ApiKey.objects.get(user=user, source=source)
                     entry["key"] = api_key.key
@@ -596,7 +596,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             if has_user_archive_edit_rights(pk, request.user):
                 try:
                     api_key = ApiKey.objects.get(
-                        source__name=archive.source, user=request.user
+                        source__name=archive["source"], user=request.user
                     ).key
                 except Exception:
                     api_key = None

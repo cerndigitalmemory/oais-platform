@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import ApiKey, Archive, Source, Status, Step, Steps
 from oais_platform.oais.serializers import ArchiveSerializer
 
 
@@ -14,10 +14,16 @@ class PipelineTests(APITestCase):
         self.permission = Permission.objects.get(codename="can_access_all_archives")
 
         self.creator = User.objects.create_user("creator", password="pw")
+        self.source = Source.objects.create(
+            name="test", longname="Test", api_url="test.test/api", classname="Local"
+        )
+        self.creator_api_key = ApiKey.objects.create(
+            user=self.creator, source=self.source, key="abcd1234"
+        )
         self.other_user = User.objects.create_user("other", password="pw")
 
         self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", creator=self.creator
+            recid="1", source=self.source.name, source_url="", creator=self.creator
         )
 
     @patch("oais_platform.oais.tasks.process.delay")
@@ -43,7 +49,7 @@ class PipelineTests(APITestCase):
         process_delay.assert_called_once_with(
             self.archive.id,
             latest_step.id,
-            self.creator.profile.get_api_key_by_source(self.archive.source),
+            self.creator_api_key.key,
             input_data=latest_step.output_data,
         )
 

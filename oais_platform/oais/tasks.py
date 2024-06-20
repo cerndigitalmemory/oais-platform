@@ -327,7 +327,7 @@ def invenio(self, archive_id, step_id, input_data=None):
             )
             req.raise_for_status()
         except requests.exceptions.HTTPError as err:
-            print(f"The request didn't succed:{err}")
+            logger.error(f"The request didn't succed:{err}")
             step.set_status(Status.FAILED)
             return {"status": 1, "ERROR": err}
 
