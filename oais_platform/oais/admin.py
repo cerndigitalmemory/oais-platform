@@ -149,7 +149,7 @@ class SourceAdmin(admin.ModelAdmin):
 
 @admin.register(ApiKey)
 class APIKeyAdmin(admin.ModelAdmin):
-    list_display = ["user_name", "source_link", "key"]
+    list_display = ["user_name", "source_name", "_key"]
 
     def user_name(self, obj):
         if obj.user:
@@ -158,11 +158,9 @@ class APIKeyAdmin(admin.ModelAdmin):
 
     user_name.short_description = "Username"
 
-    def source_link(self, obj):
-        related_obj = obj.source
-        if related_obj:
-            url = reverse("admin:oais_source_change", args=[related_obj.id])
-            return format_html('<a href="{}">{}</a>', url, related_obj)
+    def source_name(self, obj):
+        if obj.source:
+            return obj.source.name
         return None
 
-    source_link.short_description = "Source"
+    source_name.short_description = "Source"
