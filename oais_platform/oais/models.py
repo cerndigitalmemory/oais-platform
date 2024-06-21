@@ -407,6 +407,9 @@ class Source(models.Model):
     how_to_get_key = models.TextField(max_length=500, null=True)
     description = models.TextField(max_length=500, null=True)
 
+    class Meta:
+        ordering = ("id",)
+
 
 class ApiKey(models.Model):
     user = models.ForeignKey(
