@@ -116,8 +116,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             try:
                 source_obj = Source.objects.get(longname=source)
                 api_key = ApiKey.objects.get(user=user, source=source_obj)
-                api_key.key = new_key
-                api_key.save()
+                if new_key:
+                    api_key.key = new_key
+                    api_key.save()
+                else:
+                    api_key.delete()
             except ApiKey.DoesNotExist:
                 ApiKey.objects.create(user=user, source=source_obj, key=new_key)
             except Source.DoesNotExist:

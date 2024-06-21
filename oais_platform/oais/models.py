@@ -1,5 +1,6 @@
 import json
 
+from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
@@ -9,7 +10,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from oais_platform.oais.sources.abstract_source import AbstractSource
-from oais_platform.settings import INVENIO_SERVER_URL
+from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
 
 from . import pipeline
 
@@ -412,7 +413,7 @@ class ApiKey(models.Model):
         User, on_delete=models.CASCADE, null=False, related_name="api_key"
     )
     source = models.ForeignKey(Source, on_delete=models.CASCADE, null=False)
-    key = models.TextField(max_length=500, blank=True)
+    _key = models.TextField(max_length=500, blank=True)
 
     class Meta:
         constraints = [
@@ -420,3 +421,19 @@ class ApiKey(models.Model):
                 fields=["user", "source"], name="unique_user_source"
             )
         ]
+
+    def encrypt(self, text):
+        f = Fernet(ENCRYPT_KEY)
+        return f.encrypt(text.encode()).decode()
+
+    def decrypt(self, ciphertext) -> str:
+        f = Fernet(ENCRYPT_KEY)
+        return f.decrypt(ciphertext.encode()).decode()
+
+    def get_key(self):
+        return self.decrypt(self._key)
+
+    def set_key(self, val):
+        self._key = self.encrypt(val)
+
+    key = property(get_key, set_key)

@@ -309,6 +309,9 @@ BATCH_ANNOUNCE_LIMIT = 20
 # Max waiting time in AM queue for upload (mins)
 AM_WAITING_TIME_LIMIT = 5
 
+# Encryption key for storing the API Keys in the DB
+ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
+
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa
