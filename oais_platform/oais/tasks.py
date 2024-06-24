@@ -721,7 +721,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 if is_failed and step.status == Status.WAITING:
                     # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
                     # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
-                    time_passed = (timezone.now() - step.start_date).seconds
+                    time_passed = (timezone.now() - step.start_date).total_seconds()
                     logging.info(f"Waiting in queue, time passed: {time_passed}s")
                     if time_passed > 60 * AM_WAITING_TIME_LIMIT:
                         logging.info(
