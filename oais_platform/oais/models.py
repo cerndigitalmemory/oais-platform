@@ -155,7 +155,7 @@ class Archive(models.Model):
             not self.title
             or self.title == ""
             or self.title == f"{self.source} - {self.recid}"
-        ):
+        ) and self.state != ArchiveState.NONE:
             if not self.next_steps:
                 self.next_steps = [10]
             else:

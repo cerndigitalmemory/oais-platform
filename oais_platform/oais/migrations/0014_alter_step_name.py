@@ -2,12 +2,14 @@
 
 from django.db import migrations, models
 
+from oais_platform.oais.models import ArchiveState
+
 
 def update_archive_next_steps(apps, schema_editor):
     archives = apps.get_model("oais", "Archive")
 
     for obj in archives.objects.all():
-        if not obj.title or obj.title == "" or obj.title == f"{obj.source} - {obj.recid}":
+        if (not obj.title or obj.title == "" or obj.title == f"{obj.source} - {obj.recid}") and obj.state != ArchiveState.NONE :
             if not obj.next_steps:
                 obj.next_steps = [10]
             else:
