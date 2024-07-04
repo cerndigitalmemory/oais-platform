@@ -141,3 +141,25 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.archive.manifest, {"test": "test"})
+
+    @patch("oais_platform.oais.tasks.extract_title.delay")
+    def test_create_step_extract_title(self, extract_title_delay):
+        self.client.force_authenticate(user=self.creator)
+
+        self.dict_archive = ArchiveSerializer(self.archive, many=False)
+
+        url = reverse("archives-next-step", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {"archive": self.dict_archive.data, "next_step": Steps.EXTRACT_TITLE},
+            format="json",
+        )
+
+        latest_step = Step.objects.latest("id")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Archive.objects.count(), 1)
+        self.assertEqual(Step.objects.count(), 1)
+        self.assertEqual(response.data["name"], Steps.EXTRACT_TITLE)
+        self.assertEqual(response.data["status"], Status.WAITING)
+        extract_title_delay.assert_called_once_with(self.archive.id, latest_step.id)

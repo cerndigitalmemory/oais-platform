@@ -8,7 +8,5 @@ def get_next_steps(taskname):
         return [3]
     elif taskname == 3:
         return [4]
-    elif taskname == 4:
-        return [5, 7, 9]
-    elif taskname in [5, 7, 9]:
+    elif taskname in [4, 5, 7, 9, 10]:
         return [5, 7, 9]

@@ -61,6 +61,7 @@ class Steps(models.IntegerChoices):
     INVENIO_RDM_PUSH = 7
     ANNOUNCE = 8
     PUSH_SIP_TO_CTA = 9
+    EXTRACT_TITLE = 10
 
 
 class Status(models.IntegerChoices):
@@ -150,6 +151,16 @@ class Archive(models.Model):
             self.next_steps = pipeline.get_next_steps(current_step)
         else:
             self.next_steps = pipeline.get_next_steps(self.last_completed_step.name)
+        if (
+            not self.title
+            or self.title == ""
+            or self.title == f"{self.source} - {self.recid}"
+        ):
+            if not self.next_steps:
+                self.next_steps = [10]
+            else:
+                self.next_steps.append(10)
+
         self.save()
 
         return self.next_steps
@@ -170,6 +181,10 @@ class Archive(models.Model):
 
     def set_path(self, new_path):
         self.path_to_sip = new_path
+        self.save()
+
+    def set_title(self, title):
+        self.title = title
         self.save()
 
     def save(self, *args, **kwargs):

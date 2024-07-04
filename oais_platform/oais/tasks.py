@@ -4,7 +4,7 @@ import ntpath
 import os
 import shutil
 import time
-from datetime import timedelta
+import xml.etree.ElementTree as ET
 from urllib.parse import urljoin
 
 import bagit_create
@@ -182,6 +182,8 @@ def create_step(step_name, archive_id, input_step_id=None, api_key=None):
         invenio.delay(step.archive.id, step.id, step.input_data)
     elif step_name == Steps.PUSH_SIP_TO_CTA:
         push_sip_to_cta.delay(step.archive.id, step.id, step.input_data)
+    elif step_name == Steps.EXTRACT_TITLE:
+        extract_title.delay(archive.id, step.id)
 
     return step
 
@@ -1075,3 +1077,36 @@ def _add_error_to_tag_description(tag, path, errormsg):
         if tag.description.find("ERRORS:") == -1:
             tag.set_description(tag.description + " ERRORS:")
         tag.set_description(tag.description + f" {errormsg}:{path}.")
+
+
+@shared_task(name="extract_title", bind=True, ignore_result=True, after_return=finalize)
+def extract_title(self, archive_id, step_id):
+    # For archives without title try to extract it from the metadata
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
+
+    sip_folder_name = archive.path_to_sip
+    dublin_core_path = "data/meta/dc.xml"
+    dublin_core_location = os.path.join(sip_folder_name, dublin_core_path)
+    try:
+        logging.info(f"Starting extract title from dc.xml for Archive {archive.id}")
+        xml_tree = ET.parse(dublin_core_location)
+        xml = xml_tree.getroot()
+        ns = {
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+        }
+        title = xml.findall("./dc:dc/dc:title", ns)
+        title = title[0].text
+        logging.info(f"Title found for Archive {archive.id}: {title}")
+        archive.set_title(title)
+        return {"status": 0, "errormsg": None}
+    except Exception as e:
+        logging.warning(
+            f"Error while extracting title from dc.xml at {dublin_core_location}: {str(e)}"
+        )
+        return {
+            "status": 1,
+            "errormsg": f"Title could not be extracted from Dublin Core file at {dublin_core_location}",
+        }

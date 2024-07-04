@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<collection>
+<dc:dc xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+  <dc:language>eng</dc:language>
+  <dc:creator>Test Creator</dc:creator>
+  <dc:title>TEST TITLE</dc:title>
+  <dc:subject>test12</dc:subject>
+  <dc:identifier>123test</dc:identifier>
+  <dc:date>2007-12-30T22:18:13Z</dc:date>
+</dc:dc>
+
+</collection>
