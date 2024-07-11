@@ -275,6 +275,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         source = self.request.GET.get("source", "all")
         tag = self.request.GET.get("tag", None)
         page = self.request.GET.get("page", None)
+        size = self.request.GET.get("size", self.default_page_size)
         step_name = self.request.GET.get("step_name", None)
         step_status = self.request.GET.get("step_status", None)
 
@@ -312,7 +313,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             self.request.GET["page"] = 1
             self.pagination_class.page_size = len(result)
         else:
-            self.pagination_class.page_size = self.default_page_size
+            self.pagination_class.page_size = size
 
         result = result.order_by("-last_modification_timestamp")
 
