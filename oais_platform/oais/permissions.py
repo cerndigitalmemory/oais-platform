@@ -7,9 +7,7 @@ from oais_platform.oais.models import Archive
 def filter_archives_by_user_creator(queryset, user):
     """Filters a queryset of archives based on the user's permissions.
 
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will be filtered to only include archives
-    created by the user.
+    The queryset will be filtered to only include archives created by the user.
     """
     queryset = queryset.filter(creator=user)
     return queryset
