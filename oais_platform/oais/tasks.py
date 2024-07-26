@@ -849,7 +849,7 @@ def prepare_invenio_payload(archive):
         title = archive.title
 
     if archive.restricted is True:
-        access = "private"
+        access = "restricted"
     else:
         access = "public"
 
