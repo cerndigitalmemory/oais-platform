@@ -271,6 +271,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns an Archive list based on the given visibility/access filter
         """
         visibility = self.request.GET.get("access", "all")
+        page = self.request.GET.get("page", None)
+        size = self.request.GET.get("size", self.default_page_size)
 
         if visibility == "owned":
             result = filter_archives_by_user_creator(
@@ -282,6 +284,15 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             result = filter_records_by_user_perms(
                 super().get_queryset(), self.request.user
             )
+
+        if page == "all":
+            if not self.request.GET._mutable:
+                self.request.GET._mutable = True
+            self.request.GET["page"] = 1
+            self.pagination_class.page_size = len(result)
+        else:
+            self.pagination_class.page_size = size
+
         return result
 
     @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
