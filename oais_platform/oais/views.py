@@ -265,6 +265,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
     default_page_size = 10
+    filters_map = {
+        "state": ["state"],
+        "source": ["source"],
+        "tag": ["archive_collections__id"],
+        "step_name": ["last_step__name"],
+        "step_status": ["last_step__status"],
+        "query": ["title__icontains", "recid__icontains"],
+    }
 
     def get_queryset(self):
         """
@@ -307,28 +315,15 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         filters = request.data["filters"]
 
-        if "state" in filters:
-            result = result.filter(state=filters["state"])
+        query = Q()
+        for key, value in filters.items():
+            subquery = Q()
+            for query_arg in self.filters_map[key]:
+                subquery |= Q(**{query_arg: value})
 
-        if "source" in filters:
-            result = result.filter(source=filters["source"])
+            query &= subquery
 
-        if "tag" in filters:
-            result = result.filter(archive_collections__id=filters["tag"])
-
-        if "step_name" in filters:
-            result = result.filter(last_step__name=filters["step_name"])
-
-        if "step_status" in filters:
-            result = result.filter(last_step__status=filters["step_status"])
-
-        if "query" in filters:
-            query_string = filters["query"]
-            result = result.filter(
-                Q(title__icontains=query_string) | Q(recid__icontains=query_string)
-            )
-
-        result = result.order_by("-last_modification_timestamp")
+        result = result.filter(query).order_by("-last_modification_timestamp")
 
         return self.make_paginated_response(result, ArchiveSerializer)
 
