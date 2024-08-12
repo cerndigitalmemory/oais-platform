@@ -323,7 +323,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     subquery |= Q(**{query_arg: value})
 
                 query &= subquery
-        except (KeyError, Exception) as error:
+        except Exception as error:
             match error:
                 case KeyError():
                     raise BadRequest("Invalid filter")
