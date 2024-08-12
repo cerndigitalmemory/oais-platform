@@ -315,13 +315,20 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         filters = request.data["filters"]
 
-        query = Q()
-        for key, value in filters.items():
-            subquery = Q()
-            for query_arg in self.filters_map[key]:
-                subquery |= Q(**{query_arg: value})
+        try:
+            query = Q()
+            for key, value in filters.items():
+                subquery = Q()
+                for query_arg in self.filters_map[key]:
+                    subquery |= Q(**{query_arg: value})
 
-            query &= subquery
+                query &= subquery
+        except (KeyError, Exception) as error:
+            match error:
+                case KeyError():
+                    raise BadRequest("Invalid filter")
+                case _:
+                    raise BadRequest("Invalid request")
 
         result = result.filter(query).order_by("-last_modification_timestamp")
 
