@@ -33,7 +33,6 @@ from oais_platform.oais.models import (
     ApiKey,
     Archive,
     Collection,
-    Profile,
     Source,
     Status,
     Step,
@@ -47,6 +46,7 @@ from oais_platform.oais.permissions import (
     filter_archives_public,
     filter_collections_by_user_perms,
     filter_jobs_by_user_perms,
+    filter_records_by_user_perms,
     filter_steps_by_user_perms,
     has_user_archive_edit_rights,
 )
@@ -265,46 +265,33 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = ArchiveSerializer
     permission_classes = [permissions.IsAuthenticated]
     default_page_size = 10
+    filters_map = {
+        "state": ["state"],
+        "source": ["source"],
+        "tag": ["archive_collections__id"],
+        "step_name": ["last_step__name"],
+        "step_status": ["last_step__status"],
+        "query": ["title__icontains", "recid__icontains"],
+    }
 
     def get_queryset(self):
         """
-        Returns Archives based on the visibility filter and status
+        Returns an Archive list based on the given visibility/access filter
         """
-        visibility = self.request.GET.get("filter", "all")
-        archive_state = self.request.GET.get("state", "all")
-        source = self.request.GET.get("source", "all")
-        tag = self.request.GET.get("tag", None)
+        visibility = self.request.GET.get("access", "all")
         page = self.request.GET.get("page", None)
-        step_name = self.request.GET.get("step_name", None)
-        step_status = self.request.GET.get("step_status", None)
+        size = self.request.GET.get("size", self.default_page_size)
 
-        if visibility == "public":
-            result = filter_archives_public(super().get_queryset())
-        elif visibility == "owned":
+        if visibility == "owned":
             result = filter_archives_by_user_creator(
                 super().get_queryset(), self.request.user
             )
         elif visibility == "private":
             result = filter_archives_for_user(super().get_queryset(), self.request.user)
-        else:
-            result = filter_all_archives_user_has_access(
+        elif visibility == "all":
+            result = filter_records_by_user_perms(
                 super().get_queryset(), self.request.user
             )
-
-        if archive_state != "all":
-            result = result.filter(state=archive_state)
-
-        if source != "all":
-            result = result.filter(source=source)
-
-        if tag:
-            result = result.filter(archive_collections__id=tag)
-
-        if step_name:
-            result = result.filter(last_step__name=step_name)
-
-        if step_status:
-            result = result.filter(last_step__status=step_status)
 
         if page == "all":
             if not self.request.GET._mutable:
@@ -312,11 +299,40 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             self.request.GET["page"] = 1
             self.pagination_class.page_size = len(result)
         else:
-            self.pagination_class.page_size = self.default_page_size
-
-        result = result.order_by("-last_modification_timestamp")
+            self.pagination_class.page_size = size
 
         return result
+
+    @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
+    def archives_filtered(self, request):
+        """
+        Returns an Archive list based on the filters set
+        """
+        result = self.get_queryset()
+
+        if "filters" not in request.data:
+            raise BadRequest("No filters")
+
+        filters = request.data["filters"]
+
+        try:
+            query = Q()
+            for key, value in filters.items():
+                subquery = Q()
+                for query_arg in self.filters_map[key]:
+                    subquery |= Q(**{query_arg: value})
+
+                query &= subquery
+        except Exception as error:
+            match error:
+                case KeyError():
+                    raise BadRequest("Invalid filter")
+                case _:
+                    raise BadRequest("Invalid request")
+
+        result = result.filter(query).order_by("-last_modification_timestamp")
+
+        return self.make_paginated_response(result, ArchiveSerializer)
 
     @action(detail=True, url_path="details", url_name="sgl-details")
     def archive_details(self, request, pk=None):
@@ -367,6 +383,20 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive["duplicates"] = None
 
         return Response(archives)
+
+    @action(detail=False, methods=["GET"], url_path="sources", url_name="sources")
+    def archives_sources(self, request):
+        """
+        Returns all source values from the Archives accessible by the user
+        """
+        archives = self.get_queryset()
+        sources = (
+            archives.order_by("source")
+            .distinct("source")
+            .values_list("source", flat=True)
+        )
+
+        return Response(sources)
 
     @action(detail=True, url_path="steps", url_name="steps")
     def archive_steps(self, request, pk=None):
@@ -427,8 +457,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             raise BadRequest("An error occured while saving the manifests.", e)
 
-    @action(detail=True, url_path="search", url_name="search")
-    def archives_search(self, request, pk=None):
+    @action(detail=False, url_path="search", url_name="search")
+    def archives_search(self, request):
         """
         Returns similar Archives (same Source and Recid) if any, nothing otherwise
         """
