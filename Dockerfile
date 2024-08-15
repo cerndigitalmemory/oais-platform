@@ -53,6 +53,20 @@ RUN apk add --update --no-cache --virtual .tmp-build-deps \
 COPY ./requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
 
+# Add CA
+RUN apk add --no-cache wget tar curl rpm
+RUN mkdir -p /etc/grid-security/certificates
+
+RUN curl -o /etc/grid-security/certificates/root.rpm https://repository.egi.eu/sw/production/cas/1/current/RPMS/ca_CERN-Root-2-1.130-1.noarch.rpm
+RUN rpm -i /etc/grid-security/certificates/root.rpm
+RUN rm -rf /etc/grid-security/certificates/root.rpm
+
+RUN curl -o /etc/grid-security/certificates/grid.rpm https://repository.egi.eu/sw/production/cas/1/current/RPMS/ca_CERN-GridCA-1.130-1.noarch.rpm
+RUN rpm -i /etc/grid-security/certificates/grid.rpm
+RUN rm -rf /etc/grid-security/certificates/grid.rpm
+
+WORKDIR /
+
 # Clean up temporary build dependencies
 RUN apk del .tmp-build-deps
 
