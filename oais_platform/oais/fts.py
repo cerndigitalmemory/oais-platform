@@ -13,8 +13,9 @@ class FTS:
             fts_instance,
             ucert=user_cert_path,
             ukey=cert_key_path,
-            verify=False,
+            verify=True,
         )
+
         logging.info(
             f'Authenticated on FTS with certificate DN: { fts3.whoami(context)["user_dn"] } '
         )

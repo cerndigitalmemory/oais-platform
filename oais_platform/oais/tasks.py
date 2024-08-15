@@ -32,6 +32,7 @@ from oais_platform.settings import (
     AM_WAITING_TIME_LIMIT,
     BASE_URL,
     BIC_UPLOAD_PATH,
+    CTA_BASE_PATH,
     FILES_URL,
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
@@ -231,8 +232,8 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
 
     submitted_job = fts.push_to_cta(
-        f"root://eospublic.cern.ch/{path_to_sip}",
-        f"root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/test/{cta_folder_name}",
+        f"root://eosuser.cern.ch/{path_to_sip}",
+        f"{CTA_BASE_PATH}{cta_folder_name}",
     )
 
     logger.info(submitted_job)
