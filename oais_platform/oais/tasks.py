@@ -32,6 +32,7 @@ from oais_platform.settings import (
     AM_WAITING_TIME_LIMIT,
     BASE_URL,
     BIC_UPLOAD_PATH,
+    CTA_BASE_PATH,
     FILES_URL,
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
@@ -39,7 +40,6 @@ from oais_platform.settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
-    CTA_BASE_PATH
 )
 
 from .fts import FTS
