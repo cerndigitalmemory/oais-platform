@@ -39,6 +39,7 @@ from oais_platform.settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
+    CTA_BASE_PATH
 )
 
 from .fts import FTS
@@ -231,8 +232,8 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
 
     submitted_job = fts.push_to_cta(
-        f"root://eospublic.cern.ch/{path_to_sip}",
-        f"root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/test/{cta_folder_name}",
+        f"root://eosuser.cern.ch/{path_to_sip}",
+        f"{CTA_BASE_PATH}{cta_folder_name}",
     )
 
     logger.info(submitted_job)
