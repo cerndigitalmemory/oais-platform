@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -79,10 +80,9 @@ from .tasks import (
     create_step_v2,
     process,
     run_next_step,
-    run_pipeline_step
+    run_pipeline_step,
 )
 
-import logging
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
@@ -410,7 +410,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         steps = archive.steps.all().order_by("start_date")
 
         serializer = StepSerializer(steps, many=True)
-    
+
         return Response(serializer.data)
 
     @action(detail=True, url_path="tags", url_name="tags")
@@ -651,7 +651,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         serializer = StepSerializer(next_step, many=False)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
     def archive_pipeline(self, request, pk=None):
         """
@@ -675,10 +675,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             pipeline_steps[0],
             archive,
         )
-   
+
         input_step_id = first_step.id
         archive = archive.add_step_to_pipeline(input_step_id)
-    
+
         try:
             for pipeline_step in pipeline_steps[1:]:
                 # TODO: check if order of steps is right => throw exception if not
@@ -693,13 +693,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             raise Exception("Wrong Step input")
 
         step_id = archive.start_new_pipeline(first_step.id)
-        
+
         if step_id:
-            step = run_pipeline_step(step_id, archive.last_completed_step, archive, api_key)
-    
+            step = run_pipeline_step(
+                step_id, archive.last_completed_step, archive, api_key
+            )
+
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
-
 
     def get_staging_area(self, request, pk=None):
         """

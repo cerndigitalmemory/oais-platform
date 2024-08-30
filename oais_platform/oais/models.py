@@ -1,14 +1,14 @@
 import json
 import logging
+
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
-from django.db import transaction
 
 from oais_platform.oais.sources.abstract_source import AbstractSource
 from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
@@ -242,7 +242,7 @@ class Archive(models.Model):
             locked_archive.save()
 
         return step_id
-    
+
     def add_step_to_pipeline(self, step_id):
         with transaction.atomic():
             locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
@@ -254,7 +254,7 @@ class Archive(models.Model):
             locked_archive.save()
 
         return locked_archive
-    
+
     def start_new_pipeline(self, start_step_id):
         step_id = None
 

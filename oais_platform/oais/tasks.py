@@ -123,11 +123,11 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 run_pipeline_step(next_step_id, step_id, archive)
 
             # else:
-                # Automatically run next step ONLY if next_steps length is one (only one possible following step)
-                # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
-                # if len(next_steps) == 1 and step.name in [1, 2, 3, 8]:
-                # create_step(next_steps[0], archive_id, step_id)
-             
+            # Automatically run next step ONLY if next_steps length is one (only one possible following step)
+            # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
+            # if len(next_steps) == 1 and step.name in [1, 2, 3, 8]:
+            # create_step(next_steps[0], archive_id, step_id)
+
         else:
             # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)
@@ -194,6 +194,7 @@ def create_step(step_name, archive_id, input_step_id=None, api_key=None):
 
     return step
 
+
 def create_step_v2(step_name, archive):
 
     if int(step_name) not in Steps:
@@ -204,6 +205,7 @@ def create_step_v2(step_name, archive):
         name=step_name,
         status=Status.NOT_RUN,
     )
+
 
 def run_pipeline_step(step_id, input_step_id, archive, api_key=None):
 
@@ -230,7 +232,7 @@ def run_pipeline_step(step_id, input_step_id, archive, api_key=None):
         push_sip_to_cta.delay(step.archive.id, step.id, step.input_data)
     elif step.name == Steps.EXTRACT_TITLE:
         extract_title.delay(archive.id, step.id)
-    
+
     return step
 
 
