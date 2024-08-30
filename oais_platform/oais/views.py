@@ -76,10 +76,13 @@ from .tasks import (
     announce_sip,
     batch_announce_task,
     create_step,
+    create_step_v2,
     process,
     run_next_step,
+    run_pipeline_step
 )
 
+import logging
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
@@ -407,6 +410,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         steps = archive.steps.all().order_by("start_date")
 
         serializer = StepSerializer(steps, many=True)
+    
         return Response(serializer.data)
 
     @action(detail=True, url_path="tags", url_name="tags")
@@ -647,6 +651,55 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         serializer = StepSerializer(next_step, many=False)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
+    def archive_pipeline(self, request, pk=None):
+        """
+        Creates the pipline of Steps of the passed Archive and executes it
+        """
+        pipeline_steps = request.data["pipeline_steps"]
+        archive_id = request.data["archive"]["id"]
+        archive = Archive.objects.get(pk=archive_id)
+
+        if has_user_archive_edit_rights(pk, request.user):
+            try:
+                api_key = ApiKey.objects.get(
+                    source__name=archive["source"], user=request.user
+                ).key
+            except Exception:
+                api_key = None
+        else:
+            raise Exception("User has no rights to perform a step for this archive")
+
+        first_step = create_step_v2(
+            pipeline_steps[0],
+            archive,
+        )
+   
+        input_step_id = first_step.id
+        archive = archive.add_step_to_pipeline(input_step_id)
+    
+        try:
+            for pipeline_step in pipeline_steps[1:]:
+                # TODO: check if order of steps is right => throw exception if not
+                step = create_step_v2(
+                    pipeline_step,
+                    archive,
+                )
+
+                input_step_id = step.id
+                archive = archive.add_step_to_pipeline(input_step_id)
+        except Exception:
+            raise Exception("Wrong Step input")
+
+        step_id = archive.start_new_pipeline(first_step.id)
+        
+        if step_id:
+            step = run_pipeline_step(step_id, archive.last_completed_step, archive, api_key)
+    
+        serializer = StepSerializer(step, many=False)
+        return Response(serializer.data)
+
 
     def get_staging_area(self, request, pk=None):
         """
