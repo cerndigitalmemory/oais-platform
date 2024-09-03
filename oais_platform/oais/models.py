@@ -130,20 +130,28 @@ class Archive(models.Model):
             ("can_unstage", "Can unstage a record and start the pipeline"),
         )
 
-    def set_last_completed_step(self, step):
+    def set_last_completed_step(self, step, lock=False):
         """
-        Set last_step to the given Step
+        Set last_completed_step to the given Step
         """
-        self.last_completed_step = step
-        self.last_step = step
-        self.save()
+        archive = self
+        with transaction.atomic():
+            if lock:
+                archive = Archive.objects.select_for_update().get(pk=self.pk)
+            archive.last_completed_step = step
+            archive.last_step = step
+            archive.save()
 
-    def set_last_step(self, step):
+    def set_last_step(self, step, lock=False):
         """
         Set last_step to the given Step
         """
-        self.last_step = step
-        self.save()
+        archive = self
+        with transaction.atomic():
+            if lock:
+                archive = Archive.objects.select_for_update().get(pk=self.pk)
+            archive.last_step = step
+            archive.save()
 
     def update_next_steps(self, current_step=None):
         """
@@ -214,8 +222,6 @@ class Archive(models.Model):
     def set_state(self):
         try:
             steps = self.steps.all().order_by("-start_date")
-            if len(steps) > 0:
-                self.last_step = steps[0]
             state = ArchiveState.NONE
             for step in steps:
                 if step.status == Status.COMPLETED:
@@ -235,39 +241,54 @@ class Archive(models.Model):
         with transaction.atomic():
             locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
 
-            if len(locked_archive.pipeline_steps) != 0:
-                locked_archive.pipeline_steps.pop(0)
-                step_id = locked_archive.pipeline_steps[0]
+            if (
+                len(locked_archive.pipeline_steps) != 0
+                and locked_archive.last_completed_step == locked_archive.last_step
+            ):
+                step_id = locked_archive.pipeline_steps.pop(0)
 
             locked_archive.save()
-
         return step_id
 
-    def add_step_to_pipeline(self, step_id):
-        with transaction.atomic():
-            locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
+    def add_step_to_pipeline(self, step_name, lock=False):
+        archive = self
 
-            if not locked_archive.pipeline_steps:
-                locked_archive.pipeline_steps = [step_id]
+        with transaction.atomic():
+
+            if lock:
+                archive = Archive.objects.select_for_update().get(pk=self.pk)
+
+            if step_name not in Steps:
+                raise Exception("Invalid Step type")
+
+            if not archive.pipeline_steps:
+                archive.pipeline_steps = []
+
+            if len(archive.pipeline_steps) == 0:
+                input_step_id = archive.last_step.id
             else:
-                locked_archive.pipeline_steps.append(step_id)
-            locked_archive.save()
+                input_step_id = archive.pipeline_steps[-1]
 
-        return locked_archive
+            input_step = Step.objects.get(pk=input_step_id)
 
-    def start_new_pipeline(self, start_step_id):
-        step_id = None
+            step = Step.objects.create(
+                archive=archive,
+                name=step_name,
+                input_step=input_step,
+                status=Status.WAITING,
+            )
 
+            if step_name not in pipeline.get_next_steps(input_step.name):
+                raise Exception("Invalid Step order")
+
+            step.input_step = input_step
+            archive.pipeline_steps.append(step.id)
+            archive.save()
+
+    def get_next_steps(self):
         with transaction.atomic():
             locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
-
-            if len(locked_archive.pipeline_steps) != 0:
-                if start_step_id == locked_archive.pipeline_steps[0]:
-                    step_id = start_step_id
-
-            locked_archive.save()
-
-        return step_id
+            return pipeline.get_next_steps(locked_archive.last_step.name)
 
 
 class Step(models.Model):

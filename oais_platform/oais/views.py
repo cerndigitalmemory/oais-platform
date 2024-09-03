@@ -77,10 +77,9 @@ from .tasks import (
     announce_sip,
     batch_announce_task,
     create_step,
-    create_step_v2,
+    execute_pipeline,
     process,
     run_next_step,
-    run_pipeline_step,
 )
 
 
@@ -657,47 +656,26 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Creates the pipline of Steps of the passed Archive and executes it
         """
-        pipeline_steps = request.data["pipeline_steps"]
-        archive_id = request.data["archive"]["id"]
-        archive = Archive.objects.get(pk=archive_id)
+        steps = request.data["pipeline_steps"]
 
         if has_user_archive_edit_rights(pk, request.user):
             try:
                 api_key = ApiKey.objects.get(
-                    source__name=archive["source"], user=request.user
+                    source__name=request.data["archive"]["source"], user=request.user
                 ).key
             except Exception:
                 api_key = None
         else:
             raise Exception("User has no rights to perform a step for this archive")
 
-        first_step = create_step_v2(
-            pipeline_steps[0],
-            archive,
-        )
-
-        input_step_id = first_step.id
-        archive = archive.add_step_to_pipeline(input_step_id)
-
-        try:
-            for pipeline_step in pipeline_steps[1:]:
-                # TODO: check if order of steps is right => throw exception if not
-                step = create_step_v2(
-                    pipeline_step,
-                    archive,
-                )
-
-                input_step_id = step.id
-                archive = archive.add_step_to_pipeline(input_step_id)
-        except Exception:
-            raise Exception("Wrong Step input")
-
-        step_id = archive.start_new_pipeline(first_step.id)
-
-        if step_id:
-            step = run_pipeline_step(
-                step_id, archive.last_completed_step, archive, api_key
+        with transaction.atomic():
+            archive = Archive.objects.select_for_update().get(
+                pk=request.data["archive"]["id"]
             )
+            for step_name in steps:
+                archive.add_step_to_pipeline(step_name)
+
+        step = execute_pipeline(archive, api_key=api_key)
 
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
@@ -1098,7 +1076,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             step = Step.objects.create(
                 archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
             )
-            archive.set_last_completed_step(step)
+            archive.set_last_completed_step(step, lock=True)
 
             # Uploading completed
             step.set_status(Status.COMPLETED)
@@ -1109,7 +1087,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             archive.set_archive_manifest(sip_json["audit"])
             archive.update_next_steps(step.name)
             archive.save()
-            run_next_step(archive.id, step.id)
+            run_next_step(archive, step.id)
 
             return Response(
                 {
@@ -1286,7 +1264,7 @@ def upload_sip(request):
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
 
-        archive.set_last_completed_step(step)
+        archive.set_last_completed_step(step, lock=True)
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
@@ -1297,7 +1275,7 @@ def upload_sip(request):
         archive.update_next_steps(step.name)
         archive.save()
 
-        run_next_step(archive.id, step.id)
+        run_next_step(archive, step.id)
 
         return Response(
             {
