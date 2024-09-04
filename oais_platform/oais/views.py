@@ -77,6 +77,7 @@ from .tasks import (
     announce_sip,
     batch_announce_task,
     create_step,
+    run_step,
     execute_pipeline,
     process,
     run_next_step,
@@ -620,41 +621,64 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.delete()
         return Response()
 
-    @action(detail=True, methods=["POST"], url_path="next-step", url_name="next-step")
-    def archive_next_step(self, request, pk=None):
+    @action(detail=True, methods=["POST"], url_path="run-step", url_name="run-step")
+    def archive_run_step(self, request, pk=None):
         """
-        Creates the next Step of the passed Archive
+        Executes the passed Step of an Archive
         """
-        next_step = request.data["next_step"]
+        step_id = request.data["step_id"]
         archive = request.data["archive"]
 
-        if int(next_step) in Steps:
-            if has_user_archive_edit_rights(pk, request.user):
-                try:
-                    api_key = ApiKey.objects.get(
-                        source__name=archive["source"], user=request.user
-                    ).key
-                except Exception:
-                    api_key = None
-
-                next_step = create_step(
-                    next_step,
-                    pk,
-                    archive["last_completed_step"],
-                    api_key,
-                )
-            else:
-                raise Exception("User has no rights to perform a step for this archive")
+        if has_user_archive_edit_rights(pk, request.user):
+            try:
+                api_key = ApiKey.objects.get(
+                    source__name=archive["source"], user=request.user
+                ).key
+            except Exception:
+                api_key = None
         else:
-            raise Exception("Wrong Step input")
+            raise Exception("User has no rights to perform a step for this archive")
+        
+        with transaction.atomic():
+            archive = Archive.objects.select_for_update().get(pk=archive["id"])
+            try:
+                current_step = Step.objects.select_for_update().get(pk=step_id)
+            except:
+                raise Exception("Invalid Step ID")
 
-        serializer = StepSerializer(next_step, many=False)
+            # rerun failed step
+            if current_step.status == Status.FAILED:
+                step = Step.objects.create(
+                    archive=archive,
+                    name=current_step.name,
+                    input_step=current_step,
+                    input_data=current_step.output_data,
+                    status=Status.WAITING,
+                )
+            # run given step if it's preceded by a failed step and it's the first in the pipeline 
+            elif current_step.status == Status.WAITING:
+                with transaction.atomic():
+                    input_step = Step.objects.select_for_update().get(pk=step.input_step.id)
+                    if input_step.status == Status.FAILED:
+                        if len(archive.pipeline_steps) > 0 and archive.pipeline_steps[0] == current_step.id:
+                            step = current_step
+                        else:
+                            raise Exception("Can't run Step in the middle of the pipeline")
+                    else:
+                        raise Exception("Can't run Step while Archive's pipeline is still executing")
+            else:
+                raise Exception("Can't run given Step")
+
+        if step:
+            step = run_step(step.id, archive, api_key=api_key)
+
+        serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
-    def archive_pipeline(self, request, pk=None):
+    def archive_run_pipeline(self, request, pk=None):
         """
-        Creates the pipline of Steps of the passed Archive and executes it
+        Creates the pipline of Steps for the passed Archive and executes it
         """
         steps = request.data["pipeline_steps"]
 
