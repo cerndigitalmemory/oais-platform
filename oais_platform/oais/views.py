@@ -73,14 +73,14 @@ from ..settings import (
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
 )
+from . import pipeline
 from .tasks import (
     announce_sip,
     batch_announce_task,
-    create_step,
-    run_step,
     execute_pipeline,
     process,
     run_next_step,
+    run_step,
 )
 
 
@@ -407,7 +407,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns all Steps of an identified Archive
         """
         archive = self.get_object()
-        steps = archive.steps.all().order_by("start_date")
+        steps = archive.steps.all().order_by("start_date", "create_date")
 
         serializer = StepSerializer(steps, many=True)
 
@@ -638,7 +638,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 api_key = None
         else:
             raise Exception("User has no rights to perform a step for this archive")
-        
+
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(pk=archive["id"])
             try:
@@ -646,8 +646,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             except:
                 raise Exception("Invalid Step ID")
 
-            # rerun failed step
-            if current_step.status == Status.FAILED:
+            # rerun last run failed step
+            if (
+                current_step.status == Status.FAILED
+                and archive.last_step.id == current_step.id
+            ):
                 step = Step.objects.create(
                     archive=archive,
                     name=current_step.name,
@@ -655,17 +658,35 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     input_data=current_step.output_data,
                     status=Status.WAITING,
                 )
-            # run given step if it's preceded by a failed step and it's the first in the pipeline 
+
+                next_steps = Step.objects.filter(input_step__id=current_step.id)
+
+                for next_step in next_steps:
+                    next_step.set_input_step(step)
+
+            # run given step if it's preceded by a failed step and it's the first runnable step in the pipeline
             elif current_step.status == Status.WAITING:
                 with transaction.atomic():
-                    input_step = Step.objects.select_for_update().get(pk=step.input_step.id)
-                    if input_step.status == Status.FAILED:
-                        if len(archive.pipeline_steps) > 0 and archive.pipeline_steps[0] == current_step.id:
+                    input_step = Step.objects.select_for_update().get(
+                        pk=current_step.input_step.id
+                    )
+                    if (
+                        input_step.status == Status.FAILED
+                        and archive.last_step.id == input_step.id
+                    ):
+                        if (
+                            len(archive.pipeline_steps) > 0
+                            and archive.pipeline_steps[0] == current_step.id
+                        ):
                             step = current_step
                         else:
-                            raise Exception("Can't run Step in the middle of the pipeline")
+                            raise Exception(
+                                "Can't run Step in the middle of the pipeline"
+                            )
                     else:
-                        raise Exception("Can't run Step while Archive's pipeline is still executing")
+                        raise Exception(
+                            "Can't run Step while Archive's pipeline is still executing"
+                        )
             else:
                 raise Exception("Can't run given Step")
 
@@ -841,6 +862,15 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         return self.approve_or_reject(
             request, "oais.can_reject_archive", approved=False
         )
+
+    @action(
+        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
+    )
+    def get_steps_order_constraints(self, request):
+        """
+        Returns all Step order constraints
+        """
+        return Response(pipeline.get_next_steps_constraints())
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1109,9 +1139,8 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
             archive.set_archive_manifest(sip_json["audit"])
-            archive.update_next_steps(step.name)
             archive.save()
-            run_next_step(archive, step.id)
+            run_next_step(archive)
 
             return Response(
                 {
@@ -1296,10 +1325,9 @@ def upload_sip(request):
 
         # Save path and change status of the archive
         archive.path_to_sip = sip_location
-        archive.update_next_steps(step.name)
         archive.save()
 
-        run_next_step(archive, step.id)
+        run_next_step(archive)
 
         return Response(
             {

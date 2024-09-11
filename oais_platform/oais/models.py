@@ -111,7 +111,6 @@ class Archive(models.Model):
         related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
-    next_steps = models.JSONField(max_length=50, default=list)
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
@@ -130,7 +129,7 @@ class Archive(models.Model):
             ("can_unstage", "Can unstage a record and start the pipeline"),
         )
 
-    def set_last_completed_step(self, step, lock=False):
+    def set_last_completed_step(self, step_id, lock=False):
         """
         Set last_completed_step to the given Step
         """
@@ -138,11 +137,10 @@ class Archive(models.Model):
         with transaction.atomic():
             if lock:
                 archive = Archive.objects.select_for_update().get(pk=self.pk)
-            archive.last_completed_step = step
-            archive.last_step = step
+            archive.last_completed_step_id = step_id
             archive.save()
 
-    def set_last_step(self, step, lock=False):
+    def set_last_step(self, step_id, lock=False):
         """
         Set last_step to the given Step
         """
@@ -150,30 +148,8 @@ class Archive(models.Model):
         with transaction.atomic():
             if lock:
                 archive = Archive.objects.select_for_update().get(pk=self.pk)
-            archive.last_step = step
+            archive.last_step_id = step_id
             archive.save()
-
-    def update_next_steps(self, current_step=None):
-        """
-        Set next_fields according to the pipeline definition
-        """
-        if current_step:
-            self.next_steps = pipeline.get_next_steps(current_step)
-        else:
-            self.next_steps = pipeline.get_next_steps(self.last_completed_step.name)
-        if (
-            not self.title
-            or self.title == ""
-            or self.title == f"{self.source} - {self.recid}"
-        ) and self.state != ArchiveState.NONE:
-            if not self.next_steps:
-                self.next_steps = [10]
-            else:
-                self.next_steps.append(10)
-
-        self.save()
-
-        return self.next_steps
 
     def set_archive_manifest(self, manifest):
         """
@@ -221,7 +197,7 @@ class Archive(models.Model):
 
     def set_state(self):
         try:
-            steps = self.steps.all().order_by("-start_date")
+            steps = self.steps.all().order_by("-start_date", "-create_date")
             state = ArchiveState.NONE
             for step in steps:
                 if step.status == Status.COMPLETED:
@@ -243,7 +219,7 @@ class Archive(models.Model):
 
             if (
                 len(locked_archive.pipeline_steps) != 0
-                and locked_archive.last_completed_step == locked_archive.last_step
+                and locked_archive.last_completed_step.id == locked_archive.last_step.id
             ):
                 step_id = locked_archive.pipeline_steps.pop(0)
 
@@ -253,6 +229,7 @@ class Archive(models.Model):
     def add_step_to_pipeline(self, step_name, lock=False):
         archive = self
 
+        # logging.info(f"add {self.last_completed_step.id}")
         with transaction.atomic():
 
             if lock:
@@ -278,10 +255,9 @@ class Archive(models.Model):
                 status=Status.WAITING,
             )
 
-            if step_name not in pipeline.get_next_steps(input_step.name):
-                raise Exception("Invalid Step order")
+            # if step_name not in pipeline.get_next_steps(input_step.name):
+            #     raise Exception("Invalid Step order")
 
-            step.input_step = input_step
             archive.pipeline_steps.append(step.id)
             archive.save()
 
@@ -300,7 +276,8 @@ class Step(models.Model):
     # The archival process this step is in
     archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
     name = models.IntegerField(choices=Steps.choices)
-    start_date = models.DateTimeField(default=timezone.now)
+    create_date = models.DateTimeField(default=timezone.now)
+    start_date = models.DateTimeField(default=None, null=True)
     finish_date = models.DateTimeField(default=None, null=True)
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
 
@@ -340,6 +317,10 @@ class Step(models.Model):
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
+        self.save()
+
+    def set_start_date(self):
+        self.start_date = timezone.now()
         self.save()
 
     def save(self, *args, **kwargs):

@@ -13,6 +13,7 @@ from amclient import AMClient
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
@@ -88,8 +89,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
         # (e.g. without throwing an exception) so here we check
         # for returned errors
         if retval["status"] == 0:
-            # Set last_step to the successful step
-            archive.set_last_completed_step(step, lock=True)
 
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
@@ -115,9 +114,11 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 except Exception:
                     logging.info(f"Sip.json was not found inside {sip_location}")
 
+            # Set last_completed_step to the successful step
+            archive.set_last_completed_step(step_id, lock=True)
+
             # Execute the remainig steps in the pipeline
             execute_pipeline(archive)
-
         else:
             # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)
@@ -126,14 +127,20 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
         step.set_status(Status.FAILED)
 
 
-def run_next_step(archive, previous_step_id):
+def run_next_step(archive):
     """
     Given an Archive (and its last executed step),
     create the next step in the pipeline,
     selecting the first possible one in the pipeline definition
     """
 
-    step_name = archive.get_next_steps(previous_step_id)[0]
+    next_steps = archive.get_next_steps()
+
+    if len(next_steps) == 0:
+        return
+
+    step_name = next_steps[0]
+
     archive.add_step_to_pipeline(step_name, lock=True)
     execute_pipeline(archive)
 
@@ -185,7 +192,6 @@ def create_step(step_name, archive_id, input_step_id=None, api_key=None):
 
 
 def run_step(step_id, archive, api_key=None):
-
     step = Step.objects.get(pk=step_id)
     step.status = Status.WAITING
 
@@ -195,7 +201,10 @@ def run_step(step_id, archive, api_key=None):
     except Exception:
         step.input_data = None
 
-    archive.set_last_step(step, lock=True)
+    step.set_start_date()
+
+    # Set last_step to the current step
+    archive.set_last_step(step_id, lock=True)
 
     if step.name == Steps.HARVEST:
         process.delay(step.archive.id, step.id, api_key, input_data=step.input_data)
@@ -216,7 +225,6 @@ def run_step(step_id, archive, api_key=None):
 
 
 def execute_pipeline(archive, api_key=None):
-
     step_id = archive.consume_pipeline()
 
     # No Steps to execute in the pipelime
@@ -228,7 +236,7 @@ def execute_pipeline(archive, api_key=None):
 
         if len(next_steps) == 1 and last_completed_step.name in [1, 2, 3, 8]:
             archive.add_pipeline_step(next_steps[0])
-            execute_pipeline(archive)
+            execute_pipeline(archive, api_key)
         else:
             return None
 
