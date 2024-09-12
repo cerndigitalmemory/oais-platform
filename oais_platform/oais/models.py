@@ -1,5 +1,4 @@
 import json
-import logging
 
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
@@ -229,7 +228,6 @@ class Archive(models.Model):
     def add_step_to_pipeline(self, step_name, lock=False):
         archive = self
 
-        # logging.info(f"add {self.last_completed_step.id}")
         with transaction.atomic():
 
             if lock:
@@ -255,8 +253,8 @@ class Archive(models.Model):
                 status=Status.WAITING,
             )
 
-            # if step_name not in pipeline.get_next_steps(input_step.name):
-            #     raise Exception("Invalid Step order")
+            if step_name not in pipeline.get_next_steps(input_step.name):
+                raise Exception("Invalid Step order")
 
             archive.pipeline_steps.append(step.id)
             archive.save()
