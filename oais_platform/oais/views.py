@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -76,6 +77,7 @@ from . import pipeline
 from .tasks import (
     announce_sip,
     batch_announce_task,
+    create_step,
     execute_pipeline,
     process,
     run_next_step,
@@ -506,7 +508,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             ).key
         except Exception:
             api_key = None
-        process.delay(step.archive.id, step.id, api_key)
+        
+        run_step(step, archive, api_key=api_key)
 
         serializer = ArchiveSerializer(
             archive,
@@ -548,7 +551,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 ).key
             except Exception:
                 api_key = None
-            process.delay(step.archive.id, step.id, api_key)
+            run_step(step, archive, api_key=api_key)
 
         serializer = CollectionSerializer(
             job_tag,
@@ -650,16 +653,20 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 current_step.status == Status.FAILED
                 and archive.last_step.id == current_step.id
             ):
-                step = Step.objects.create(
+                # create new step based on the failed step
+                step = create_step(
+                    step_name=current_step.name,
                     archive=archive,
-                    name=current_step.name,
-                    input_step=current_step,
+                    input_step_id=current_step.id,
                     input_data=current_step.output_data,
-                    status=Status.WAITING,
                 )
 
-                next_steps = Step.objects.filter(input_step__id=current_step.id)
+                # get steps that are precedeed by the failed step
+                next_steps = Step.objects.filter(
+                    input_step__id=current_step.id
+                ).exclude(id=step.id)
 
+                # update successors of the failed steps
                 for next_step in next_steps:
                     next_step.set_input_step(step)
 
@@ -690,7 +697,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 raise Exception("Can't run given Step")
 
         if step:
-            step = run_step(step.id, archive, api_key=api_key)
+            step = run_step(step, archive, api_key=api_key)
 
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
@@ -1108,7 +1115,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({"status": 0, "msg": "SIP created successfully"})
 
-    @action(detail=True, methods=["POST"], url_path="archive", url_name="archvive")
+    @action(detail=True, methods=["POST"], url_path="archive", url_name="archive")
     def create_archive(self, request, pk=None):
         """
         Creates an Archive given the path to an SIP. \n
@@ -1129,16 +1136,21 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             step = Step.objects.create(
                 archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
             )
-            archive.set_last_completed_step(step, lock=True)
+            step.set_start_date()
 
             # Uploading completed
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
 
+            # Set Archive's last step info
+            archive.set_last_step(step.id)
+            archive.set_last_completed_step(step.id)
+
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
             archive.set_archive_manifest(sip_json["audit"])
             archive.save()
+
             run_next_step(archive)
 
             return Response(
@@ -1315,12 +1327,15 @@ def upload_sip(request):
         step = Step.objects.create(
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
-
-        archive.set_last_completed_step(step, lock=True)
+        step.set_start_date()
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
+
+        # Set Archive's last step info
+        archive.set_last_step(step.id)
+        archive.set_last_completed_step(step.id)
 
         # Save path and change status of the archive
         archive.path_to_sip = sip_location

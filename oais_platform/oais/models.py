@@ -1,5 +1,5 @@
 import json
-
+import logging
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
@@ -244,17 +244,15 @@ class Archive(models.Model):
             else:
                 input_step_id = archive.pipeline_steps[-1]
 
-            input_step = Step.objects.get(pk=input_step_id)
-
             step = Step.objects.create(
                 archive=archive,
                 name=step_name,
-                input_step=input_step,
+                input_step_id=input_step_id,
                 status=Status.WAITING,
             )
 
-            if step_name not in pipeline.get_next_steps(input_step.name):
-                raise Exception("Invalid Step order")
+            # if step_name not in pipeline.get_next_steps(input_step.name):
+            #     raise Exception("Invalid Step order")
 
             archive.pipeline_steps.append(step.id)
             archive.save()
@@ -262,7 +260,25 @@ class Archive(models.Model):
     def get_next_steps(self):
         with transaction.atomic():
             locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
-            return pipeline.get_next_steps(locked_archive.last_step.name)
+
+            # Determine the last step's type
+            if len(locked_archive.pipeline_steps) == 0:
+                step_name = locked_archive.last_step.name
+            else:
+                step_name = locked_archive.pipeline_steps[-1]
+
+        # Get possible next steps
+        next_steps = pipeline.get_next_steps(step_name)
+
+        if (
+            not locked_archive.title
+            or locked_archive.title == ""
+            or locked_archive.title
+            == f"{locked_archive.source} - {locked_archive.recid}"
+        ) and locked_archive.state != ArchiveState.NONE:
+            next_steps.append(Steps.EXTRACT_TITLE)
+
+        return next_steps
 
 
 class Step(models.Model):
