@@ -1,5 +1,5 @@
 import json
-import logging
+
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
@@ -128,27 +128,19 @@ class Archive(models.Model):
             ("can_unstage", "Can unstage a record and start the pipeline"),
         )
 
-    def set_last_completed_step(self, step_id, lock=False):
+    def set_last_completed_step(self, step_id):
         """
         Set last_completed_step to the given Step
         """
-        archive = self
-        with transaction.atomic():
-            if lock:
-                archive = Archive.objects.select_for_update().get(pk=self.pk)
-            archive.last_completed_step_id = step_id
-            archive.save()
+        self.last_completed_step_id = step_id
+        self.save()
 
-    def set_last_step(self, step_id, lock=False):
+    def set_last_step(self, step_id):
         """
         Set last_step to the given Step
         """
-        archive = self
-        with transaction.atomic():
-            if lock:
-                archive = Archive.objects.select_for_update().get(pk=self.pk)
-            archive.last_step_id = step_id
-            archive.save()
+        self.last_step_id = step_id
+        self.save()
 
     def set_archive_manifest(self, manifest):
         """
@@ -251,8 +243,10 @@ class Archive(models.Model):
                 status=Status.WAITING,
             )
 
-            # if step_name not in pipeline.get_next_steps(input_step.name):
-            #     raise Exception("Invalid Step order")
+            prev_step_name = Step.objects.get(pk=input_step_id).name
+
+            if step_name not in pipeline.get_next_steps(prev_step_name):
+                raise Exception("Invalid Step order")
 
             archive.pipeline_steps.append(step.id)
             archive.save()
@@ -265,20 +259,20 @@ class Archive(models.Model):
             if len(locked_archive.pipeline_steps) == 0:
                 step_name = locked_archive.last_step.name
             else:
-                step_name = locked_archive.pipeline_steps[-1]
+                step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
 
-        # Get possible next steps
-        next_steps = pipeline.get_next_steps(step_name)
+            # Get possible next steps
+            next_steps = pipeline.get_next_steps(step_name)
 
-        if (
-            not locked_archive.title
-            or locked_archive.title == ""
-            or locked_archive.title
-            == f"{locked_archive.source} - {locked_archive.recid}"
-        ) and locked_archive.state != ArchiveState.NONE:
-            next_steps.append(Steps.EXTRACT_TITLE)
+            if (
+                not locked_archive.title
+                or locked_archive.title == ""
+                or locked_archive.title
+                == f"{locked_archive.source} - {locked_archive.recid}"
+            ) and locked_archive.state != ArchiveState.NONE:
+                next_steps.append(Steps.EXTRACT_TITLE)
 
-        return next_steps
+            return next_steps
 
 
 class Step(models.Model):

@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import shutil
 import subprocess
@@ -414,6 +413,17 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(serializer.data)
 
+    @action(detail=True, url_path="next-steps", url_name="next-steps")
+    def archive_next_steps(self, request, pk=None):
+        """
+        Returns the type of possible next Steps of an identified Archive
+        """
+
+        archive = self.get_object()
+        next_steps = archive.get_next_steps()
+
+        return Response(next_steps)
+
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
         """
@@ -508,8 +518,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             ).key
         except Exception:
             api_key = None
-        
-        run_step(step, archive, api_key=api_key)
+
+        run_step(step, archive.id, api_key=api_key)
 
         serializer = ArchiveSerializer(
             archive,
@@ -551,7 +561,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 ).key
             except Exception:
                 api_key = None
-            run_step(step, archive, api_key=api_key)
+            run_step(step, archive.id, api_key=api_key)
 
         serializer = CollectionSerializer(
             job_tag,
@@ -646,7 +656,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             try:
                 current_step = Step.objects.select_for_update().get(pk=step_id)
             except:
-                raise Exception("Invalid Step ID")
+                raise BadRequest("Invalid Step ID")
 
             # rerun last run failed step
             if (
@@ -684,20 +694,24 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                             len(archive.pipeline_steps) > 0
                             and archive.pipeline_steps[0] == current_step.id
                         ):
+                            # remove step from pipeline
+                            archive.pipeline_steps.pop(0)
+                            archive.save()
+
                             step = current_step
                         else:
-                            raise Exception(
+                            raise BadRequest(
                                 "Can't run Step in the middle of the pipeline"
                             )
                     else:
-                        raise Exception(
+                        raise BadRequest(
                             "Can't run Step while Archive's pipeline is still executing"
                         )
             else:
-                raise Exception("Can't run given Step")
+                raise BadRequest("Can't run given Step")
 
         if step:
-            step = run_step(step, archive, api_key=api_key)
+            step = run_step(step, archive.id, api_key=api_key)
 
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
@@ -708,6 +722,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Creates the pipline of Steps for the passed Archive and executes it
         """
         steps = request.data["pipeline_steps"]
+
+        if len(steps) > 10:
+            raise BadRequest("Invalid pipeline size")
 
         if has_user_archive_edit_rights(pk, request.user):
             try:
@@ -723,8 +740,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             archive = Archive.objects.select_for_update().get(
                 pk=request.data["archive"]["id"]
             )
-            for step_name in steps:
-                archive.add_step_to_pipeline(step_name)
+            try:
+                for step_name in steps:
+                    archive.add_step_to_pipeline(step_name)
+            except Exception as e:
+                raise BadRequest(e)
 
         step = execute_pipeline(archive, api_key=api_key)
 
