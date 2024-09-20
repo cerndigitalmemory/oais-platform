@@ -649,7 +649,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             except Exception:
                 api_key = None
         else:
-            raise Exception("User has no rights to perform a step for this archive")
+            raise BadRequest("User has no rights to perform a step for this archive")
 
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(pk=archive["id"])
@@ -734,7 +734,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             except Exception:
                 api_key = None
         else:
-            raise Exception("User has no rights to perform a step for this archive")
+            raise BadRequest("User has no rights to perform a step for this archive")
 
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(
