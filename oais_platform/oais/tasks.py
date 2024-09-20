@@ -119,8 +119,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 archive = Archive.objects.select_for_update().get(pk=archive_id)
                 archive.set_last_completed_step(step_id)
 
-            logging.info(archive.last_completed_step_id)
-
             # Execute the remainig steps in the pipeline
             execute_pipeline(archive)
         else:
@@ -171,7 +169,7 @@ def run_step(step, archive_id, api_key=None):
     Execute the given Step by spawning a Celery tasks for it
 
     step: target Step
-    archive: target Archive
+    archive_id: ID of target Archive
     api_key: API key
     """
 
@@ -217,7 +215,6 @@ def execute_pipeline(archive, api_key=None):
     else:
         # Automatically run next step ONLY if next_steps length is one (only one possible following step)
         # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
-        logging.info(archive.last_completed_step_id)
         last_completed_step = Step.objects.get(pk=archive.last_completed_step_id)
         next_steps = archive.get_next_steps()
 
