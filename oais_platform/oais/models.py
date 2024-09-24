@@ -220,13 +220,13 @@ class Archive(models.Model):
     def add_step_to_pipeline(self, step_name, lock=False):
         archive = self
 
+        if step_name not in Steps:
+            raise Exception("Invalid Step type")
+
         with transaction.atomic():
 
             if lock:
                 archive = Archive.objects.select_for_update().get(pk=self.pk)
-
-            if step_name not in Steps:
-                raise Exception("Invalid Step type")
 
             if not archive.pipeline_steps:
                 archive.pipeline_steps = []

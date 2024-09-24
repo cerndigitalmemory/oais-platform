@@ -71,6 +71,7 @@ from ..settings import (
     CELERY_RESULT_BACKEND,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
+    PIPELINE_SIZE_LIMIT,
 )
 from . import pipeline
 from .tasks import (
@@ -79,7 +80,6 @@ from .tasks import (
     create_step,
     execute_pipeline,
     process,
-    run_next_step,
     run_step,
 )
 
@@ -671,7 +671,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     input_data=current_step.output_data,
                 )
 
-                # get steps that are precedeed by the failed step
+                # get steps that are preceded by the failed step
                 next_steps = Step.objects.filter(
                     input_step__id=current_step.id
                 ).exclude(id=step.id)
@@ -723,7 +723,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         steps = request.data["pipeline_steps"]
 
-        if len(steps) > 10:
+        if len(steps) > PIPELINE_SIZE_LIMIT:
             raise BadRequest("Invalid pipeline size")
 
         if has_user_archive_edit_rights(pk, request.user):
@@ -1171,7 +1171,8 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             archive.set_archive_manifest(sip_json["audit"])
             archive.save()
 
-            run_next_step(archive)
+            # run next step
+            execute_pipeline(archive)
 
             return Response(
                 {
@@ -1361,7 +1362,8 @@ def upload_sip(request):
         archive.path_to_sip = sip_location
         archive.save()
 
-        run_next_step(archive)
+        # run next step
+        execute_pipeline(archive)
 
         return Response(
             {
