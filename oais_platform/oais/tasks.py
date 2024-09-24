@@ -93,12 +93,11 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-            if not step.name == 5:
-                step.set_output_data(retval)
+            step.set_output_data(retval)
 
             # If harvest, upload or announce is completed then add the audit of the sip.json to the
             #  archive.manifest field
-            if step.name in [1, 2, 8]:
+            if step.name in [Steps.SIP_UPLOAD, Steps.HARVEST, Steps.ANNOUNCE]:
                 sip_folder_name = archive.path_to_sip
                 sip_manifest_path = "data/meta/sip.json"
                 sip_location = os.path.join(sip_folder_name, sip_manifest_path)
@@ -127,23 +126,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             step.set_output_data(retval)
     else:
         step.set_status(Status.FAILED)
-
-
-def run_next_step(archive):
-    """
-    Given an Archive create the next step in the pipeline,
-    selecting the first possible one in the pipeline definition
-    """
-
-    next_steps = archive.get_next_steps()
-
-    if len(next_steps) == 0:
-        return
-
-    step_name = next_steps[0]
-
-    archive.add_step_to_pipeline(step_name, lock=True)
-    execute_pipeline(archive)
 
 
 def create_step(step_name, archive, input_step_id=None, input_data=None):
@@ -218,7 +200,12 @@ def execute_pipeline(archive, api_key=None):
         last_completed_step = Step.objects.get(pk=archive.last_completed_step_id)
         next_steps = archive.get_next_steps()
 
-        if len(next_steps) == 1 and last_completed_step.name in [1, 2, 3, 8]:
+        if len(next_steps) == 1 and last_completed_step.name in [
+            Steps.SIP_UPLOAD,
+            Steps.HARVEST,
+            Steps.VALIDATION,
+            Steps.ANNOUNCE,
+        ]:
             step = create_step(
                 step_name=next_steps[0],
                 archive=archive,
@@ -312,22 +299,34 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     status = fts.job_status(job_id)
 
     task_name = f"FTS job status for step: {step.id}"
-    periodic_task = PeriodicTask.objects.get(name=task_name)
 
     if status["job_state"] == "FINISHED":
-        logger.info("Looks like the transfer succeded, removing periodic task")
-
-        step.set_finish_date()
-        step.set_status(Status.COMPLETED)
-
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-        periodic_task.delete()
+        _handle_completed_fts_job(self, task_name, step, status, archive_id)
     elif status["job_state"] == "FAILED":
-        step.set_finish_date()
-        step.set_status(Status.FAILED)
+        _remove_periodic_task_on_failure(task_name, step, status)
 
+
+def _handle_completed_fts_job(self, task_name, step, status, archive_id):
+    try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
-        periodic_task.delete()
+    except Exception as e:
+        logger.warning(e)
+        step.set_status(Status.FAILED)
+        return
+
+    status["status"] = 0
+    finalize(
+        self=self,
+        status=states.SUCCESS,
+        retval=status,
+        task_id=None,
+        args=[archive_id, step.id],
+        kwargs=None,
+        einfo=None,
+    )
+
+    logger.info("Looks like the transfer succeded, removing periodic task")
+    periodic_task.delete()
 
 
 @shared_task(
@@ -720,102 +719,86 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
     am = _get_am_client()
 
     try:
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-
-        try:
-            am_status = am.get_unit_status(message["id"])
-            logging.info(f"Current unit status for {am_status}")
-        except requests.HTTPError as e:
-            logging.info(f"Error {e.response.status_code} for archivematica")
-            if e.response.status_code == 400:
-                is_failed = True
-                try:
-                    # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
-                    am.unit_uuid = message["id"]
-                    executed_jobs = am.get_jobs()
-                    logging.debug(
-                        f"Executed jobs for given id({message['id']}): {executed_jobs}"
-                    )
-                    if executed_jobs != 1 and len(executed_jobs) > 0:
-                        is_failed = False
-                        am_status = {
-                            "status": "PROCESSING",
-                            "microservice": "Waiting for archivematica to continue the processing",
-                        }
-                        logging.info(
-                            f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
-                        )
-                    else:
-                        logging.info(
-                            "No executed jobs for the given Archivematica package."
-                        )
-                except requests.HTTPError as e:
-                    logging.info(
-                        f"Error {e.response.status_code} for archivematica retreiving jobs"
-                    )
-
-                if is_failed and step.status == Status.WAITING:
-                    # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
-                    # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
-                    time_passed = (timezone.now() - step.start_date).total_seconds()
-                    logging.info(f"Waiting in queue, time passed: {time_passed}s")
-                    if time_passed > 60 * AM_WAITING_TIME_LIMIT:
-                        logging.info(
-                            f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
-                        )
-                    else:
-                        is_failed = False
-                        am_status = {
-                            "status": "WAITING",
-                            "microservice": "Waiting for archivematica to respond",
-                        }
-
-                # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
-                # This is usually because archivematica may not have access to the file or the transfer source is not correct.
-                if is_failed:
+        am_status = am.get_unit_status(message["id"])
+        logging.info(f"Current unit status for {am_status}")
+    except requests.HTTPError as e:
+        logging.info(f"Error {e.response.status_code} for archivematica")
+        if e.response.status_code == 400:
+            is_failed = True
+            try:
+                # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
+                am.unit_uuid = message["id"]
+                executed_jobs = am.get_jobs()
+                logging.debug(
+                    f"Executed jobs for given id({message['id']}): {executed_jobs}"
+                )
+                if executed_jobs != 1 and len(executed_jobs) > 0:
+                    is_failed = False
                     am_status = {
-                        "status": "FAILED",
-                        "microservice": "Archivematica delayed to respond.",
+                        "status": "PROCESSING",
+                        "microservice": "Waiting for archivematica to continue the processing",
                     }
-            else:
-                # If there is other type of error code then archivematica connection could not be established.
+                    logging.info(
+                        f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
+                    )
+                else:
+                    logging.info(
+                        "No executed jobs for the given Archivematica package."
+                    )
+            except requests.HTTPError as e:
+                logging.info(
+                    f"Error {e.response.status_code} for archivematica retreiving jobs"
+                )
+
+            if is_failed and step.status == Status.WAITING:
+                # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
+                # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
+                time_passed = (timezone.now() - step.start_date).total_seconds()
+                logging.info(f"Waiting in queue, time passed: {time_passed}s")
+                if time_passed > 60 * AM_WAITING_TIME_LIMIT:
+                    logging.info(
+                        f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
+                    )
+                else:
+                    is_failed = False
+                    am_status = {
+                        "status": "WAITING",
+                        "microservice": "Waiting for archivematica to respond",
+                    }
+
+            # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
+            # This is usually because archivematica may not have access to the file or the transfer source is not correct.
+            if is_failed:
                 am_status = {
                     "status": "FAILED",
-                    "microservice": "Error: Could not connect to archivematica",
+                    "microservice": "Archivematica delayed to respond.",
                 }
-        except Exception as e:
-            """
-            In any other case make task fail (Archivematica crashed or not responding)
-            """
-            am_status = {"status": "FAILED", "microservice": str(e)}
-
-        status = am_status["status"]
-        microservice = am_status["microservice"]
-
-        logger.info(f"Status for {step_id} is: {status}")
-
-        # Needs to validate both because just status=complete does not guarantee that aip is stored
-        if status == "COMPLETE" and microservice == "Remove the processing directory":
-            am_status, step_status = _handle_completed_am_package(
-                self, am, step, am_status, task_name, archive_id
-            )
-            step.set_status(step_status)
-
-        elif status == "FAILED":
-            step.set_status(Status.FAILED)
-            _remove_periodic_task_on_failure(periodic_task, step)
-
-        elif status == "PROCESSING" or status == "COMPLETE":
-            step.set_status(Status.IN_PROGRESS)
-
-        step.set_output_data(am_status)
-
+        else:
+            # If there is other type of error code then archivematica connection could not be established.
+            am_status = {
+                "status": "FAILED",
+                "microservice": "Error: Could not connect to archivematica",
+            }
     except Exception as e:
-        logger.warning(
-            f"Error while archiving {step.id}. Archivematica pipeline is full or settings configuration is wrong."
-        )
-        logger.warning(e)
-        step.set_status(Status.FAILED)
+        """
+        In any other case make task fail (Archivematica crashed or not responding)
+        """
+        am_status = {"status": "FAILED", "microservice": str(e)}
+
+    status = am_status["status"]
+    microservice = am_status["microservice"]
+
+    logger.info(f"Status for {step_id} is: {status}")
+
+    # Needs to validate both because just status=complete does not guarantee that aip is stored
+    if status == "COMPLETE" and microservice == "Remove the processing directory":
+        _handle_completed_am_package(self, task_name, am, step, am_status, archive_id)
+
+    elif status == "FAILED":
+        _remove_periodic_task_on_failure(task_name, step, am_status)
+
+    elif status == "PROCESSING" or status == "COMPLETE":
+        step.set_status(Status.IN_PROGRESS)
 
 
 def _get_am_client():
@@ -833,10 +816,17 @@ def _get_am_client():
     return am
 
 
-def _handle_completed_am_package(self, am, step, am_status, task_name, archive_id):
+def _handle_completed_am_package(self, task_name, am, step, am_status, archive_id):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
+
+    try:
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+    except Exception as e:
+        logger.warning(e)
+        step.set_status(Status.FAILED)
+        return
 
     uuid = am_status["uuid"]
     am.package_uuid = uuid
@@ -851,33 +841,39 @@ def _handle_completed_am_package(self, am, step, am_status, task_name, archive_i
             "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
         )
 
+        am_status["status"] = 0
+
         finalize(
             self=self,
             status=states.SUCCESS,
-            retval={"status": 0},
+            retval=am_status,
             task_id=None,
             args=[archive_id, step.id],
             kwargs=None,
             einfo=None,
         )
 
-        step.set_finish_date()
-        step_status = Status.COMPLETED
-
-        periodic_task = PeriodicTask.objects.get(name=task_name)
         periodic_task.delete()
     else:
         logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
         # If the path artifact is not complete try again
-        step_status = Status.IN_PROGRESS
-
-    return am_status, step_status
+        step.set_status(Status.IN_PROGRESS)
 
 
-def _remove_periodic_task_on_failure(periodic_task, step):
+def _remove_periodic_task_on_failure(task_name, step, output_data):
     """
     Set step as failed and remove the scheduled task
     """
+    step.set_status(Status.FAILED)
+
+    try:
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+    except Exception as e:
+        logger.warning(e)
+        return
+
+    step.set_output_data(output_data)
+
     logger.warning(f"Step {step.id} failed. Step status: {step.status}")
     periodic_task.delete()
 
