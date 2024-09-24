@@ -233,8 +233,10 @@ class Archive(models.Model):
 
             if len(archive.pipeline_steps) == 0:
                 input_step_id = archive.last_step.id
+                prev_step_name = archive.last_step.name
             else:
                 input_step_id = archive.pipeline_steps[-1]
+                prev_step_name = Step.objects.get(pk=input_step_id).name
 
             step = Step.objects.create(
                 archive=archive,
@@ -242,8 +244,6 @@ class Archive(models.Model):
                 input_step_id=input_step_id,
                 status=Status.WAITING,
             )
-
-            prev_step_name = Step.objects.get(pk=input_step_id).name
 
             if step_name not in pipeline.get_next_steps(prev_step_name):
                 raise Exception("Invalid Step order")
