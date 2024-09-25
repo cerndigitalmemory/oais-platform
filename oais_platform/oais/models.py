@@ -240,7 +240,7 @@ class Archive(models.Model):
                 status=Status.WAITING,
             )
 
-            if input_step_id and step_name not in archive.get_next_steps(
+            if input_step_id and step_name not in archive._get_next_steps(
                 prev_step_name
             ):
                 raise Exception("Invalid Step order")
@@ -259,9 +259,9 @@ class Archive(models.Model):
                 step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
 
             # Get possible next steps
-            return locked_archive.get_next_steps(step_name)
+            return locked_archive._get_next_steps(step_name)
 
-    def get_next_steps(self, step_name):
+    def _get_next_steps(self, step_name):
         next_steps = pipeline.get_next_steps(step_name)
 
         if (
