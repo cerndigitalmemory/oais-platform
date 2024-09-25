@@ -93,7 +93,8 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-            step.set_output_data(retval)
+            if step.name != Steps.ARCHIVE:
+                step.set_output_data(retval)
 
             # If harvest, upload or announce is completed then add the audit of the sip.json to the
             #  archive.manifest field
@@ -808,7 +809,11 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
         _remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
+        print("lold")
+        step.set_output_data(am_status)
         step.set_status(Status.IN_PROGRESS)
+    else:
+        step.set_output_data(am_status)
 
 
 def _get_am_client():
@@ -851,12 +856,12 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
             "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
         )
 
-        am_status["status"] = 0
-
+        step.set_output_data(am_status)
+    
         finalize(
             self=self,
             status=states.SUCCESS,
-            retval=am_status,
+            retval={"status": 0},
             task_id=None,
             args=[archive_id, step.id],
             kwargs=None,
@@ -868,6 +873,7 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
         # If the path artifact is not complete try again
         step.set_status(Status.IN_PROGRESS)
+        step.set_output_data(am_status)
 
 
 def _remove_periodic_task_on_failure(task_name, step, output_data):

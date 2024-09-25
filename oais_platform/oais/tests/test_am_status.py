@@ -18,6 +18,9 @@ class ArchivematicaStatusTests(APITestCase):
 
         self.step = Step.objects.create(archive=self.archive, name=5)
 
+        # simulate archivematica step started
+        self.step.set_start_date()
+
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")
