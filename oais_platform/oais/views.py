@@ -722,6 +722,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Creates the pipline of Steps for the passed Archive and executes it
         """
         steps = request.data["pipeline_steps"]
+        archive_id = request.data["archive"]["id"]
 
         if len(steps) > PIPELINE_SIZE_LIMIT:
             raise BadRequest("Invalid pipeline size")
@@ -737,16 +738,15 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             raise BadRequest("User has no rights to perform a step for this archive")
 
         with transaction.atomic():
-            archive = Archive.objects.select_for_update().get(
-                pk=request.data["archive"]["id"]
-            )
+            archive = Archive.objects.select_for_update().get(pk=archive_id)
+
             try:
                 for step_name in steps:
                     archive.add_step_to_pipeline(step_name)
             except Exception as e:
                 raise BadRequest(e)
 
-        step = execute_pipeline(archive, api_key=api_key)
+        step = execute_pipeline(archive_id, api_key=api_key)
 
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
@@ -1172,7 +1172,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             archive.save()
 
             # run next step
-            execute_pipeline(archive)
+            execute_pipeline(archive.id)
 
             return Response(
                 {
@@ -1363,7 +1363,7 @@ def upload_sip(request):
         archive.save()
 
         # run next step
-        execute_pipeline(archive)
+        execute_pipeline(archive.id)
 
         return Response(
             {

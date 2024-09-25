@@ -119,7 +119,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 archive.set_last_completed_step(step_id)
 
             # Execute the remainig steps in the pipeline
-            execute_pipeline(archive)
+            execute_pipeline(archive_id)
         else:
             # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)
@@ -188,29 +188,39 @@ def run_step(step, archive_id, api_key=None):
     return step
 
 
-def execute_pipeline(archive, api_key=None):
-    step_id = archive.consume_pipeline()
+def execute_pipeline(archive_id, api_key=None):
 
-    # No Steps to execute in the pipelime
-    if step_id is not None:
-        step = Step.objects.get(pk=step_id)
-    else:
-        # Automatically run next step ONLY if next_steps length is one (only one possible following step)
-        # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
-        last_completed_step = Step.objects.get(pk=archive.last_completed_step_id)
-        next_steps = archive.get_next_steps()
+    with transaction.atomic():
+        archive = Archive.objects.select_for_update().get(pk=archive_id)
 
-        if len(next_steps) == 1 and last_completed_step.name in [
-            Steps.SIP_UPLOAD,
-            Steps.HARVEST,
-            Steps.VALIDATION,
-            Steps.ANNOUNCE,
-        ]:
-            step = create_step(
-                step_name=next_steps[0],
-                archive=archive,
-                input_step_id=last_completed_step.id,
-            )
+        # Archive's pipeline is not running at the moment
+        if archive.last_completed_step == archive.last_step:
+            # Run first available step in the pipeline
+            if len(archive.pipeline_steps) != 0:
+                step_id = archive.consume_pipeline()
+                step = Step.objects.get(pk=step_id)
+            # No available step in the pipeline
+            else:
+                # Automatically run next step ONLY if next_steps length is one (only one possible following step)
+                # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
+                last_completed_step = Step.objects.get(
+                    pk=archive.last_completed_step_id
+                )
+                next_steps = archive.get_next_steps()
+
+                if len(next_steps) == 1 and last_completed_step.name in [
+                    Steps.SIP_UPLOAD,
+                    Steps.HARVEST,
+                    Steps.VALIDATION,
+                    Steps.ANNOUNCE,
+                ]:
+                    step = create_step(
+                        step_name=next_steps[0],
+                        archive=archive,
+                        input_step_id=last_completed_step.id,
+                    )
+                else:
+                    return None
         else:
             return None
 

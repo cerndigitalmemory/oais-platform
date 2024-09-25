@@ -203,18 +203,9 @@ class Archive(models.Model):
             self.state = ArchiveState.NONE
 
     def consume_pipeline(self):
-        step_id = None
+        step_id = self.pipeline_steps.pop(0)
+        self.save()
 
-        with transaction.atomic():
-            locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
-
-            if (
-                len(locked_archive.pipeline_steps) != 0
-                and locked_archive.last_completed_step.id == locked_archive.last_step.id
-            ):
-                step_id = locked_archive.pipeline_steps.pop(0)
-
-            locked_archive.save()
         return step_id
 
     def add_step_to_pipeline(self, step_name, lock=False):
@@ -232,8 +223,12 @@ class Archive(models.Model):
                 archive.pipeline_steps = []
 
             if len(archive.pipeline_steps) == 0:
-                input_step_id = archive.last_step.id
-                prev_step_name = archive.last_step.name
+                if archive.last_step:
+                    input_step_id = archive.last_step.id
+                    prev_step_name = archive.last_step.name
+                else:
+                    input_step_id = None
+                    prev_step_name = None
             else:
                 input_step_id = archive.pipeline_steps[-1]
                 prev_step_name = Step.objects.get(pk=input_step_id).name
@@ -245,7 +240,9 @@ class Archive(models.Model):
                 status=Status.WAITING,
             )
 
-            if step_name not in pipeline.get_next_steps(prev_step_name):
+            if input_step_id and step_name not in archive.get_next_steps(
+                prev_step_name
+            ):
                 raise Exception("Invalid Step order")
 
             archive.pipeline_steps.append(step.id)
@@ -262,17 +259,19 @@ class Archive(models.Model):
                 step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
 
             # Get possible next steps
-            next_steps = pipeline.get_next_steps(step_name)
+            return locked_archive.get_next_steps(step_name)
 
-            if (
-                not locked_archive.title
-                or locked_archive.title == ""
-                or locked_archive.title
-                == f"{locked_archive.source} - {locked_archive.recid}"
-            ) and locked_archive.state != ArchiveState.NONE:
-                next_steps.append(Steps.EXTRACT_TITLE)
+    def get_next_steps(self, step_name):
+        next_steps = pipeline.get_next_steps(step_name)
 
-            return next_steps
+        if (
+            not self.title
+            or self.title == ""
+            or self.title == f"{self.source} - {self.recid}"
+        ) and self.state != ArchiveState.NONE:
+            next_steps.append(Steps.EXTRACT_TITLE)
+
+        return next_steps
 
 
 class Step(models.Model):
