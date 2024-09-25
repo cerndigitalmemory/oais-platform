@@ -857,7 +857,7 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         )
 
         step.set_output_data(am_status)
-    
+
         finalize(
             self=self,
             status=states.SUCCESS,
