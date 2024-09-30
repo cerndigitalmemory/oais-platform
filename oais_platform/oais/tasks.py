@@ -809,9 +809,11 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
             )
         except Exception as e:
             logger.warning(
-                f"Error while archiving {step.id}. Archivematica settings configuration might be wrong: {str(e)}"
+                f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
             )
-            step.set_status(Status.FAILED)
+            _remove_periodic_task_on_failure(
+                task_name, step, {"status": "FAILED", "microservice": str(e)}
+            )
 
     elif status == "FAILED":
         _remove_periodic_task_on_failure(task_name, step, am_status)
