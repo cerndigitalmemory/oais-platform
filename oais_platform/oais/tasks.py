@@ -803,13 +803,20 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
-        _handle_completed_am_package(self, task_name, am, step, am_status, archive_id)
+        try:
+            _handle_completed_am_package(
+                self, task_name, am, step, am_status, archive_id
+            )
+        except Exception as e:
+            logger.warning(
+                f"Error while archiving {step.id}. Archivematica settings configuration might be wrong: {str(e)}"
+            )
+            step.set_status(Status.FAILED)
 
     elif status == "FAILED":
         _remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
-        print("lold")
         step.set_output_data(am_status)
         step.set_status(Status.IN_PROGRESS)
     else:
