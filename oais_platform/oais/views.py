@@ -71,13 +71,16 @@ from ..settings import (
     CELERY_RESULT_BACKEND,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
+    PIPELINE_SIZE_LIMIT,
 )
+from . import pipeline
 from .tasks import (
     announce_sip,
     batch_announce_task,
     create_step,
+    execute_pipeline,
     process,
-    run_next_step,
+    run_step,
 )
 
 
@@ -404,10 +407,22 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns all Steps of an identified Archive
         """
         archive = self.get_object()
-        steps = archive.steps.all().order_by("start_date")
+        steps = archive.steps.all().order_by("start_date", "create_date")
 
         serializer = StepSerializer(steps, many=True)
+
         return Response(serializer.data)
+
+    @action(detail=True, url_path="next-steps", url_name="next-steps")
+    def archive_next_steps(self, request, pk=None):
+        """
+        Returns the type of possible next Steps of an identified Archive
+        """
+
+        archive = self.get_object()
+        next_steps = archive.get_next_steps()
+
+        return Response(next_steps)
 
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
@@ -503,7 +518,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             ).key
         except Exception:
             api_key = None
-        process.delay(step.archive.id, step.id, api_key)
+
+        run_step(step, archive.id, api_key=api_key)
 
         serializer = ArchiveSerializer(
             archive,
@@ -545,7 +561,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 ).key
             except Exception:
                 api_key = None
-            process.delay(step.archive.id, step.id, api_key)
+            run_step(step, archive.id, api_key=api_key)
 
         serializer = CollectionSerializer(
             job_tag,
@@ -617,35 +633,122 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.delete()
         return Response()
 
-    @action(detail=True, methods=["POST"], url_path="next-step", url_name="next-step")
-    def archive_next_step(self, request, pk=None):
+    @action(detail=True, methods=["POST"], url_path="run-step", url_name="run-step")
+    def archive_run_step(self, request, pk=None):
         """
-        Creates the next Step of the passed Archive
+        Executes the passed Step of an Archive
         """
-        next_step = request.data["next_step"]
+        step_id = request.data["step_id"]
         archive = request.data["archive"]
 
-        if int(next_step) in Steps:
-            if has_user_archive_edit_rights(pk, request.user):
-                try:
-                    api_key = ApiKey.objects.get(
-                        source__name=archive["source"], user=request.user
-                    ).key
-                except Exception:
-                    api_key = None
-
-                next_step = create_step(
-                    next_step,
-                    pk,
-                    archive["last_completed_step"],
-                    api_key,
-                )
-            else:
-                raise Exception("User has no rights to perform a step for this archive")
+        if has_user_archive_edit_rights(pk, request.user):
+            try:
+                api_key = ApiKey.objects.get(
+                    source__name=archive["source"], user=request.user
+                ).key
+            except Exception:
+                api_key = None
         else:
-            raise Exception("Wrong Step input")
+            raise BadRequest("User has no rights to perform a step for this archive")
 
-        serializer = StepSerializer(next_step, many=False)
+        with transaction.atomic():
+            archive = Archive.objects.select_for_update().get(pk=archive["id"])
+            try:
+                current_step = Step.objects.select_for_update().get(pk=step_id)
+            except:
+                raise BadRequest("Invalid Step ID")
+
+            # rerun last run failed step
+            if (
+                current_step.status == Status.FAILED
+                and archive.last_step.id == current_step.id
+            ):
+                # create new step based on the failed step
+                step = create_step(
+                    step_name=current_step.name,
+                    archive=archive,
+                    input_step_id=current_step.id,
+                    input_data=current_step.output_data,
+                )
+
+                # get steps that are preceded by the failed step
+                next_steps = Step.objects.filter(
+                    input_step__id=current_step.id
+                ).exclude(id=step.id)
+
+                # update successors of the failed steps
+                for next_step in next_steps:
+                    next_step.set_input_step(step)
+
+            # run given step if it's preceded by a failed step and it's the first runnable step in the pipeline
+            elif current_step.status == Status.WAITING:
+                with transaction.atomic():
+                    input_step = Step.objects.select_for_update().get(
+                        pk=current_step.input_step.id
+                    )
+                    if (
+                        input_step.status == Status.FAILED
+                        and archive.last_step.id == input_step.id
+                    ):
+                        if (
+                            len(archive.pipeline_steps) > 0
+                            and archive.pipeline_steps[0] == current_step.id
+                        ):
+                            # remove step from pipeline
+                            archive.pipeline_steps.pop(0)
+                            archive.save()
+
+                            step = current_step
+                        else:
+                            raise BadRequest(
+                                "Can't run Step in the middle of the pipeline"
+                            )
+                    else:
+                        raise BadRequest(
+                            "Can't run Step while Archive's pipeline is still executing"
+                        )
+            else:
+                raise BadRequest("Can't run given Step")
+
+        if step:
+            step = run_step(step, archive.id, api_key=api_key)
+
+        serializer = StepSerializer(step, many=False)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
+    def archive_run_pipeline(self, request, pk=None):
+        """
+        Creates the pipline of Steps for the passed Archive and executes it
+        """
+        steps = request.data["pipeline_steps"]
+        archive_id = request.data["archive"]["id"]
+
+        if len(steps) > PIPELINE_SIZE_LIMIT:
+            raise BadRequest("Invalid pipeline size")
+
+        if has_user_archive_edit_rights(pk, request.user):
+            try:
+                api_key = ApiKey.objects.get(
+                    source__name=request.data["archive"]["source"], user=request.user
+                ).key
+            except Exception:
+                api_key = None
+        else:
+            raise BadRequest("User has no rights to perform a step for this archive")
+
+        with transaction.atomic():
+            archive = Archive.objects.select_for_update().get(pk=archive_id)
+
+            try:
+                for step_name in steps:
+                    archive.add_step_to_pipeline(step_name)
+            except Exception as e:
+                raise BadRequest(e)
+
+        step = execute_pipeline(archive_id, api_key=api_key)
+
+        serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
 
     def get_staging_area(self, request, pk=None):
@@ -785,6 +888,15 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         return self.approve_or_reject(
             request, "oais.can_reject_archive", approved=False
         )
+
+    @action(
+        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
+    )
+    def get_steps_order_constraints(self, request):
+        """
+        Returns all Step order constraints
+        """
+        return Response(pipeline.get_next_steps_constraints())
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1023,7 +1135,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({"status": 0, "msg": "SIP created successfully"})
 
-    @action(detail=True, methods=["POST"], url_path="archive", url_name="archvive")
+    @action(detail=True, methods=["POST"], url_path="archive", url_name="archive")
     def create_archive(self, request, pk=None):
         """
         Creates an Archive given the path to an SIP. \n
@@ -1044,18 +1156,23 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             step = Step.objects.create(
                 archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
             )
-            archive.set_last_completed_step(step)
+            step.set_start_date()
 
             # Uploading completed
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
 
+            # Set Archive's last step info
+            archive.set_last_step(step.id)
+            archive.set_last_completed_step(step.id)
+
             # Save path and change status of the archive
             archive.path_to_sip = uj.sip_dir
             archive.set_archive_manifest(sip_json["audit"])
-            archive.update_next_steps(step.name)
             archive.save()
-            run_next_step(archive.id, step.id)
+
+            # run next step
+            execute_pipeline(archive.id)
 
             return Response(
                 {
@@ -1231,19 +1348,22 @@ def upload_sip(request):
         step = Step.objects.create(
             archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
-
-        archive.set_last_completed_step(step)
+        step.set_start_date()
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
 
+        # Set Archive's last step info
+        archive.set_last_step(step.id)
+        archive.set_last_completed_step(step.id)
+
         # Save path and change status of the archive
         archive.path_to_sip = sip_location
-        archive.update_next_steps(step.name)
         archive.save()
 
-        run_next_step(archive.id, step.id)
+        # run next step
+        execute_pipeline(archive.id)
 
         return Response(
             {

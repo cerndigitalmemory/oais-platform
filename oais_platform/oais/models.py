@@ -4,7 +4,7 @@ from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -110,7 +110,7 @@ class Archive(models.Model):
         related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
-    next_steps = models.JSONField(max_length=50, default=list)
+    pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
     title = models.CharField(max_length=255, default="")
@@ -128,42 +128,19 @@ class Archive(models.Model):
             ("can_unstage", "Can unstage a record and start the pipeline"),
         )
 
-    def set_last_completed_step(self, step):
+    def set_last_completed_step(self, step_id):
+        """
+        Set last_completed_step to the given Step
+        """
+        self.last_completed_step_id = step_id
+        self.save()
+
+    def set_last_step(self, step_id):
         """
         Set last_step to the given Step
         """
-        self.last_completed_step = step
-        self.last_step = step
+        self.last_step_id = step_id
         self.save()
-
-    def set_last_step(self, step):
-        """
-        Set last_step to the given Step
-        """
-        self.last_step = step
-        self.save()
-
-    def update_next_steps(self, current_step=None):
-        """
-        Set next_fields according to the pipeline definition
-        """
-        if current_step:
-            self.next_steps = pipeline.get_next_steps(current_step)
-        else:
-            self.next_steps = pipeline.get_next_steps(self.last_completed_step.name)
-        if (
-            not self.title
-            or self.title == ""
-            or self.title == f"{self.source} - {self.recid}"
-        ) and self.state != ArchiveState.NONE:
-            if not self.next_steps:
-                self.next_steps = [10]
-            else:
-                self.next_steps.append(10)
-
-        self.save()
-
-        return self.next_steps
 
     def set_archive_manifest(self, manifest):
         """
@@ -211,9 +188,7 @@ class Archive(models.Model):
 
     def set_state(self):
         try:
-            steps = self.steps.all().order_by("-start_date")
-            if len(steps) > 0:
-                self.last_step = steps[0]
+            steps = self.steps.all().order_by("-start_date", "-create_date")
             state = ArchiveState.NONE
             for step in steps:
                 if step.status == Status.COMPLETED:
@@ -227,6 +202,77 @@ class Archive(models.Model):
         except Exception:
             self.state = ArchiveState.NONE
 
+    def consume_pipeline(self):
+        step_id = self.pipeline_steps.pop(0)
+        self.save()
+
+        return step_id
+
+    def add_step_to_pipeline(self, step_name, lock=False):
+        archive = self
+
+        if step_name not in Steps:
+            raise Exception("Invalid Step type")
+
+        with transaction.atomic():
+
+            if lock:
+                archive = Archive.objects.select_for_update().get(pk=self.pk)
+
+            if not archive.pipeline_steps:
+                archive.pipeline_steps = []
+
+            if len(archive.pipeline_steps) == 0:
+                if archive.last_step:
+                    input_step_id = archive.last_step.id
+                    prev_step_name = archive.last_step.name
+                else:
+                    input_step_id = None
+                    prev_step_name = None
+            else:
+                input_step_id = archive.pipeline_steps[-1]
+                prev_step_name = Step.objects.get(pk=input_step_id).name
+
+            step = Step.objects.create(
+                archive=archive,
+                name=step_name,
+                input_step_id=input_step_id,
+                status=Status.WAITING,
+            )
+
+            if input_step_id and step_name not in archive._get_next_steps(
+                prev_step_name
+            ):
+                raise Exception("Invalid Step order")
+
+            archive.pipeline_steps.append(step.id)
+            archive.save()
+
+    def get_next_steps(self):
+        with transaction.atomic():
+            locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
+
+            # Determine the last step's type
+            if len(locked_archive.pipeline_steps) == 0:
+                step_name = locked_archive.last_step.name
+            else:
+                step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
+
+            # Get possible next steps
+            return locked_archive._get_next_steps(step_name)
+
+    def _get_next_steps(self, step_name):
+        next_steps = pipeline.get_next_steps(step_name)
+
+        if (
+            not self.title
+            or self.title == ""
+            or self.title == f"{self.source} - {self.recid}"
+        ) and self.state != ArchiveState.NONE:
+            next_steps.append(Steps.EXTRACT_TITLE)
+
+        return next_steps
+
 
 class Step(models.Model):
     """
@@ -237,7 +283,8 @@ class Step(models.Model):
     # The archival process this step is in
     archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
     name = models.IntegerField(choices=Steps.choices)
-    start_date = models.DateTimeField(default=timezone.now)
+    create_date = models.DateTimeField(default=timezone.now)
+    start_date = models.DateTimeField(default=None, null=True)
     finish_date = models.DateTimeField(default=None, null=True)
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
 
@@ -277,6 +324,10 @@ class Step(models.Model):
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
+        self.save()
+
+    def set_start_date(self):
+        self.start_date = timezone.now()
         self.save()
 
     def save(self, *args, **kwargs):
