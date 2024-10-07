@@ -254,6 +254,8 @@ class Archive(models.Model):
 
             # Determine the last step's type
             if len(locked_archive.pipeline_steps) == 0:
+                if not locked_archive.last_step:
+                    return []
                 step_name = locked_archive.last_step.name
             else:
                 step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
