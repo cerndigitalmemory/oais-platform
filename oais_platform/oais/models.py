@@ -264,7 +264,7 @@ class Archive(models.Model):
             return locked_archive._get_next_steps(step_name)
 
     def _get_next_steps(self, step_name):
-        next_steps = pipeline.get_next_steps(step_name)
+        next_steps = pipeline.get_next_steps(step_name).copy()  # shallow
 
         if (
             not self.title
