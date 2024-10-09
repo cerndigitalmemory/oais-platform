@@ -783,6 +783,36 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             return Response({"status": 1, "errormsg": e})
 
+    @action(detail=False, methods=["POST"], url_path="actions", url_name="actions")
+    def archive_action_intersection(self, request, pk=None):
+        """
+        Get common possible actions for the archives
+        """
+        archives = request.data["archives"]
+        result = {}
+        if len(archives) > 0:
+            first_state = archives[0]["state"]
+            state_intersection = True
+            next_steps_intersection = None
+
+            for archive in archives:
+                if state_intersection and archive["state"] != first_state:
+                    state_intersection = False
+
+                next_step = Archive.objects.get(pk=archive["id"]).get_next_steps()
+                if not next_steps_intersection:
+                    next_steps_intersection = next_step
+                else:
+                    next_steps_intersection = set(next_steps_intersection).intersection(
+                        next_step
+                    )
+                    if len(next_steps_intersection) == 0 and not state_intersection:
+                        break
+            result["state_intersection"] = state_intersection
+            result["next_steps_intersection"] = sorted(next_steps_intersection)
+
+        return Response(result)
+
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
     """
