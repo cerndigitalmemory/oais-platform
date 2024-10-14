@@ -638,7 +638,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Creates the pipline of Steps for the passed Archive and executes it
         """
-        run_type = request.data["run_type"]
+        run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
         archive_id = request.data["archive"]["id"]
 
