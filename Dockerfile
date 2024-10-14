@@ -57,17 +57,18 @@ RUN pip install -r /requirements.txt
 RUN apk add --no-cache wget tar curl rpm
 RUN mkdir -p /etc/grid-security/certificates
 
-ENV REPOSITORY="https://repository.egi.eu/sw/production/cas/1/current/RPMS/"
-ENV CERTIFICATES="Root GridCA"
+ENV RPM_BASE_URL=https://repository.egi.eu/sw/production/cas/1/current/RPMS/
 
-RUN for CERTIFICATE in $CERTIFICATES; do \
-    PACKAGE=$(curl -s $REPOSITORY | grep -oP 'href="\K'"ca_CERN-$CERTIFICATE"'[^"]+\.rpm' | sort -V | tail -n 1); \
-      if [ -n "$PACKAGE" ]; then \
-          curl -o "/etc/grid-security/certificates/$PACKAGE" "$REPOSITORY/$PACKAGE"; \
-          rpm -i "/etc/grid-security/certificates/$PACKAGE"; \
-          rm -rf "/etc/grid-security/certificates/$PACKAGE"; \
+# Install the latest RPM for both Root and GridCA
+RUN for package in Root GridCA; do \
+      LATEST_RPM=$(curl -s ${RPM_BASE_URL} | grep "ca_CERN-${package}-" | grep ".noarch.rpm" | sort -V | tail -n 1) && \
+      if [ -z "$LATEST_RPM" ]; then \
+        echo "Error: Could not determine the latest RPM version for ${package}." && exit 1; \
       else \
-          echo "RPM package for ca_CERN-$CERTIFICATE was not found." && exit 1; \
+        echo "Latest RPM version for ${package} found: $LATEST_RPM"; \
+        curl -o /etc/grid-security/certificates/${LATEST_RPM} ${RPM_BASE_URL}${LATEST_RPM} && \
+        rpm -i /etc/grid-security/certificates/${LATEST_RPM} && \
+        rm -rf /etc/grid-security/certificates/${LATEST_RPM}; \
       fi; \
     done
 
