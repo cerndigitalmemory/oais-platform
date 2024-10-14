@@ -59,9 +59,9 @@ RUN mkdir -p /etc/grid-security/certificates
 
 ENV RPM_BASE_URL=https://repository.egi.eu/sw/production/cas/1/current/RPMS/
 
-# Install the latest RPM for both Root and GridCA
+# Install the latest RPM for both RootCA and GridCA
 RUN for package in Root GridCA; do \
-      LATEST_RPM=$(curl -s ${RPM_BASE_URL} | grep "ca_CERN-${package}-" | grep ".noarch.rpm" | sort -V | tail -n 1) && \
+      LATEST_RPM=$(curl -s ${RPM_BASE_URL} | grep -o "href=\"ca_CERN-${package}-[^\"]*\.noarch\.rpm\"" | sed 's/href="//' | sed 's/"//g' | sort -V | tail -n 1) && \
       if [ -z "$LATEST_RPM" ]; then \
         echo "Error: Could not determine the latest RPM version for ${package}." && exit 1; \
       else \
