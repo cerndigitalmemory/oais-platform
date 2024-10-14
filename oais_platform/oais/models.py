@@ -233,17 +233,17 @@ class Archive(models.Model):
                 input_step_id = archive.pipeline_steps[-1]
                 prev_step_name = Step.objects.get(pk=input_step_id).name
 
+            if input_step_id and step_name not in archive._get_next_steps(
+                prev_step_name
+            ):
+                raise Exception("Invalid Step order")
+
             step = Step.objects.create(
                 archive=archive,
                 name=step_name,
                 input_step_id=input_step_id,
                 status=Status.WAITING,
             )
-
-            if input_step_id and step_name not in archive._get_next_steps(
-                prev_step_name
-            ):
-                raise Exception("Invalid Step order")
 
             archive.pipeline_steps.append(step.id)
             archive.save()

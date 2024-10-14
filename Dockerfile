@@ -57,13 +57,19 @@ RUN pip install -r /requirements.txt
 RUN apk add --no-cache wget tar curl rpm
 RUN mkdir -p /etc/grid-security/certificates
 
-RUN curl -o /etc/grid-security/certificates/root.rpm https://repository.egi.eu/sw/production/cas/1/current/RPMS/ca_CERN-Root-2-1.131-1.noarch.rpm
-RUN rpm -i /etc/grid-security/certificates/root.rpm
-RUN rm -rf /etc/grid-security/certificates/root.rpm
+ENV REPOSITORY="https://repository.egi.eu/sw/production/cas/1/current/RPMS/"
+ENV CERTIFICATES="Root GridCA"
 
-RUN curl -o /etc/grid-security/certificates/grid.rpm https://repository.egi.eu/sw/production/cas/1/current/RPMS/ca_CERN-GridCA-1.131-1.noarch.rpm
-RUN rpm -i /etc/grid-security/certificates/grid.rpm
-RUN rm -rf /etc/grid-security/certificates/grid.rpm
+RUN for CERTIFICATE in $CERTIFICATES; do \
+    PACKAGE=$(curl -s $REPOSITORY | grep -oP 'href="\K'"ca_CERN-$CERTIFICATE"'[^"]+\.rpm' | sort -V | tail -n 1); \
+      if [ -n "$PACKAGE" ]; then \
+          curl -o "/etc/grid-security/certificates/$PACKAGE" "$REPOSITORY/$PACKAGE"; \
+          rpm -i "/etc/grid-security/certificates/$PACKAGE"; \
+          rm -rf "/etc/grid-security/certificates/$PACKAGE"; \
+      else \
+          echo "RPM package for ca_CERN-$CERTIFICATE was not found." && exit 1; \
+      fi; \
+    done
 
 WORKDIR /
 

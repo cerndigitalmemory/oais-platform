@@ -633,99 +633,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.delete()
         return Response()
 
-    @action(detail=True, methods=["POST"], url_path="run-step", url_name="run-step")
-    def archive_run_step(self, request, pk=None):
-        """
-        Executes the passed Step of an Archive
-        """
-        step_id = request.data["step_id"]
-        archive = request.data["archive"]
-
-        if has_user_archive_edit_rights(pk, request.user):
-            try:
-                api_key = ApiKey.objects.get(
-                    source__name=archive["source"], user=request.user
-                ).key
-            except Exception:
-                api_key = None
-        else:
-            raise BadRequest("User has no rights to perform a step for this archive")
-
-        with transaction.atomic():
-            archive = Archive.objects.select_for_update().get(pk=archive["id"])
-            try:
-                current_step = Step.objects.select_for_update().get(pk=step_id)
-            except:
-                raise BadRequest("Invalid Step ID")
-
-            # rerun last run failed step
-            if (
-                current_step.status == Status.FAILED
-                and archive.last_step.id == current_step.id
-            ):
-                # create new step based on the failed step
-                step = create_step(
-                    step_name=current_step.name,
-                    archive=archive,
-                    input_step_id=current_step.id,
-                    input_data=current_step.output_data,
-                )
-
-                # get steps that are preceded by the failed step
-                next_steps = Step.objects.filter(
-                    input_step__id=current_step.id
-                ).exclude(id=step.id)
-
-                # update successors of the failed steps
-                for next_step in next_steps:
-                    next_step.set_input_step(step)
-
-            # run given step if it's preceded by a failed step and it's the first runnable step in the pipeline
-            elif current_step.status == Status.WAITING:
-                with transaction.atomic():
-                    input_step = Step.objects.select_for_update().get(
-                        pk=current_step.input_step.id
-                    )
-                    if (
-                        input_step.status == Status.FAILED
-                        and archive.last_step.id == input_step.id
-                    ):
-                        if (
-                            len(archive.pipeline_steps) > 0
-                            and archive.pipeline_steps[0] == current_step.id
-                        ):
-                            # remove step from pipeline
-                            archive.pipeline_steps.pop(0)
-                            archive.save()
-
-                            step = current_step
-                        else:
-                            raise BadRequest(
-                                "Can't run Step in the middle of the pipeline"
-                            )
-                    else:
-                        raise BadRequest(
-                            "Can't run Step while Archive's pipeline is still executing"
-                        )
-            else:
-                raise BadRequest("Can't run given Step")
-
-        if step:
-            step = run_step(step, archive.id, api_key=api_key)
-
-        serializer = StepSerializer(step, many=False)
-        return Response(serializer.data)
-
     @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
     def archive_run_pipeline(self, request, pk=None):
         """
         Creates the pipline of Steps for the passed Archive and executes it
         """
-        steps = request.data["pipeline_steps"]
+        run_type = request.data["run_type"]
+        steps = request.data.get("pipeline_steps")
         archive_id = request.data["archive"]["id"]
-
-        if len(steps) > PIPELINE_SIZE_LIMIT:
-            raise BadRequest("Invalid pipeline size")
 
         if has_user_archive_edit_rights(pk, request.user):
             try:
@@ -739,15 +654,72 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(pk=archive_id)
+            force_continue = False
 
-            try:
-                for step_name in steps:
-                    archive.add_step_to_pipeline(step_name)
-            except Exception as e:
-                raise BadRequest(e)
+            match run_type:
+                case "run":
+                    if steps is not None and (
+                        len(steps) > PIPELINE_SIZE_LIMIT or len(steps) == 0
+                    ):
+                        raise BadRequest("Invalid pipeline size")
+                    try:
+                        for step_name in steps:
+                            archive.add_step_to_pipeline(step_name)
+                    except Exception as e:
+                        raise BadRequest(e)
+                case "retry":
+                    last_step = Step.objects.select_for_update().get(
+                        pk=archive.last_step.id
+                    )
+                    if last_step and last_step.status != Status.FAILED:
+                        raise BadRequest(
+                            "Retry operation not permitted, last step is not failed."
+                        )
+                    step = create_step(
+                        step_name=last_step.name,
+                        archive=archive,
+                        input_step_id=last_step.id,
+                        input_data=last_step.output_data,
+                    )
 
-        step = execute_pipeline(archive_id, api_key=api_key)
+                    # get steps that are preceded by the failed step
+                    next_steps = Step.objects.filter(
+                        input_step__id=last_step.id
+                    ).exclude(id=step.id)
 
+                    # update successors of the failed steps
+                    for next_step in next_steps:
+                        next_step.set_input_step(step)
+                    archive.pipeline_steps.insert(0, step.id)
+                    archive.save()
+                case "continue":
+                    force_continue = True
+                    last_step = Step.objects.select_for_update().get(
+                        pk=archive.last_step.id
+                    )
+                    if last_step and last_step.status != Status.FAILED:
+                        raise BadRequest(
+                            "Continue operation not permitted, last step is not failed."
+                        )
+                    if len(archive.pipeline_steps) == 0:
+                        raise BadRequest(
+                            "Continue operation not permitted, the pipeline is empty."
+                        )
+                    continue_step = Step.objects.select_for_update().get(
+                        pk=archive.pipeline_steps[0]
+                    )
+                    if continue_step.status != Status.WAITING:
+                        raise BadRequest(
+                            "Continue operation not permitted, next step in pipeline is not in status WAITING."
+                        )
+                case _:
+                    raise BadRequest(
+                        "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
+                    )
+
+        step = execute_pipeline(
+            archive_id, api_key=api_key, force_continue=force_continue
+        )
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
 
@@ -794,22 +766,42 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             first_state = archives[0]["state"]
             state_intersection = True
             next_steps_intersection = None
+            all_last_step_failed = True
+            can_continue = True
 
-            for archive in archives:
-                if state_intersection and archive["state"] != first_state:
-                    state_intersection = False
+            with transaction.atomic():
+                for archive in archives:
+                    archive = Archive.objects.select_for_update().get(pk=archive["id"])
 
-                next_step = Archive.objects.get(pk=archive["id"]).get_next_steps()
-                if not next_steps_intersection:
-                    next_steps_intersection = next_step
-                else:
-                    next_steps_intersection = set(next_steps_intersection).intersection(
-                        next_step
-                    )
-                    if len(next_steps_intersection) == 0 and not state_intersection:
-                        break
-            result["state_intersection"] = state_intersection
-            result["next_steps_intersection"] = sorted(next_steps_intersection)
+                    if state_intersection and archive.state != first_state:
+                        state_intersection = False
+
+                    if (
+                        all_last_step_failed
+                        and archive.last_step.status != Status.FAILED
+                    ):
+                        all_last_step_failed = False
+
+                    if len(archive.pipeline_steps) == 0:
+                        can_continue = False
+
+                    next_step = archive.get_next_steps()
+                    if not next_steps_intersection:
+                        next_steps_intersection = next_step
+                    else:
+                        next_steps_intersection = set(
+                            next_steps_intersection
+                        ).intersection(next_step)
+                        if (
+                            len(next_steps_intersection) == 0
+                            and not state_intersection
+                            and not all_last_step_failed
+                        ):
+                            break
+                result["state_intersection"] = state_intersection
+                result["next_steps_intersection"] = sorted(next_steps_intersection)
+                result["all_last_step_failed"] = all_last_step_failed
+                result["can_continue"] = all_last_step_failed and can_continue
 
         return Response(result)
 

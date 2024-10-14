@@ -189,13 +189,13 @@ def run_step(step, archive_id, api_key=None):
     return step
 
 
-def execute_pipeline(archive_id, api_key=None):
+def execute_pipeline(archive_id, api_key=None, force_continue=False):
 
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
 
         # Archive's pipeline is not running at the moment
-        if archive.last_completed_step == archive.last_step:
+        if archive.last_completed_step == archive.last_step or force_continue:
             # Run first available step in the pipeline
             if len(archive.pipeline_steps) != 0:
                 step_id = archive.consume_pipeline()
