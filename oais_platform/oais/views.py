@@ -668,6 +668,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     except Exception as e:
                         raise BadRequest(e)
                 case "retry":
+                    force_continue = True
                     last_step = Step.objects.select_for_update().get(
                         pk=archive.last_step.id
                     )
