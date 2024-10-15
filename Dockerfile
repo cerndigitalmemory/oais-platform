@@ -54,8 +54,7 @@ COPY ./requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
 
 # Add CA
-RUN echo "https://linuxsoft.cern.ch/mirror/repository.egi.eu/sw/production/cas/1/current/" >> /etc/apk/repositories
-RUN apk add ca_CERN-Root-2 && apk cache clean
+RUN apk add ca_CERN-Root-2 --repository=https://linuxsoft.cern.ch/mirror/repository.egi.eu/sw/production/cas/1/current/ && apk cache clean
 
 WORKDIR /
 
