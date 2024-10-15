@@ -54,23 +54,8 @@ COPY ./requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
 
 # Add CA
-RUN apk add --no-cache wget tar curl rpm
-RUN mkdir -p /etc/grid-security/certificates
-
-ENV RPM_BASE_URL=https://repository.egi.eu/sw/production/cas/1/current/RPMS/
-
-# Install the latest RPM for both RootCA and GridCA
-RUN for package in Root GridCA; do \
-      LATEST_RPM=$(curl -s ${RPM_BASE_URL} | grep -o "href=\"ca_CERN-${package}-[^\"]*\.noarch\.rpm\"" | sed 's/href="//' | sed 's/"//g' | sort -V | tail -n 1) && \
-      if [ -z "$LATEST_RPM" ]; then \
-        echo "Error: Could not determine the latest RPM version for ${package}." && exit 1; \
-      else \
-        echo "Latest RPM version for ${package} found: $LATEST_RPM"; \
-        curl -o /etc/grid-security/certificates/${LATEST_RPM} ${RPM_BASE_URL}${LATEST_RPM} && \
-        rpm -i /etc/grid-security/certificates/${LATEST_RPM} && \
-        rm -rf /etc/grid-security/certificates/${LATEST_RPM}; \
-      fi; \
-    done
+RUN echo "https://linuxsoft.cern.ch/mirror/repository.egi.eu/sw/production/cas/1/current/" >> /etc/apk/repositories
+RUN apk add ca_CERN-Root-2 && apk cache clean
 
 WORKDIR /
 

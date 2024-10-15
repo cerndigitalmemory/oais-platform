@@ -62,6 +62,7 @@ class Steps(models.IntegerChoices):
     ANNOUNCE = 8
     PUSH_SIP_TO_CTA = 9
     EXTRACT_TITLE = 10
+    NOTIFY_SOURCE = 11
 
 
 class Status(models.IntegerChoices):
@@ -110,6 +111,7 @@ class Archive(models.Model):
         related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
+    path_to_aip = models.CharField(max_length=250, null=True)
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
@@ -272,6 +274,10 @@ class Archive(models.Model):
             or self.title == f"{self.source} - {self.recid}"
         ) and self.state != ArchiveState.NONE:
             next_steps.append(Steps.EXTRACT_TITLE)
+
+        source = Source.objects.all().filter(name=self.source).first()
+        if source and source.notification_endpoint and self.state == ArchiveState.AIP:
+            next_steps.append(Steps.NOTIFY_SOURCE)
 
         return next_steps
 
@@ -474,6 +480,7 @@ class Source(models.Model):
     has_public_records = models.BooleanField(default=True)
     how_to_get_key = models.TextField(max_length=500, null=True)
     description = models.TextField(max_length=500, null=True)
+    notification_endpoint = models.CharField(max_length=250, null=True)
 
     class Meta:
         ordering = ("id",)

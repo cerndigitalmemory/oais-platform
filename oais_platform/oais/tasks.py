@@ -18,7 +18,15 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
+from oais_platform.oais.models import (
+    Archive,
+    ArchiveState,
+    Collection,
+    Source,
+    Status,
+    Step,
+    Steps,
+)
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
@@ -83,7 +91,7 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     # TODO: Check if this should be removed
     step.set_task(self.request.id)
 
-    # If the Celery task succeded
+    # If the Celery task succeeded
     if status == states.SUCCESS:
         # Even if the status is SUCCESS, the task may have failed
         # (e.g. without throwing an exception) so here we check
@@ -172,24 +180,27 @@ def run_step(step, archive_id, api_key=None):
         archive.set_last_step(step.id)
 
     if step.name == Steps.HARVEST:
-        process.delay(step.archive.id, step.id, api_key, input_data=step.input_data)
+        process.delay(archive_id, step.id, api_key, input_data=step.input_data)
     elif step.name == Steps.VALIDATION:
-        validate.delay(step.archive.id, step.id, step.input_data)
+        validate.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.CHECKSUM:
-        checksum.delay(step.archive.id, step.id, step.input_data)
+        checksum.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.ARCHIVE:
-        archivematica.delay(step.archive.id, step.id, step.input_data)
+        archivematica.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.INVENIO_RDM_PUSH:
-        invenio.delay(step.archive.id, step.id, step.input_data)
+        invenio.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.PUSH_SIP_TO_CTA:
-        push_sip_to_cta.delay(step.archive.id, step.id, step.input_data)
+        push_sip_to_cta.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.EXTRACT_TITLE:
-        extract_title.delay(archive.id, step.id)
+        extract_title.delay(archive_id, step.id)
+    elif step.name == Steps.NOTIFY_SOURCE:
+        notify_source.delay(archive_id, step.id, api_key)
 
     return step
 
 
 def execute_pipeline(archive_id, api_key=None, force_continue=False):
+    logging.info(f"Starting to execute pipeline for Archive {archive_id}")
 
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
@@ -204,6 +215,9 @@ def execute_pipeline(archive_id, api_key=None, force_continue=False):
             else:
                 # Automatically run next step ONLY if next_steps length is one (only one possible following step)
                 # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
+                logging.debug(
+                    "There are no steps in the pipeline, checking automatic next step."
+                )
                 last_completed_step = Step.objects.get(
                     pk=archive.last_completed_step_id
                 )
@@ -220,9 +234,13 @@ def execute_pipeline(archive_id, api_key=None, force_continue=False):
                         archive=archive,
                         input_step_id=last_completed_step.id,
                     )
+                    logging.debug(f"Automatic next step created : {next_steps[0]}.")
                 else:
                     return None
         else:
+            logging.warning(
+                f"Archive last step was not completed and force_continue is set to: {force_continue}"
+            )
             return None
 
     return run_step(step, archive.id, api_key)
@@ -336,7 +354,7 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         einfo=None,
     )
 
-    logger.info("Looks like the transfer succeded, removing periodic task")
+    logger.info("Looks like the transfer succeeded, removing periodic task")
     periodic_task.delete()
 
 
@@ -384,10 +402,10 @@ def invenio(self, archive_id, step_id, input_data=None):
                 verify=False,
             )
             req.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            logger.error(f"The request didn't succed:{err}")
+        except Exception as err:
+            logger.error(f"The request didn't succeed:{err}")
             step.set_status(Status.FAILED)
-            return {"status": 1, "ERROR": err}
+            return {"status": 1, "errormsg": err}
 
         # Parse the response and get our new record ID so we can link it
         data_loaded = json.loads(req.text)
@@ -866,6 +884,8 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         )
 
         step.set_output_data(am_status)
+        step.archive.path_to_aip(am_status["artifact"]["artifact_path"])
+        step.archive.save()
 
         finalize(
             self=self,
@@ -1177,3 +1197,80 @@ def extract_title(self, archive_id, step_id):
             "status": 1,
             "errormsg": f"Title could not be extracted from Dublin Core file at {dublin_core_location}",
         }
+
+
+@shared_task(name="notify_source", bind=True, ignore_result=True, after_return=finalize)
+def notify_source(self, archive_id, step_id, api_key=None):
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
+
+    logging.info(
+        f"Starting to notify the upstream source({archive.source}) for Archive {archive.id}"
+    )
+
+    if archive.state != ArchiveState.AIP:
+        return {"status": 1, "errormsg": f"Archive {archive.id} is not an AIP."}
+
+    notification_endpoint = Source.objects.get(
+        name=archive.source
+    ).notification_endpoint
+    if not notification_endpoint or len(notification_endpoint) == 0:
+        return {
+            "status": 1,
+            "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
+        }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-CSRFToken": "eyJhbGciOiJIUzUxMiIsImlhdCI6MTcyODk5NjAwMiwiZXhwIjoxNzI5MDgyNDAyfQ.IkZZRmFUSmZpSW5mVmYwSmVOY1FFUGszUkdDSmVRdWw3Ig.8DZmhf80QhhoL8s-t7ck0fWJYg4u0XleO9WR0tq5WozwIb6urt-3h-knQC0aAztc9EZnSOp6YeNTCOnZw-eHYQ",
+    }
+
+    # Set up the authentication headers for the requests to the Source
+    if not api_key:
+        logging.warning(
+            f"User has no API key set for the upstream source ({archive.source})."
+        )
+    else:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    harvest_time = (
+        archive.steps.all()
+        .filter(name=Steps.HARVEST, status=Status.COMPLETED)
+        .first()
+        .start_date
+    )
+    archive_time = (
+        archive.steps.all()
+        .filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
+        .order_by("-start_date")
+        .first()
+        .start_date
+    )
+
+    payload = {
+        "pid": archive.recid,
+        "status": "P",  # Preserved
+        "path": archive.path_to_aip,
+        "harvest_timestamp": str(harvest_time),
+        "archive_timestamp": str(archive_time),
+        "description": {"sender": "CERN Preserve Platform", "compliance": "OAIS"},
+    }
+
+    try:
+        req = requests.post(
+            notification_endpoint,
+            headers=headers,
+            data=json.dumps(payload),
+            verify=os.path.join(os.path.dirname(__file__), "sources/test.cert"),
+        )
+        logging.debug(f"Notify source returned {req.text}")
+        req.raise_for_status()
+    except Exception as err:
+        logging.error(f"The notification request did not succeed:{err}")
+        return {"status": 1, "errormsg": str(err)}
+
+    if req.status_code == 202:
+        return {"status": 0, "errormsg": None}
+    else:
+        return {"status": 1, "errormsg": "Notifying the upstream source failed."}
