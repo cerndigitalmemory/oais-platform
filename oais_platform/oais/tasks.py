@@ -1221,56 +1221,16 @@ def notify_source(self, archive_id, step_id, api_key=None):
             "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
         }
 
-    headers = {
-        "Content-Type": "application/json",
-        "X-CSRFToken": "eyJhbGciOiJIUzUxMiIsImlhdCI6MTcyODk5NjAwMiwiZXhwIjoxNzI5MDgyNDAyfQ.IkZZRmFUSmZpSW5mVmYwSmVOY1FFUGszUkdDSmVRdWw3Ig.8DZmhf80QhhoL8s-t7ck0fWJYg4u0XleO9WR0tq5WozwIb6urt-3h-knQC0aAztc9EZnSOp6YeNTCOnZw-eHYQ",
-    }
-
-    # Set up the authentication headers for the requests to the Source
-    if not api_key:
-        logging.warning(
-            f"User has no API key set for the upstream source ({archive.source})."
-        )
-    else:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    harvest_time = (
-        archive.steps.all()
-        .filter(name=Steps.HARVEST, status=Status.COMPLETED)
-        .first()
-        .start_date
-    )
-    archive_time = (
-        archive.steps.all()
-        .filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
-        .order_by("-start_date")
-        .first()
-        .start_date
-    )
-
-    payload = {
-        "pid": archive.recid,
-        "status": "P",  # Preserved
-        "path": archive.path_to_aip,
-        "harvest_timestamp": str(harvest_time),
-        "archive_timestamp": str(archive_time),
-        "description": {"sender": "CERN Preserve Platform", "compliance": "OAIS"},
-    }
-
     try:
-        req = requests.post(
-            notification_endpoint,
-            headers=headers,
-            data=json.dumps(payload),
-            verify=os.path.join(os.path.dirname(__file__), "sources/test.cert"),
+        get_source(archive.source).notify_source(
+            archive, notification_endpoint, api_key
         )
-        logging.debug(f"Notify source returned {req.text}")
-        req.raise_for_status()
-    except Exception as err:
-        logging.error(f"The notification request did not succeed:{err}")
-        return {"status": 1, "errormsg": str(err)}
-
-    if req.status_code == 202:
-        return {"status": 0, "errormsg": None}
-    else:
-        return {"status": 1, "errormsg": "Notifying the upstream source failed."}
+        return {
+            "status": 0,
+            "errormsg": None,
+        }
+    except Exception as e:
+        return {
+            "status": 1,
+            "errormsg": str(e),
+        }

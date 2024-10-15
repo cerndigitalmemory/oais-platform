@@ -13,3 +13,6 @@ class AbstractSource(ABC):
     @abstractmethod
     def search_by_id(self, recid):
         pass
+
+    def notify_source(self, archive, notification_endpoint, api_key=None):
+        raise NotImplementedError("Step Notify Source not implemented for this Source.")

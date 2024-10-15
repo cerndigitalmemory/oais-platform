@@ -5,6 +5,7 @@ import os
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
+from oais_platform.oais.models import Source, Status, Steps
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -57,6 +58,7 @@ class Invenio(AbstractSource):
             req = requests.get(
                 f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}",
                 headers=self.headers,
+                verify=False,
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
@@ -124,3 +126,52 @@ class Invenio(AbstractSource):
             "source": self.source,
             "status": status,
         }
+
+    def notify_source(self, archive, notification_endpoint, api_key=None):
+        headers = {
+            "Content-Type": "application/json",
+        }
+
+        # Set up the authentication headers for the requests to the Source
+        if not api_key:
+            raise Exception(
+                f"User has no API key set for the upstream source ({archive.source})."
+            )
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        harvest_time = (
+            archive.steps.all()
+            .filter(name=Steps.HARVEST, status=Status.COMPLETED)
+            .first()
+            .start_date
+        )
+        archive_time = (
+            archive.steps.all()
+            .filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
+            .order_by("-start_date")
+            .first()
+            .start_date
+        )
+
+        payload = {
+            "pid": archive.recid,
+            "status": "P",  # Preserved
+            "path": archive.path_to_aip,
+            "harvest_timestamp": str(harvest_time),
+            "archive_timestamp": str(archive_time),
+            "description": {"sender": "CERN Preserve Platform", "compliance": "OAIS"},
+        }
+
+        req = requests.post(
+            notification_endpoint,
+            headers=headers,
+            data=json.dumps(payload),
+            verify=False,
+        )
+        req.raise_for_status()
+
+        if req.status_code == 202:
+            return True
+        else:
+            raise Exception("Notifying the upstream source failed.")
