@@ -155,10 +155,13 @@ class Invenio(AbstractSource):
             .start_date
         )
 
+        registry_link = archive.resource.invenio_parent_url
+
         payload = {
             "pid": archive.recid,
             "status": "P",  # Preserved
             "path": archive.path_to_aip,
+            "uri": registry_link,
             "harvest_timestamp": str(harvest_time),
             "archive_timestamp": str(archive_time),
             "description": {"sender": "CERN Digital Memory", "compliance": "OAIS"},

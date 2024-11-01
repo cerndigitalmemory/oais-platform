@@ -415,8 +415,8 @@ def invenio(self, archive_id, step_id, input_data=None):
         # Create a path artifact with a link to the InvenioRDM Record we just created
         # FIXME: Use a single method to create artifacts
         output_invenio_artifact = {
-            "artifact_name": "Invenio Link",
-            "artifact_path": "test",
+            "artifact_name": "Registry",
+            "artifact_path": relative_path,
             "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
         }
 
@@ -884,7 +884,7 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         )
 
         step.set_output_data(am_status)
-        step.archive.path_to_aip(am_status["artifact"]["artifact_path"])
+        step.archive.path_to_aip = am_status["artifact"]["artifact_path"]
         step.archive.save()
 
         finalize(
