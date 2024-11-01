@@ -276,7 +276,7 @@ class Archive(models.Model):
             next_steps.append(Steps.EXTRACT_TITLE)
 
         source = Source.objects.all().filter(name=self.source).first()
-        if source and source.notification_endpoint:  # and self.state == ArchiveState.AIP:
+        if source and source.notification_endpoint and self.state == ArchiveState.AIP:
             next_steps.append(Steps.NOTIFY_SOURCE)
 
         return next_steps

@@ -5,7 +5,7 @@ import os
 import requests
 
 from oais_platform.oais.exceptions import ServiceUnavailable
-from oais_platform.oais.models import Source, Status, Steps
+from oais_platform.oais.models import Status, Steps
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -146,6 +146,7 @@ class Invenio(AbstractSource):
             .first()
             .start_date
         )
+
         archive_time = (
             archive.steps.all()
             .filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
@@ -160,7 +161,7 @@ class Invenio(AbstractSource):
             "path": archive.path_to_aip,
             "harvest_timestamp": str(harvest_time),
             "archive_timestamp": str(archive_time),
-            "description": {"sender": "CERN Preserve Platform", "compliance": "OAIS"},
+            "description": {"sender": "CERN Digital Memory", "compliance": "OAIS"},
         }
 
         req = requests.post(
@@ -169,9 +170,10 @@ class Invenio(AbstractSource):
             data=json.dumps(payload),
             verify=False,
         )
-        req.raise_for_status()
 
         if req.status_code == 202:
             return True
         else:
-            raise Exception("Notifying the upstream source failed.")
+            raise Exception(
+                f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
+            )
