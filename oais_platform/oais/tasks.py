@@ -289,7 +289,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
 
     submitted_job = fts.push_to_cta(
-        f"root://eosuser.cern.ch/{path_to_sip}",
+        f"https://eosproject.cern.ch/{path_to_sip}",
         f"{CTA_BASE_PATH}{cta_folder_name}",
     )
 
@@ -298,7 +298,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     output_cta_artifact = {
         "artifact_name": "FTS Job",
         "artifact_path": cta_folder_name,
-        "artifact_url": f"https://fts3-pilot.cern.ch:8449/fts3/ftsmon/#/job/{submitted_job}",
+        "artifact_url": f"{FTS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
     }
 
     # Create the scheduler

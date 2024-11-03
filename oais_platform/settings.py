@@ -300,7 +300,7 @@ FTS_GRID_CERT_KEY = environ.get("FTS_GRID_CERT_KEY", "private.nopwd.key")
 # CTA Settings
 CTA_BASE_PATH = environ.get(
     "CTA_BASE_PATH",
-    "root://eosctapublicpps.cern.ch//eos/ctapublicpps/archivetest/digital-memory/",
+    "https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/",
 )
 
 # Batch announce number of subfolders limit
