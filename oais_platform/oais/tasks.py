@@ -48,7 +48,6 @@ from oais_platform.settings import (
     FTS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
-    LOGLEVEL,
     SIP_UPSTREAM_BASEPATH,
 )
 
