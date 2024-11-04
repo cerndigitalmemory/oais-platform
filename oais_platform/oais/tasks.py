@@ -48,6 +48,7 @@ from oais_platform.settings import (
     FTS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
+    LOGLEVEL,
     SIP_UPSTREAM_BASEPATH,
 )
 
@@ -60,7 +61,7 @@ bic_version = bagit_create.version.get_version()
 ## Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
 ## Standard logger
-logging.basicConfig(level=logging.INFO)
+logger.setLevel(logging.INFO)
 
 try:
     # Get the FTS client ready
@@ -291,7 +292,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
 
     submitted_job = fts.push_to_cta(
-        f"https://eosproject.cern.ch/{path_to_sip}",
+        f"https://eosproject.cern.ch:8444/{path_to_sip}",
         f"{CTA_BASE_PATH}{cta_folder_name}",
     )
 
@@ -658,7 +659,7 @@ def archivematica(self, archive_id, step_id, input_data):
     am.transfer_name = transfer_name
 
     # Create archivematica package
-    logging.info(
+    logger.info(
         f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
     )
 
@@ -755,16 +756,16 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
     try:
         am_status = am.get_unit_status(message["id"])
-        logging.info(f"Current unit status for {am_status}")
+        logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
-        logging.info(f"Error {e.response.status_code} for archivematica")
+        logger.info(f"Error {e.response.status_code} for archivematica")
         if e.response.status_code == 400:
             is_failed = True
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
                 am.unit_uuid = message["id"]
                 executed_jobs = am.get_jobs()
-                logging.debug(
+                logger.debug(
                     f"Executed jobs for given id({message['id']}): {executed_jobs}"
                 )
                 if executed_jobs != 1 and len(executed_jobs) > 0:
@@ -773,15 +774,13 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         "status": "PROCESSING",
                         "microservice": "Waiting for archivematica to continue the processing",
                     }
-                    logging.info(
+                    logger.info(
                         f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
                     )
                 else:
-                    logging.info(
-                        "No executed jobs for the given Archivematica package."
-                    )
+                    logger.info("No executed jobs for the given Archivematica package.")
             except requests.HTTPError as e:
-                logging.info(
+                logger.info(
                     f"Error {e.response.status_code} for archivematica retreiving jobs"
                 )
 
@@ -789,9 +788,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
                 # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
                 time_passed = (timezone.now() - step.start_date).total_seconds()
-                logging.info(f"Waiting in queue, time passed: {time_passed}s")
+                logger.info(f"Waiting in queue, time passed: {time_passed}s")
                 if time_passed > 60 * AM_WAITING_TIME_LIMIT:
-                    logging.info(
+                    logger.info(
                         f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
                     )
                 else:
@@ -1183,7 +1182,7 @@ def extract_title(self, archive_id, step_id):
     dublin_core_path = "data/meta/dc.xml"
     dublin_core_location = os.path.join(sip_folder_name, dublin_core_path)
     try:
-        logging.info(f"Starting extract title from dc.xml for Archive {archive.id}")
+        logger.info(f"Starting extract title from dc.xml for Archive {archive.id}")
         xml_tree = ET.parse(dublin_core_location)
         xml = xml_tree.getroot()
         ns = {
@@ -1192,11 +1191,11 @@ def extract_title(self, archive_id, step_id):
         }
         title = xml.findall("./dc:dc/dc:title", ns)
         title = title[0].text
-        logging.info(f"Title found for Archive {archive.id}: {title}")
+        logger.info(f"Title found for Archive {archive.id}: {title}")
         archive.set_title(title)
         return {"status": 0, "errormsg": None}
     except Exception as e:
-        logging.warning(
+        logger.warning(
             f"Error while extracting title from dc.xml at {dublin_core_location}: {str(e)}"
         )
         return {
