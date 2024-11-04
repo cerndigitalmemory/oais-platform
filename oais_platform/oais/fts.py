@@ -28,7 +28,6 @@ class FTS:
         self.context = context
 
     def push_to_cta(self, source, dest):
-        job = self.prepare_push_job(source, dest)
         transfer = fts3.new_transfer(source, dest)
         job = fts3.new_job(
             [transfer],
