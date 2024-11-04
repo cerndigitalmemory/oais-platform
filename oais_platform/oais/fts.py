@@ -44,4 +44,4 @@ class FTS:
         return submitted_job
 
     def job_status(self, job_id):
-        return fts3.get_job_status(self.context, [job_id], list_files=False)
+        return fts3.get_job_status(self.context, job_id, list_files=False)

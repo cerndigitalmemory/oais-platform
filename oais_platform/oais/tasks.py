@@ -269,9 +269,7 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(
-    name="push_sip_to_cta", bind=True, ignore_result=True, after_return=finalize
-)
+@shared_task(name="push_sip_to_cta", bind=True, ignore_result=True)
 def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     """
     Push the SIP of the given Archive to CTA, preparing the FTS Job,
@@ -290,38 +288,44 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
 
     cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
 
-    submitted_job = fts.push_to_cta(
-        f"https://eosproject.cern.ch:8444/{path_to_sip}",
-        f"{CTA_BASE_PATH}{cta_folder_name}",
-    )
+    try:
+        submitted_job = fts.push_to_cta(
+            f"https://eosproject.cern.ch:8444/{path_to_sip}",
+            f"{CTA_BASE_PATH}{cta_folder_name}",
+        )
 
-    logger.info(submitted_job)
+        logger.info(submitted_job)
 
-    output_cta_artifact = {
-        "artifact_name": "FTS Job",
-        "artifact_path": cta_folder_name,
-        "artifact_url": f"{FTS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
-    }
+        output_cta_artifact = {
+            "artifact_name": "FTS Job",
+            "artifact_path": cta_folder_name,
+            "artifact_url": f"{FTS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
+        }
 
-    # Create the scheduler
-    schedule = IntervalSchedule.objects.create(
-        every=60, period=IntervalSchedule.SECONDS
-    )
-    # Spawn a periodic task to check for the status of the job
-    PeriodicTask.objects.create(
-        interval=schedule,
-        name=f"FTS job status for step: {step.id}",
-        task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job]),
-        expire_seconds=60.0,
-    )
+        # Create the scheduler
+        schedule = IntervalSchedule.objects.create(
+            every=60, period=IntervalSchedule.SECONDS
+        )
+        # Spawn a periodic task to check for the status of the job
+        PeriodicTask.objects.create(
+            interval=schedule,
+            name=f"FTS job status for step: {step.id}",
+            task="check_fts_job_status",
+            args=json.dumps([archive.id, step.id, submitted_job]),
+            expire_seconds=60.0,
+        )
 
-    return {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
+        step.set_output_data(
+            {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
+        )
+    except Exception as e:
+        logger.warning(str(e))
+        if step:
+            step.set_status(Status.FAILED)
+            step.set_output_data({"status": 1, "errormsg": str(e)})
 
 
-@shared_task(
-    name="check_fts_job_status", bind=True, ignore_result=True, after_return=finalize
-)
+@shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
 def check_fts_job_status(self, archive_id, step_id, job_id):
     """
     Check the status of a FTS job.
@@ -330,9 +334,15 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     """
     logger.info(f"Checking job status for Step {step_id} and job {job_id}")
     step = Step.objects.get(pk=step_id)
-    status = fts.job_status(job_id)
-
     task_name = f"FTS job status for step: {step.id}"
+
+    try:
+        status = fts.job_status(job_id)
+    except Exception as e:
+        logger.warning(str(e))
+        _remove_periodic_task_on_failure(
+            task_name, step, {"status": 1, "errormsg": str(e)}
+        )
 
     logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
@@ -340,7 +350,6 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
         _handle_completed_fts_job(self, task_name, step, status, archive_id)
     elif status["job_state"] == "FAILED":
         _remove_periodic_task_on_failure(task_name, step, status)
-        return {"status": 1, "errormsg": "Push to tape operation failed."}
 
 
 def _handle_completed_fts_job(self, task_name, step, status, archive_id):
@@ -365,7 +374,16 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
 
     periodic_task.delete()
 
-    return {"status": 0, "errormsg": None}
+    status = {"status": 0, "errormsg": None}
+    finalize(
+        self=self,
+        status=states.SUCCESS,
+        retval=status,
+        task_id=None,
+        args=[archive_id, step.id],
+        kwargs=None,
+        einfo=None,
+    )
 
 
 @shared_task(
