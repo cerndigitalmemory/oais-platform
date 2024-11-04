@@ -14,11 +14,24 @@ from oais_platform.oais.models import (
     UploadJob,
 )
 
+
+class NullToNotRequiredMixin:
+    """Override form, set nullable field as not required."""
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        for field_name, field in form.base_fields.items():
+            model_field = self.model._meta.get_field(field_name)
+            if model_field.null:
+                field.required = False
+        return form
+
+
 # Register your models here.
 
 
 @admin.register(Archive)
-class ArchiveAdmin(admin.ModelAdmin):
+class ArchiveAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "timestamp",
@@ -61,7 +74,7 @@ class ArchiveAdmin(admin.ModelAdmin):
 
 
 @admin.register(Step)
-class StepAdmin(admin.ModelAdmin):
+class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "archive_link",
@@ -82,12 +95,12 @@ class StepAdmin(admin.ModelAdmin):
 
 
 @admin.register(Resource)
-class ResourceAdmin(admin.ModelAdmin):
+class ResourceAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = ("id", "source", "recid")
 
 
 @admin.register(Collection)
-class CollectionAdmin(admin.ModelAdmin):
+class CollectionAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "timestamp",
@@ -107,7 +120,7 @@ class CollectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
+class ProfileAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = ["user_name"]
 
     def user_name(self, obj):
@@ -119,7 +132,7 @@ class ProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(UploadJob)
-class UploadJobAdmin(admin.ModelAdmin):
+class UploadJobAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = ("id", "creator_name", "timestamp", "sip_dir")
 
     def creator_name(self, obj):
@@ -131,7 +144,7 @@ class UploadJobAdmin(admin.ModelAdmin):
 
 
 @admin.register(Source)
-class SourceAdmin(admin.ModelAdmin):
+class SourceAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "name",
@@ -149,7 +162,7 @@ class SourceAdmin(admin.ModelAdmin):
 
 
 @admin.register(ApiKey)
-class APIKeyAdmin(admin.ModelAdmin):
+class APIKeyAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = ["user_name", "source_name", "_key"]
 
     def user_name(self, obj):
