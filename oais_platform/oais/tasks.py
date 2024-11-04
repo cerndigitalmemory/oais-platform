@@ -60,7 +60,7 @@ bic_version = bagit_create.version.get_version()
 ## Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
 ## Standard logger
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 try:
     # Get the FTS client ready
@@ -304,41 +304,43 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     }
 
     # Create the scheduler
-    schedule = IntervalSchedule.objects.create(every=2, period=IntervalSchedule.SECONDS)
+    schedule = IntervalSchedule.objects.create(
+        every=60, period=IntervalSchedule.SECONDS
+    )
     # Spawn a periodic task to check for the status of the job
     PeriodicTask.objects.create(
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
         args=json.dumps([archive.id, step.id, submitted_job]),
-        expire_seconds=2.0,
+        expire_seconds=60.0,
     )
 
-    step.set_output_data(
-        {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
-    )
+    return {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
 
 
-@shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
+@shared_task(
+    name="check_fts_job_status", bind=True, ignore_result=True, after_return=finalize
+)
 def check_fts_job_status(self, archive_id, step_id, job_id):
     """
     Check the status of a FTS job.
     If finished, set the corresponding step as completed and remove the
     periodic task.
     """
+    logger.info(f"Checking job status for Step {step_id} and job {job_id}")
     step = Step.objects.get(pk=step_id)
     status = fts.job_status(job_id)
 
     task_name = f"FTS job status for step: {step.id}"
 
-    logger.info(
-        f"FTS job status for Archive {archive_id} returned: {status['job_state']}."
-    )
+    logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
     if status["job_state"] == "FINISHED":
         _handle_completed_fts_job(self, task_name, step, status, archive_id)
     elif status["job_state"] == "FAILED":
         _remove_periodic_task_on_failure(task_name, step, status)
+        return {"status": 1, "errormsg": "Push to tape operation failed."}
 
 
 def _handle_completed_fts_job(self, task_name, step, status, archive_id):
@@ -349,6 +351,7 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         step.set_status(Status.FAILED)
         return
 
+    logger.info("FTS transfer succeded, removing periodic task")
     status["status"] = 0
     finalize(
         self=self,
@@ -360,8 +363,9 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         einfo=None,
     )
 
-    logger.info("Looks like the transfer succeeded, removing periodic task")
     periodic_task.delete()
+
+    return {"status": 0, "errormsg": None}
 
 
 @shared_task(
