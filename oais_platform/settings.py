@@ -290,6 +290,9 @@ SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
 
 # FTS Settings
 FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-pilot.cern.ch:8446")
+FTS_STATUS_INSTANCE = environ.get(
+    "FTS_STATUS_INSTANCE", "https://fts3-pilot.cern.ch:8449"
+)
 
 # GRID Certificate used to authenticate
 # Public part

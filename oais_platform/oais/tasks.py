@@ -46,6 +46,7 @@ from oais_platform.settings import (
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
     FTS_INSTANCE,
+    FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
@@ -79,7 +80,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     retval: returned value from the execution of the celery task
     task_id: Celery task ID
     """
-
     # ID of the Archive this Step is in
     archive_id = args[0]
     archive = Archive.objects.get(pk=archive_id)
@@ -293,36 +293,35 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
             f"https://eosproject.cern.ch:8444/{path_to_sip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
-
-        logger.info(submitted_job)
-
-        output_cta_artifact = {
-            "artifact_name": "FTS Job",
-            "artifact_path": cta_folder_name,
-            "artifact_url": f"{FTS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
-        }
-
-        # Create the scheduler
-        schedule = IntervalSchedule.objects.create(
-            every=60, period=IntervalSchedule.SECONDS
-        )
-        # Spawn a periodic task to check for the status of the job
-        PeriodicTask.objects.create(
-            interval=schedule,
-            name=f"FTS job status for step: {step.id}",
-            task="check_fts_job_status",
-            args=json.dumps([archive.id, step.id, submitted_job]),
-            expire_seconds=60.0,
-        )
-
-        step.set_output_data(
-            {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
-        )
     except Exception as e:
         logger.warning(str(e))
-        if step:
-            step.set_status(Status.FAILED)
-            step.set_output_data({"status": 1, "errormsg": str(e)})
+        step.set_status(Status.FAILED)
+        step.set_output_data({"status": 1, "errormsg": str(e)})
+
+    logger.info(submitted_job)
+
+    output_cta_artifact = {
+        "artifact_name": "FTS Job",
+        "artifact_path": cta_folder_name,
+        "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
+    }
+
+    # Create the scheduler
+    schedule = IntervalSchedule.objects.create(
+        every=60, period=IntervalSchedule.SECONDS
+    )
+    # Spawn a periodic task to check for the status of the job
+    PeriodicTask.objects.create(
+        interval=schedule,
+        name=f"FTS job status for step: {step.id}",
+        task="check_fts_job_status",
+        args=json.dumps([archive.id, step.id, submitted_job]),
+        expire_seconds=60.0,
+    )
+
+    step.set_output_data(
+        {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
+    )
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)

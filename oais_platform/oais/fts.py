@@ -28,6 +28,7 @@ class FTS:
         self.context = context
 
     def push_to_cta(self, source, dest):
+        logging.info(f"Starting FTS transfer from {source} to {dest}.")
         transfer = fts3.new_transfer(source, dest)
         job = fts3.new_job(
             [transfer],
