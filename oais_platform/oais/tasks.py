@@ -60,6 +60,7 @@ bic_version = bagit_create.version.get_version()
 # Set up logging
 ## Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
+logger.setLevel("DEBUG")
 ## Standard logger
 logging.basicConfig(level=logging.INFO)
 

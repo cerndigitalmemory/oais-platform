@@ -4,7 +4,6 @@ import fts3.rest.client.easy as fts3
 
 
 class FTS:
-    bring_online = 259200
     archive_timeout = 86400
     copy_pin_lifetime = -1
 
@@ -36,7 +35,6 @@ class FTS:
             metadata="Digital Memory job",
             retry=1,
             priority=3,
-            bring_online=self.bring_online,
             archive_timeout=self.archive_timeout,
             copy_pin_lifetime=self.copy_pin_lifetime,
         )
