@@ -11,6 +11,8 @@ class FTS:
         logging.debug(
             f"Authenticating to FTS instance {fts_instance} using {user_cert_path} / {cert_key_path}"
         )
+        logging.getLogger("fts3.rest.client").setLevel(logging.DEBUG)
+
         # Login to FTS and set up the context
         context = fts3.Context(
             fts_instance,
@@ -18,8 +20,6 @@ class FTS:
             ukey=cert_key_path,
             verify=True,
         )
-
-        logging.getLogger("fts3.rest.client").setLevel(logging.DEBUG)
 
         logging.info(
             f'Authenticated on FTS with certificate DN: { fts3.whoami(context)["user_dn"] } '

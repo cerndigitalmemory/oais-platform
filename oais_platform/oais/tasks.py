@@ -70,12 +70,15 @@ try:
     schedule, _ = IntervalSchedule.objects.get_or_create(
         every=6, period=IntervalSchedule.HOURS
     )
-    PeriodicTask.objects.get_or_create(
-        interval=schedule,
-        name=f"Delegating FTS certificate for {FTS_INSTANCE}",
-        task="fts_delegate",
-        expire_seconds=21600.0,
-    )
+    task_name = f"Delegating FTS certificate for {FTS_INSTANCE}"
+    periodic_task = PeriodicTask.objects.get(name=task_name)
+    if not periodic_task:
+        PeriodicTask.objects.create(
+            interval=schedule,
+            name=task_name,
+            task="fts_delegate",
+            expire_seconds=21600.0,
+        )
 except Exception as e:
     logging.warning(f"Couldn't initialize the FTS client: {e}")
 
