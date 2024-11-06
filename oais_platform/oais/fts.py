@@ -44,3 +44,7 @@ class FTS:
 
     def job_status(self, job_id):
         return fts3.get_job_status(self.context, job_id, list_files=False)
+
+    def delegate_cert(self):
+        logging.info("Delegating certificate")
+        fts3.delegate(self.context, force=True)

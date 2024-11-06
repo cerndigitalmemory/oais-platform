@@ -67,8 +67,17 @@ logging.basicConfig(level=logging.INFO)
 try:
     # Get the FTS client ready
     fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
-except Exception:
-    logging.warning("Couldn't initialize the FTS client")
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=6, period=IntervalSchedule.HOURS
+    )
+    PeriodicTask.objects.create(
+        interval=schedule,
+        name=f"Delegating FTS certificate for {FTS_INSTANCE}",
+        task="fts_delegate",
+        expire_seconds=21600.0,
+    )
+except Exception as e:
+    logging.warning(f"Couldn't initialize the FTS client: {e}")
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -384,6 +393,14 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         kwargs=None,
         einfo=None,
     )
+
+
+@shared_task(name="fts_delegate", bind=True, ignore_result=True)
+def fts_delegate(self):
+    try:
+        fts.delegate()
+    except Exception as e:
+        logger.warning(e)
 
 
 @shared_task(
