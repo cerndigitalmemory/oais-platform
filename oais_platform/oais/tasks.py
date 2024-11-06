@@ -70,7 +70,7 @@ try:
     schedule, _ = IntervalSchedule.objects.get_or_create(
         every=6, period=IntervalSchedule.HOURS
     )
-    PeriodicTask.objects.create(
+    PeriodicTask.objects.get_or_create(
         interval=schedule,
         name=f"Delegating FTS certificate for {FTS_INSTANCE}",
         task="fts_delegate",
