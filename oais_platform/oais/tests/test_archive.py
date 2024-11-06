@@ -7,7 +7,7 @@ from parameterized import parameterized
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Resource, Step
+from oais_platform.oais.models import Archive, ArchiveState, Resource, Step
 
 
 class ArchiveTests(APITestCase):
@@ -33,7 +33,7 @@ class ArchiveTests(APITestCase):
             restricted=False,
         )
 
-        self.public_archive = Archive.objects.create(
+        self.public_archive2 = Archive.objects.create(
             recid="7234",
             source="source_1",
             source_url="",
@@ -42,7 +42,7 @@ class ArchiveTests(APITestCase):
             restricted=False,
         )
 
-        self.public_archive = Archive.objects.create(
+        self.public_archive3 = Archive.objects.create(
             recid="3445",
             source="source_2",
             source_url="",
@@ -222,8 +222,22 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
+    def test_record_check_none(self):
+        self.client.force_authenticate(user=self.creator)
+
+        url = reverse("check_archived_records")
+        response = self.client.post(
+            url, {"recordList": [{"recid": "1", "source": "test"}]}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data[0]["archives"]), 0)
+
     def test_record_check(self):
         self.client.force_authenticate(user=self.creator)
+        Step.objects.create(archive=self.private_archive, name=5, status=4)
+        Step.objects.create(archive=self.public_archive, name=5, status=4)
 
         url = reverse("check_archived_records")
         response = self.client.post(
