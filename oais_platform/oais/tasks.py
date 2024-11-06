@@ -307,6 +307,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
         logger.warning(str(e))
         step.set_status(Status.FAILED)
         step.set_output_data({"status": 1, "errormsg": str(e)})
+        return 1
 
     logger.info(submitted_job)
 
