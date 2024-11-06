@@ -32,6 +32,7 @@ from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    ArchiveState,
     Collection,
     Source,
     Status,
@@ -372,8 +373,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
             try:
                 duplicates = Archive.objects.filter(
-                    recid__contains=archive["recid"], source__contains=archive["source"]
-                ).exclude(id__contains=archive["id"])
+                    recid=archive["recid"],
+                    source=archive["source"],
+                ).exclude(id=archive["id"])
                 archive_serializer = ArchiveSerializer(
                     filter_archives_by_user_creator(
                         duplicates,
@@ -480,8 +482,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         try:
             archives = Archive.objects.filter(
-                recid__contains=archive.recid, source__contains=archive.source
-            )
+                recid=archive.recid, source=archive.source
+            ).exclude(id=archive["id"], state=ArchiveState.NONE)
             serializer = ArchiveSerializer(
                 filter_archives_by_user_creator(
                     archives,
@@ -1271,8 +1273,8 @@ def check_archived_records(request):
     for record in records:
         try:
             archives = Archive.objects.filter(
-                recid__contains=record["recid"], source__contains=record["source"]
-            )
+                recid=record["recid"], source=record["source"]
+            ).exclude(state=ArchiveState.NONE)
             serializer = ArchiveSerializer(
                 filter_archives_by_user_creator(
                     archives,

@@ -308,8 +308,8 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     }
 
     # Create the scheduler
-    schedule = IntervalSchedule.objects.create(
-        every=60, period=IntervalSchedule.SECONDS
+    schedule = IntervalSchedule.objects.get_or_create(
+        every=1, period=IntervalSchedule.HOURS
     )
     # Spawn a periodic task to check for the status of the job
     PeriodicTask.objects.create(
@@ -317,7 +317,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
         args=json.dumps([archive.id, step.id, submitted_job]),
-        expire_seconds=60.0,
+        expire_seconds=3600.0,
     )
 
     step.set_output_data(
@@ -703,7 +703,7 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_status(Status.WAITING)
 
             # Create the scheduler
-            schedule = IntervalSchedule.objects.create(
+            schedule = IntervalSchedule.objects.get_or_create(
                 every=60, period=IntervalSchedule.SECONDS
             )
             # Spawn a periodic task to check for the status of the package on AM
