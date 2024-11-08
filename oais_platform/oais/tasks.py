@@ -71,8 +71,8 @@ try:
         every=6, period=IntervalSchedule.HOURS
     )
     task_name = f"Delegating FTS certificate for {FTS_INSTANCE}"
-    periodic_task = PeriodicTask.objects.get(name=task_name)
-    if not periodic_task:
+    periodic_task = PeriodicTask.objects.filter(name=task_name).count()
+    if periodic_task == 0:
         PeriodicTask.objects.create(
             interval=schedule,
             name=task_name,
