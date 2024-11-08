@@ -303,7 +303,7 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
 
     try:
         submitted_job = fts.push_to_cta(
-            f"https://eosproject.cern.ch:8444/{path_to_sip}",
+            f"https://eosproject-p.cern.ch:8444/{path_to_sip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
