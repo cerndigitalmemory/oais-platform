@@ -201,9 +201,9 @@ def run_step(step, archive_id, api_key=None):
     elif step.name == Steps.ARCHIVE:
         archivematica.delay(archive_id, step.id, step.input_data)
     elif step.name == Steps.INVENIO_RDM_PUSH:
-        invenio.delay(archive_id, step.id, step.input_data)
-    elif step.name == Steps.PUSH_SIP_TO_CTA:
-        push_sip_to_cta.delay(archive_id, step.id, step.input_data)
+        invenio.delay(step.archive.id, step.id, step.input_data)
+    elif step.name == Steps.PUSH_TO_CTA:
+        push_to_cta.delay(step.archive.id, step.id, step.input_data)
     elif step.name == Steps.EXTRACT_TITLE:
         extract_title.delay(archive_id, step.id)
     elif step.name == Steps.NOTIFY_SOURCE:
@@ -282,10 +282,10 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(name="push_sip_to_cta", bind=True, ignore_result=True)
-def push_sip_to_cta(self, archive_id, step_id, input_data=None):
+@shared_task(name="push_to_cta", bind=True, ignore_result=True)
+def push_to_cta(self, archive_id, step_id, input_data=None):
     """
-    Push the SIP of the given Archive to CTA, preparing the FTS Job,
+    Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
     artifact. Once done, set up another periodic task to check on
     the status of the transfer.
@@ -295,15 +295,26 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
-    path_to_sip = archive.path_to_sip
+    try:
+        aip_step = (
+            archive.steps.filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
+            .order_by("-start_date")
+            .first()
+        )
+        path_to_aip = aip_step.output_data["artifact"]["artifact_path"]
+    except Exception as e:
+        logging.warning(f"Could not get AIP path for Archive {archive_id}: {str(e)}")
+        step.set_status(Status.FAILED)
+        step.set_output_data({"status": 1, "errormsg": str(e)})
+        return 1
     # And set the step as in progress
     step.set_status(Status.IN_PROGRESS)
 
-    cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
+    cta_folder_name = f"aip-{archive.id}-{int(time.time())}"
 
     try:
         submitted_job = fts.push_to_cta(
-            f"https://eosproject-p.cern.ch:8444/{path_to_sip}",
+            f"https://eosproject-p.cern.ch:8444/{path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:

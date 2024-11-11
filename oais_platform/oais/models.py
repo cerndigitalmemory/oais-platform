@@ -60,7 +60,7 @@ class Steps(models.IntegerChoices):
     EDIT_MANIFEST = 6
     INVENIO_RDM_PUSH = 7
     ANNOUNCE = 8
-    PUSH_SIP_TO_CTA = 9
+    PUSH_TO_CTA = 9
     EXTRACT_TITLE = 10
     NOTIFY_SOURCE = 11
 
@@ -274,6 +274,9 @@ class Archive(models.Model):
             or self.title == f"{self.source} - {self.recid}"
         ) and self.state != ArchiveState.NONE:
             next_steps.append(Steps.EXTRACT_TITLE)
+
+        if self.state == ArchiveState.AIP and Steps.PUSH_TO_CTA not in next_steps:
+            next_steps.append(Steps.PUSH_TO_CTA)
 
         source = Source.objects.all().filter(name=self.source).first()
         if source and source.notification_endpoint and self.state == ArchiveState.AIP:
