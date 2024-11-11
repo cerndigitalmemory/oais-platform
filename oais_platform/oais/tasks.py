@@ -301,7 +301,8 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
             .order_by("-start_date")
             .first()
         )
-        path_to_aip = aip_step.output_data["artifact"]["artifact_path"]
+        aip_step_output = json.loads(aip_step.output_data)
+        path_to_aip = aip_step_output["artifact"]["artifact_path"]
     except Exception as e:
         logging.warning(f"Could not get AIP path for Archive {archive_id}: {str(e)}")
         step.set_status(Status.FAILED)
