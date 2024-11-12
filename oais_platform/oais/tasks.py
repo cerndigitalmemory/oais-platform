@@ -295,19 +295,12 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
-    try:
-        aip_step = (
-            archive.steps.filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
-            .order_by("-start_date")
-            .first()
-        )
-        aip_step_output = json.loads(aip_step.output_data)
-        path_to_aip = aip_step_output["artifact"]["artifact_path"]
-    except Exception as e:
-        logging.warning(f"Could not get AIP path for Archive {archive_id}: {str(e)}")
+    path_to_aip = archive.get_path_to_aip()
+    if not path_to_aip:
         step.set_status(Status.FAILED)
-        step.set_output_data({"status": 1, "errormsg": str(e)})
+        step.set_output_data({"status": 1, "errormsg": "Could not get AIP path."})
         return 1
+
     # And set the step as in progress
     step.set_status(Status.IN_PROGRESS)
 
@@ -374,7 +367,10 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     if status["job_state"] == "FINISHED":
         _handle_completed_fts_job(self, task_name, step, status, archive_id)
     elif status["job_state"] == "FAILED":
-        _remove_periodic_task_on_failure(task_name, step, status)
+        result = {"FTS status": status}
+        if step.output_data["artifact"]:
+            result["artifact"] = step.output_data["artifact"]
+        _remove_periodic_task_on_failure(task_name, step, result)
 
 
 def _handle_completed_fts_job(self, task_name, step, status, archive_id):
@@ -399,7 +395,7 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
 
     periodic_task.delete()
 
-    status = {"status": 0, "errormsg": None}
+    status = {"status": 0, "errormsg": None, "artifact": step.output_data["artifact"]}
     finalize(
         self=self,
         status=states.SUCCESS,

@@ -48,7 +48,7 @@ RUN dnf install -y epel-release && \
 
 # Install python packages
 COPY ./requirements.txt /requirements.txt
-RUN pip3 install -r /requirements.txt
+RUN pip3 install wheel && pip3 install -r /requirements.txt
 
 COPY docker/carepo.repo /etc/yum.repos.d/
 RUN dnf install -y ca_CERN-Root-2 ca_CERN-GridCA && dnf clean -y all
