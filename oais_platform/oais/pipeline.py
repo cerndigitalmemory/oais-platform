@@ -1,5 +1,18 @@
 """
 Example pipeline definition and resolver
+
+Step enums are defined in models.py Steps class
+To avoid circular imports:
+1 - SIP upload
+2 - Harvest
+3 - Validation
+4 - Checksum
+5 - Archive
+6 - Edit manifest
+7 - Push to registry
+8 - Announce
+9 - Push to CTA
+10 - Extract title
 """
 
 next_steps_constraints = {

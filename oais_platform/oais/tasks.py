@@ -304,7 +304,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
     # And set the step as in progress
     step.set_status(Status.IN_PROGRESS)
 
-    cta_folder_name = f"aip-{archive.id}-{int(time.time())}"
+    cta_folder_name = f"aip-{archive.id}"
 
     try:
         submitted_job = fts.push_to_cta(
@@ -365,7 +365,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
     if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(self, task_name, step, status, archive_id)
+        _handle_completed_fts_job(self, task_name, step, archive_id, job_id)
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
         if step.output_data["artifact"]:
@@ -373,7 +373,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
         _remove_periodic_task_on_failure(task_name, step, result)
 
 
-def _handle_completed_fts_job(self, task_name, step, status, archive_id):
+def _handle_completed_fts_job(self, task_name, step, archive_id, job_id):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
     except Exception as e:
@@ -395,7 +395,15 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
 
     periodic_task.delete()
 
-    status = {"status": 0, "errormsg": None, "artifact": step.output_data["artifact"]}
+    cta_folder_name = f"aip-{archive_id}"
+    cta_artifact = {
+        "artifact_name": "CTA",
+        "artifact_localpath": cta_folder_name,
+        "artifact_url": f"{CTA_BASE_PATH}{cta_folder_name}",
+        "fts_id": job_id,
+    }
+
+    status = {"status": 0, "errormsg": None, "artifact": cta_artifact}
     finalize(
         self=self,
         status=states.SUCCESS,
@@ -939,7 +947,7 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         )
 
         step.set_output_data(am_status)
-        step.archive.path_to_aip = am_status["artifact"]["artifact_path"]
+        step.archive.set_aip_path(am_status["artifact"]["artifact_path"])
         step.archive.save()
 
         finalize(

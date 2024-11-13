@@ -163,6 +163,10 @@ class Archive(models.Model):
         self.path_to_sip = new_path
         self.save()
 
+    def set_aip_path(self, new_aip_path):
+        self.path_to_aip = new_aip_path
+        self.save()
+
     def set_title(self, title):
         self.title = title
         self.save()
@@ -284,19 +288,6 @@ class Archive(models.Model):
             next_steps.append(Steps.NOTIFY_SOURCE)
 
         return next_steps
-
-    def get_path_to_aip(self):
-        try:
-            aip_step = (
-                self.steps.filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
-                .order_by("-start_date")
-                .first()
-            )
-            aip_step_output = json.loads(aip_step.output_data)
-            return aip_step_output["artifact"]["artifact_path"]
-        except Exception as e:
-            logging.warning(f"Could not get AIP path for Archive {self.id}: {str(e)}")
-            return None
 
 
 class Step(models.Model):
