@@ -295,10 +295,11 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
-    path_to_aip = archive.get_path_to_aip()
-    if not path_to_aip:
+    if not archive.path_to_aip:
         step.set_status(Status.FAILED)
-        step.set_output_data({"status": 1, "errormsg": "Could not get AIP path."})
+        step.set_output_data(
+            {"status": 1, "errormsg": "AIP path not found for the given archive."}
+        )
         return 1
 
     # And set the step as in progress
@@ -308,7 +309,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
 
     try:
         submitted_job = fts.push_to_cta(
-            f"https://eosproject-p.cern.ch:8444/{path_to_aip}",
+            f"https://eosproject-p.cern.ch:8444/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
