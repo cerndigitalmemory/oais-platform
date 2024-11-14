@@ -296,6 +296,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
     if not archive.path_to_aip:
+        logger.warning("AIP path not found for the given archive.")
         step.set_status(Status.FAILED)
         step.set_output_data(
             {"status": 1, "errormsg": "AIP path not found for the given archive."}
@@ -1018,16 +1019,27 @@ def prepare_invenio_payload(archive):
     for step in steps:
         if "artifact" in step.output_data:
             out_data = json.loads(step.output_data)
-            if out_data["artifact"]["artifact_name"] in ["SIP", "AIP"]:
+            artifact_name = out_data["artifact"]["artifact_name"]
+            if artifact_name in ["SIP", "AIP"]:
                 invenio_artifacts.append(
                     {
-                        "type": out_data["artifact"]["artifact_name"],
+                        "type": artifact_name,
                         "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
                         "path": out_data["artifact"]["artifact_path"],
                         "add_details": {
                             "SIP": "Submission Information Package as harvested by the platform from the upstream digital repository.",
                             "AIP": "Archival Information Package, as processed by Archivematica.",
-                        }[out_data["artifact"]["artifact_name"]],
+                        }[artifact_name],
+                        "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
+                    }
+                )
+            elif artifact_name == "CTA":
+                invenio_artifacts.append(
+                    {
+                        "type": artifact_name,
+                        "link": None,
+                        "path": out_data["artifact"]["artifact_url"],
+                        "add_details": "Archival Information Package pushed to the CERN Tape Archive.",
                         "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
                     }
                 )
