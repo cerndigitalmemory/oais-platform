@@ -25,31 +25,22 @@ class ArchiveTests(APITestCase):
             restricted=True,
         )
 
-        self.public_archive = Archive.objects.create(
-            recid="1",
-            source="test",
-            source_url="",
-            creator=self.creator,
-            restricted=False,
-        )
-
-        self.public_archive2 = Archive.objects.create(
-            recid="7234",
-            source="source_1",
-            source_url="",
-            title="archive test 1",
-            creator=self.creator,
-            restricted=False,
-        )
-
-        self.public_archive3 = Archive.objects.create(
-            recid="3445",
-            source="source_2",
-            source_url="",
-            title="archive test 2",
-            creator=self.creator,
-            restricted=False,
-        )
+        self.public_archives = []
+        resources = [
+            ["1", "test", "test source 1"],
+            ["7234", "source_1", "archive test 1"],
+            ["3445", "source_2", "archive test 2"],
+        ]
+        for r in resources:
+            archive = Archive.objects.create(
+                recid=r[0],
+                source=r[1],
+                source_url="",
+                creator=self.creator,
+                restricted=False,
+                title=r[2],
+            )
+            self.public_archives.append(archive)
 
     @skip("GET public Archives operation is unsupported")
     def test_archive_list_creator_public(self):
@@ -237,7 +228,7 @@ class ArchiveTests(APITestCase):
     def test_record_check(self):
         self.client.force_authenticate(user=self.creator)
         Step.objects.create(archive=self.private_archive, name=5, status=4)
-        Step.objects.create(archive=self.public_archive, name=5, status=4)
+        Step.objects.create(archive=self.public_archives[0], name=5, status=4)
 
         url = reverse("check_archived_records")
         response = self.client.post(
