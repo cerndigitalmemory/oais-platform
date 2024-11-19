@@ -1,4 +1,4 @@
-FROM python:3.11-alpine
+FROM cern/alma9-base
 
 # Ensure that the python output is sent straight to terminal
 ENV PYTHONUNBUFFERED 1
@@ -9,73 +9,49 @@ ENV OIDC_RP_CLIENT_ID=
 ENV OIDC_RP_CLIENT_SECRET=
 ENV SECRET_KEY=
 
-RUN apk add --update \
-  build-base \
-  cairo \
-  cairo-dev \
-  cargo \
-  freetype-dev \
-  gcc \
-  gdk-pixbuf-dev \
-  gettext \
-  jpeg-dev \
-  lcms2-dev \
-  libffi-dev \
-  musl-dev \
-  openjpeg-dev \
-  openssl-dev \
-  pango-dev \
-  poppler-utils \
-  postgresql-client \
-  postgresql-dev \
-  py-cffi \
-  python3-dev \
-  rust \
-  tcl-dev \
-  tiff-dev \
-  tk-dev \
-  zlib-dev \
-  # to allow pip install dependencies from git repositories
-  git \
-  # needed to compile M2Crypto, needed for the FTS client
-  swig
-
-# Postgresql client
-RUN apk add --update --no-cache postgresql-client jpeg-dev 
-
-# Build dependencies
-RUN apk add --update --no-cache --virtual .tmp-build-deps \
-  gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev \
-  # gssapi header to compile pykerberos
-  krb5-dev
+# Update the base image, install required repositories, and Python 3.11
+RUN dnf install -y epel-release && \
+    dnf install -y dnf-plugins-core && \
+    dnf install -y python3.11 python3.11-devel && \
+    ln -sfn /usr/bin/python3.11 /usr/bin/python3 && \
+    python3.11 -m ensurepip --upgrade && \
+    dnf groupinstall -y "Development Tools" && \
+    dnf install -y \
+      cairo \
+      cairo-devel \
+      cargo \
+      freetype-devel \
+      gdk-pixbuf2 \
+      gdk-pixbuf2-devel \
+      gettext \
+      glibc-devel \
+      kernel-headers \
+      krb5-devel \
+      libjpeg-devel \
+      lcms2-devel \
+      libffi-devel \
+      openjpeg2-devel \
+      openssl-devel \
+      pango \
+      pango-devel \
+      poppler-utils \
+      postgresql \
+      postgresql-devel \
+      rust \
+      tcl-devel \
+      libtiff-devel \
+      tk-devel \
+      zlib \
+      zlib-devel \
+      git \
+      swig 
 
 # Install python packages
 COPY ./requirements.txt /requirements.txt
-RUN pip install -r /requirements.txt
+RUN pip3 install wheel && pip3 install -r /requirements.txt
 
-# Add CA
-RUN apk add --no-cache wget tar curl rpm
-RUN mkdir -p /etc/grid-security/certificates
-
-ENV RPM_BASE_URL=https://repository.egi.eu/sw/production/cas/1/current/RPMS/
-
-# Install the latest RPM for both RootCA and GridCA
-RUN for package in Root GridCA; do \
-      LATEST_RPM=$(curl -s ${RPM_BASE_URL} | grep -o "href=\"ca_CERN-${package}-[^\"]*\.noarch\.rpm\"" | sed 's/href="//' | sed 's/"//g' | sort -V | tail -n 1) && \
-      if [ -z "$LATEST_RPM" ]; then \
-        echo "Error: Could not determine the latest RPM version for ${package}." && exit 1; \
-      else \
-        echo "Latest RPM version for ${package} found: $LATEST_RPM"; \
-        curl -o /etc/grid-security/certificates/${LATEST_RPM} ${RPM_BASE_URL}${LATEST_RPM} && \
-        rpm -i /etc/grid-security/certificates/${LATEST_RPM} && \
-        rm -rf /etc/grid-security/certificates/${LATEST_RPM}; \
-      fi; \
-    done
-
-WORKDIR /
-
-# Clean up temporary build dependencies
-RUN apk del .tmp-build-deps
+COPY docker/carepo.repo /etc/yum.repos.d/
+RUN dnf install -y ca_CERN-Root-2 ca_CERN-GridCA && dnf clean -y all
 
 RUN mkdir /oais_platform
 COPY . /oais_platform/

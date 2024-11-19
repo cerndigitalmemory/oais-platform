@@ -1,4 +1,5 @@
 import json
+import logging
 
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
@@ -60,7 +61,7 @@ class Steps(models.IntegerChoices):
     EDIT_MANIFEST = 6
     INVENIO_RDM_PUSH = 7
     ANNOUNCE = 8
-    PUSH_SIP_TO_CTA = 9
+    PUSH_TO_CTA = 9
     EXTRACT_TITLE = 10
 
 
@@ -110,6 +111,7 @@ class Archive(models.Model):
         related_name="last_step",
     )
     path_to_sip = models.CharField(max_length=100)
+    path_to_aip = models.CharField(max_length=250, null=True)
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
@@ -158,6 +160,10 @@ class Archive(models.Model):
 
     def set_path(self, new_path):
         self.path_to_sip = new_path
+        self.save()
+
+    def set_aip_path(self, new_aip_path):
+        self.path_to_aip = new_aip_path
         self.save()
 
     def set_title(self, title):
@@ -272,6 +278,9 @@ class Archive(models.Model):
             or self.title == f"{self.source} - {self.recid}"
         ) and self.state != ArchiveState.NONE:
             next_steps.append(Steps.EXTRACT_TITLE)
+
+        if self.state == ArchiveState.AIP and Steps.PUSH_TO_CTA not in next_steps:
+            next_steps.append(Steps.PUSH_TO_CTA)
 
         return next_steps
 

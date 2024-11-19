@@ -64,7 +64,7 @@ class PipelineTests(APITestCase):
             ),  # invalid size
             ([-1], status.HTTP_400_BAD_REQUEST),  # invalid type of the step
             (
-                [Steps.PUSH_SIP_TO_CTA, Steps.VALIDATION, Steps.CHECKSUM],
+                [Steps.PUSH_TO_CTA, Steps.VALIDATION, Steps.CHECKSUM],
                 status.HTTP_400_BAD_REQUEST,
             ),  # invalid order
             (
@@ -89,7 +89,7 @@ class PipelineTests(APITestCase):
     def test_execute_pipeline_ongoing_execution(self):
         self.client.force_authenticate(user=self.creator)
 
-        pipeline = [Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH, Steps.PUSH_SIP_TO_CTA]
+        pipeline = [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH]
 
         # simulate ongoing checksum step: last_completed_step != last_step
         self.archive.set_last_step(self.checksum_step.id)
@@ -143,9 +143,9 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "push_sip_to_cta",
-                    "pipeline": [Steps.PUSH_SIP_TO_CTA],
-                    "prev_step": Steps.CHECKSUM,
+                    "task": "push_to_cta",
+                    "pipeline": [Steps.PUSH_TO_CTA],
+                    "prev_step": Steps.ARCHIVE,
                 },
                 status.HTTP_200_OK,
             ),

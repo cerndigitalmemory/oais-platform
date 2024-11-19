@@ -38,6 +38,7 @@ from oais_platform.settings import (
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
     FTS_INSTANCE,
+    FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
@@ -51,14 +52,27 @@ bic_version = bagit_create.version.get_version()
 # Set up logging
 ## Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
+logger.setLevel("DEBUG")
 ## Standard logger
 logging.basicConfig(level=logging.INFO)
 
 try:
     # Get the FTS client ready
     fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
-except Exception:
-    logging.warning("Couldn't initialize the FTS client")
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=6, period=IntervalSchedule.HOURS
+    )
+    task_name = f"Delegating FTS certificate for {FTS_INSTANCE}"
+    periodic_task = PeriodicTask.objects.filter(name=task_name).count()
+    if periodic_task == 0:
+        PeriodicTask.objects.create(
+            interval=schedule,
+            name=task_name,
+            task="fts_delegate",
+            expire_seconds=21600.0,
+        )
+except Exception as e:
+    logging.warning(f"Couldn't initialize the FTS client: {e}")
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -71,7 +85,6 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     retval: returned value from the execution of the celery task
     task_id: Celery task ID
     """
-
     # ID of the Archive this Step is in
     archive_id = args[0]
     archive = Archive.objects.get(pk=archive_id)
@@ -181,8 +194,8 @@ def run_step(step, archive_id, api_key=None):
         archivematica.delay(step.archive.id, step.id, step.input_data)
     elif step.name == Steps.INVENIO_RDM_PUSH:
         invenio.delay(step.archive.id, step.id, step.input_data)
-    elif step.name == Steps.PUSH_SIP_TO_CTA:
-        push_sip_to_cta.delay(step.archive.id, step.id, step.input_data)
+    elif step.name == Steps.PUSH_TO_CTA:
+        push_to_cta.delay(step.archive.id, step.id, step.input_data)
     elif step.name == Steps.EXTRACT_TITLE:
         extract_title.delay(archive.id, step.id)
 
@@ -251,10 +264,10 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(name="push_sip_to_cta", bind=True, ignore_result=True)
-def push_sip_to_cta(self, archive_id, step_id, input_data=None):
+@shared_task(name="push_to_cta", bind=True, ignore_result=True)
+def push_to_cta(self, archive_id, step_id, input_data=None):
     """
-    Push the SIP of the given Archive to CTA, preparing the FTS Job,
+    Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
     artifact. Once done, set up another periodic task to check on
     the status of the transfer.
@@ -264,34 +277,49 @@ def push_sip_to_cta(self, archive_id, step_id, input_data=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
-    path_to_sip = archive.path_to_sip
+    if not archive.path_to_aip:
+        logger.warning("AIP path not found for the given archive.")
+        step.set_status(Status.FAILED)
+        step.set_output_data(
+            {"status": 1, "errormsg": "AIP path not found for the given archive."}
+        )
+        return 1
+
     # And set the step as in progress
     step.set_status(Status.IN_PROGRESS)
 
-    cta_folder_name = f"sip-{archive.id}-{int(time.time())}"
+    cta_folder_name = f"aip-{archive.id}"
 
-    submitted_job = fts.push_to_cta(
-        f"root://eosuser.cern.ch/{path_to_sip}",
-        f"{CTA_BASE_PATH}{cta_folder_name}",
-    )
+    try:
+        submitted_job = fts.push_to_cta(
+            f"https://eosproject-p.cern.ch:8444/{archive.path_to_aip}",
+            f"{CTA_BASE_PATH}{cta_folder_name}",
+        )
+    except Exception as e:
+        logger.warning(str(e))
+        step.set_status(Status.FAILED)
+        step.set_output_data({"status": 1, "errormsg": str(e)})
+        return 1
 
     logger.info(submitted_job)
 
     output_cta_artifact = {
         "artifact_name": "FTS Job",
         "artifact_path": cta_folder_name,
-        "artifact_url": f"https://fts3-pilot.cern.ch:8449/fts3/ftsmon/#/job/{submitted_job}",
+        "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
     }
 
     # Create the scheduler
-    schedule = IntervalSchedule.objects.create(every=2, period=IntervalSchedule.SECONDS)
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=1, period=IntervalSchedule.HOURS
+    )
     # Spawn a periodic task to check for the status of the job
     PeriodicTask.objects.create(
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
         args=json.dumps([archive.id, step.id, submitted_job]),
-        expire_seconds=2.0,
+        expire_seconds=3600.0,
     )
 
     step.set_output_data(
@@ -306,18 +334,30 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     If finished, set the corresponding step as completed and remove the
     periodic task.
     """
+    logger.info(f"Checking job status for Step {step_id} and job {job_id}")
     step = Step.objects.get(pk=step_id)
-    status = fts.job_status(job_id)
-
     task_name = f"FTS job status for step: {step.id}"
 
+    try:
+        status = fts.job_status(job_id)
+    except Exception as e:
+        logger.warning(str(e))
+        _remove_periodic_task_on_failure(
+            task_name, step, {"status": 1, "errormsg": str(e)}
+        )
+
+    logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
+
     if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(self, task_name, step, status, archive_id)
+        _handle_completed_fts_job(self, task_name, step, archive_id, job_id)
     elif status["job_state"] == "FAILED":
-        _remove_periodic_task_on_failure(task_name, step, status)
+        result = {"FTS status": status}
+        if step.output_data["artifact"]:
+            result["artifact"] = step.output_data["artifact"]
+        _remove_periodic_task_on_failure(task_name, step, result)
 
 
-def _handle_completed_fts_job(self, task_name, step, status, archive_id):
+def _handle_completed_fts_job(self, task_name, step, archive_id, job_id):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
     except Exception as e:
@@ -325,7 +365,18 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         step.set_status(Status.FAILED)
         return
 
-    status["status"] = 0
+    logger.info("FTS transfer succeded, removing periodic task")
+    periodic_task.delete()
+
+    cta_folder_name = f"aip-{archive_id}"
+    cta_artifact = {
+        "artifact_name": "CTA",
+        "artifact_localpath": cta_folder_name,
+        "artifact_url": f"{CTA_BASE_PATH}{cta_folder_name}",
+        "fts_id": job_id,
+    }
+
+    status = {"status": 0, "errormsg": None, "artifact": cta_artifact}
     finalize(
         self=self,
         status=states.SUCCESS,
@@ -336,8 +387,13 @@ def _handle_completed_fts_job(self, task_name, step, status, archive_id):
         einfo=None,
     )
 
-    logger.info("Looks like the transfer succeded, removing periodic task")
-    periodic_task.delete()
+
+@shared_task(name="fts_delegate", bind=True, ignore_result=True)
+def fts_delegate(self):
+    try:
+        fts.delegate()
+    except Exception as e:
+        logger.warning(e)
 
 
 @shared_task(
@@ -634,7 +690,7 @@ def archivematica(self, archive_id, step_id, input_data):
     am.transfer_name = transfer_name
 
     # Create archivematica package
-    logging.info(
+    logger.info(
         f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
     )
 
@@ -657,7 +713,7 @@ def archivematica(self, archive_id, step_id, input_data):
             current_step.set_status(Status.WAITING)
 
             # Create the scheduler
-            schedule = IntervalSchedule.objects.create(
+            schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=60, period=IntervalSchedule.SECONDS
             )
             # Spawn a periodic task to check for the status of the package on AM
@@ -731,16 +787,16 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
 
     try:
         am_status = am.get_unit_status(message["id"])
-        logging.info(f"Current unit status for {am_status}")
+        logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
-        logging.info(f"Error {e.response.status_code} for archivematica")
+        logger.info(f"Error {e.response.status_code} for archivematica")
         if e.response.status_code == 400:
             is_failed = True
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
                 am.unit_uuid = message["id"]
                 executed_jobs = am.get_jobs()
-                logging.debug(
+                logger.debug(
                     f"Executed jobs for given id({message['id']}): {executed_jobs}"
                 )
                 if executed_jobs != 1 and len(executed_jobs) > 0:
@@ -749,15 +805,13 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                         "status": "PROCESSING",
                         "microservice": "Waiting for archivematica to continue the processing",
                     }
-                    logging.info(
+                    logger.info(
                         f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
                     )
                 else:
-                    logging.info(
-                        "No executed jobs for the given Archivematica package."
-                    )
+                    logger.info("No executed jobs for the given Archivematica package.")
             except requests.HTTPError as e:
-                logging.info(
+                logger.info(
                     f"Error {e.response.status_code} for archivematica retreiving jobs"
                 )
 
@@ -765,9 +819,9 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
                 # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
                 time_passed = (timezone.now() - step.start_date).total_seconds()
-                logging.info(f"Waiting in queue, time passed: {time_passed}s")
+                logger.info(f"Waiting in queue, time passed: {time_passed}s")
                 if time_passed > 60 * AM_WAITING_TIME_LIMIT:
-                    logging.info(
+                    logger.info(
                         f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
                     )
                 else:
@@ -866,6 +920,8 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
         )
 
         step.set_output_data(am_status)
+        step.archive.set_aip_path(am_status["artifact"]["artifact_path"])
+        step.archive.save()
 
         finalize(
             self=self,
@@ -934,16 +990,27 @@ def prepare_invenio_payload(archive):
     for step in steps:
         if "artifact" in step.output_data:
             out_data = json.loads(step.output_data)
-            if out_data["artifact"]["artifact_name"] in ["SIP", "AIP"]:
+            artifact_name = out_data["artifact"]["artifact_name"]
+            if artifact_name in ["SIP", "AIP"]:
                 invenio_artifacts.append(
                     {
-                        "type": out_data["artifact"]["artifact_name"],
+                        "type": artifact_name,
                         "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
                         "path": out_data["artifact"]["artifact_path"],
                         "add_details": {
                             "SIP": "Submission Information Package as harvested by the platform from the upstream digital repository.",
                             "AIP": "Archival Information Package, as processed by Archivematica.",
-                        }[out_data["artifact"]["artifact_name"]],
+                        }[artifact_name],
+                        "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
+                    }
+                )
+            elif artifact_name == "CTA":
+                invenio_artifacts.append(
+                    {
+                        "type": artifact_name,
+                        "link": None,
+                        "path": out_data["artifact"]["artifact_url"],
+                        "add_details": "Archival Information Package pushed to the CERN Tape Archive.",
                         "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
                     }
                 )
@@ -1157,7 +1224,7 @@ def extract_title(self, archive_id, step_id):
     dublin_core_path = "data/meta/dc.xml"
     dublin_core_location = os.path.join(sip_folder_name, dublin_core_path)
     try:
-        logging.info(f"Starting extract title from dc.xml for Archive {archive.id}")
+        logger.info(f"Starting extract title from dc.xml for Archive {archive.id}")
         xml_tree = ET.parse(dublin_core_location)
         xml = xml_tree.getroot()
         ns = {
@@ -1166,11 +1233,11 @@ def extract_title(self, archive_id, step_id):
         }
         title = xml.findall("./dc:dc/dc:title", ns)
         title = title[0].text
-        logging.info(f"Title found for Archive {archive.id}: {title}")
+        logger.info(f"Title found for Archive {archive.id}: {title}")
         archive.set_title(title)
         return {"status": 0, "errormsg": None}
     except Exception as e:
-        logging.warning(
+        logger.warning(
             f"Error while extracting title from dc.xml at {dublin_core_location}: {str(e)}"
         )
         return {
