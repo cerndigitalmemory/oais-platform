@@ -162,7 +162,7 @@ export INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 
 The [CERN FTS client](https://fts.web.cern.ch/fts/) is used to push and retrieve data to the CERN Tape Archive (CTA). It is suggested to set up a Service account for this.
 
-Change your desired `FTS_INSTANCE` to use in the settings. By default the test one is used. `FTS_STATUS_INSTANCE`should point to the base url where the job status can be checked for a given ID.
+Change your desired `FTS_INSTANCE` to use in the settings. By default the test one is used. `FTS_SOURCE_BASE_PATH` should point to the EOS HTTPS source base path.`FTS_STATUS_INSTANCE`should point to the base url where the job status can be checked for a given ID.
 
 You need a GRID certificate to authenticate. Request one from the [CERN Certification Authority](https://ca.cern.ch/ca/). If using a service account, request permission to obtain a Grid _Robot_ certificate.
 
@@ -182,6 +182,7 @@ Once you have your final `usercert.pem` and `private.nopwd.key`, set their paths
 ```bash
 export FTS_INSTANCE="VALUE"
 export FTS_STATUS_INSTANCE="VALUE"
+export FTS_SOURCE_BASE_PATH="VALUE"
 export FTS_GRID_CERT="VALUE"
 export FTS_GRID_CERT_KEY="VALUE"
 ```

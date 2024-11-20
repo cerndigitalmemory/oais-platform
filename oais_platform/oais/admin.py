@@ -157,6 +157,7 @@ class SourceAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "has_public_records",
         "how_to_get_key",
         "description",
+        "notification_endpoint",
     )
 
 

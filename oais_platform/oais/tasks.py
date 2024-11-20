@@ -18,7 +18,15 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
+from oais_platform.oais.models import (
+    Archive,
+    ArchiveState,
+    Collection,
+    Source,
+    Status,
+    Step,
+    Steps,
+)
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
@@ -38,6 +46,7 @@ from oais_platform.settings import (
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
     FTS_INSTANCE,
+    FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
@@ -198,6 +207,8 @@ def run_step(step, archive_id, api_key=None):
         push_to_cta.delay(step.archive.id, step.id, step.input_data)
     elif step.name == Steps.EXTRACT_TITLE:
         extract_title.delay(archive.id, step.id)
+    elif step.name == Steps.NOTIFY_SOURCE:
+        notify_source.delay(archive_id, step.id, api_key)
 
     return step
 
@@ -292,7 +303,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
 
     try:
         submitted_job = fts.push_to_cta(
-            f"https://eosproject-p.cern.ch:8444/{archive.path_to_aip}",
+            f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
@@ -440,10 +451,10 @@ def invenio(self, archive_id, step_id, input_data=None):
                 verify=False,
             )
             req.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            logger.error(f"The request didn't succed:{err}")
+        except Exception as err:
+            logger.error(f"The request didn't succeed:{err}")
             step.set_status(Status.FAILED)
-            return {"status": 1, "ERROR": err}
+            return {"status": 1, "errormsg": err}
 
         # Parse the response and get our new record ID so we can link it
         data_loaded = json.loads(req.text)
@@ -453,8 +464,8 @@ def invenio(self, archive_id, step_id, input_data=None):
         # Create a path artifact with a link to the InvenioRDM Record we just created
         # FIXME: Use a single method to create artifacts
         output_invenio_artifact = {
-            "artifact_name": "Invenio Link",
-            "artifact_path": "test",
+            "artifact_name": "Registry",
+            "artifact_path": relative_path,
             "artifact_url": f"{INVENIO_SERVER_URL}{relative_path}",
         }
 
@@ -1243,4 +1254,41 @@ def extract_title(self, archive_id, step_id):
         return {
             "status": 1,
             "errormsg": f"Title could not be extracted from Dublin Core file at {dublin_core_location}",
+        }
+
+
+@shared_task(name="notify_source", bind=True, ignore_result=True, after_return=finalize)
+def notify_source(self, archive_id, step_id, api_key=None):
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
+
+    logging.info(
+        f"Starting to notify the upstream source({archive.source}) for Archive {archive.id}"
+    )
+
+    if archive.state != ArchiveState.AIP:
+        return {"status": 1, "errormsg": f"Archive {archive.id} is not an AIP."}
+
+    notification_endpoint = Source.objects.get(
+        name=archive.source
+    ).notification_endpoint
+    if not notification_endpoint or len(notification_endpoint) == 0:
+        return {
+            "status": 1,
+            "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
+        }
+
+    try:
+        get_source(archive.source).notify_source(
+            archive, notification_endpoint, api_key
+        )
+        return {
+            "status": 0,
+            "errormsg": None,
+        }
+    except Exception as e:
+        return {
+            "status": 1,
+            "errormsg": str(e),
         }

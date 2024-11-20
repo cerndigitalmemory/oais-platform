@@ -13,6 +13,7 @@ To avoid circular imports:
 8 - Announce
 9 - Push to CTA
 10 - Extract title
+11 - Notify source
 """
 
 next_steps_constraints = {
@@ -25,6 +26,7 @@ next_steps_constraints = {
     8: [3],
     9: [5, 7, 9],
     10: [5, 7],
+    11: [5, 7, 9, 11],
 }
 
 
