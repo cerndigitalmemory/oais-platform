@@ -280,12 +280,17 @@ class Archive(models.Model):
         ) and self.state != ArchiveState.NONE:
             next_steps.append(Steps.EXTRACT_TITLE)
 
-        if self.state == ArchiveState.AIP and Steps.PUSH_TO_CTA not in next_steps:
-            next_steps.append(Steps.PUSH_TO_CTA)
+        if self.state == ArchiveState.AIP:
+            if Steps.PUSH_TO_CTA not in next_steps:
+                next_steps.append(Steps.PUSH_TO_CTA)
 
-        source = Source.objects.all().filter(name=self.source).first()
-        if source and source.notification_endpoint and self.state == ArchiveState.AIP:
-            next_steps.append(Steps.NOTIFY_SOURCE)
+            source = Source.objects.all().filter(name=self.source)
+            if (
+                len(source) > 0
+                and source[0].notification_endpoint
+                and Steps.NOTIFY_SOURCE not in next_steps
+            ):
+                next_steps.append(Steps.NOTIFY_SOURCE)
 
         return next_steps
 

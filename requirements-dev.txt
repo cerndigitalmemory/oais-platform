@@ -1,4 +1,4 @@
-git+https://gitlab.cern.ch/digitalmemory/bagit-create@develop#bagit-create
+git+https://gitlab.cern.ch/digitalmemory/bagit-create@develop
 celery==4.4.7
 Django==3.2.4
 djangorestframework==3.12.4

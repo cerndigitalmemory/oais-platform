@@ -46,6 +46,7 @@ from oais_platform.settings import (
     FTS_GRID_CERT,
     FTS_GRID_CERT_KEY,
     FTS_INSTANCE,
+    FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
@@ -310,7 +311,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
 
     try:
         submitted_job = fts.push_to_cta(
-            f"https://eosproject-p.cern.ch:8444/{archive.path_to_aip}",
+            f"{FTS_SOURCE_BASE_PATH}{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
