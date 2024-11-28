@@ -494,6 +494,7 @@ class Source(models.Model):
     how_to_get_key = models.TextField(max_length=500, null=True)
     description = models.TextField(max_length=500, null=True)
     notification_endpoint = models.CharField(max_length=250, null=True)
+    notification_enabled = models.BooleanField(default=False)
 
     class Meta:
         ordering = ("id",)

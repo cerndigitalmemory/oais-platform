@@ -139,6 +139,9 @@ class Invenio(AbstractSource):
         else:
             headers["Authorization"] = f"Bearer {api_key}"
 
+        if not archive.path_to_aip:
+            raise Exception(f"Archive {archive.id} has no path_to_aip set.")
+
         harvest_time = (
             archive.steps.all()
             .filter(name=Steps.HARVEST, status=Status.COMPLETED)
@@ -154,19 +157,18 @@ class Invenio(AbstractSource):
             .start_date
         )
 
-        registry_link = archive.resource.invenio_parent_url
-        if not registry_link:
-            raise Exception(f"Registry link not found for Archive {archive.id}")
-
         payload = {
             "pid": archive.recid,
             "status": "P",  # Preserved
             "path": archive.path_to_aip,
-            "uri": registry_link,
             "harvest_timestamp": str(harvest_time),
             "archive_timestamp": str(archive_time),
             "description": {"sender": "CERN Digital Memory", "compliance": "OAIS"},
         }
+
+        registry_link = archive.resource.invenio_parent_url
+        if registry_link:
+            payload["uri"] = registry_link
 
         req = requests.post(
             notification_endpoint,

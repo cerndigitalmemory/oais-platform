@@ -13,3 +13,6 @@ class Local(AbstractSource):
 
     def search_by_id(self, recid):
         pass
+
+    def notify_source(self, archive, notification_endpoint, api_key=None):
+        pass
