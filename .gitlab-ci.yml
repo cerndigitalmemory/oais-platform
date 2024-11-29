@@ -26,7 +26,7 @@ django-tests:
   stage: test
   image: registry.cern.ch/docker.io/docker/compose
   services:
-    - docker:dind
+    - registry.cern.ch/docker.io/library/docker:20.10.16-dind
   variables:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_HOST: tcp://docker:2375/
