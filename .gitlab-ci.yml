@@ -26,11 +26,12 @@ django-tests:
   stage: test
   image: registry.cern.ch/docker.io/docker/compose
   services:
-    - registry.cern.ch/docker.io/library/docker:20.10.16-dind
+    - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
+      alias: docker
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_HOST: tcp://docker:2376/
   script:
+    - docker info
     - docker-compose -f test-compose.yml up --exit-code-from django
   tags:
     - docker-privileged-xl
