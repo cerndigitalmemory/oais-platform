@@ -8,12 +8,12 @@ services:
     ports:
       - 80:80
     volumes:
-      - ./oais-web:/oais_web
+      - ../oais-web:/oais_web
     depends_on:
       - django
   db:
     container_name: oais_psql
-    image: postgres:12-alpine
+    image: registry.cern.ch/docker.io/library/postgres:13.1
     environment:
       - POSTGRES_DB=oais_platform
       - POSTGRES_USER=postgres
@@ -29,7 +29,7 @@ services:
       retries: 50
   pgadmin:
     container_name: oais_pgadmin
-    image: dpage/pgadmin4
+    image: registry.cern.ch/docker.io/dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
@@ -79,7 +79,7 @@ services:
   # Redis
   redis:
     container_name: oais_redis
-    image: redis:alpine
+    image: registry.cern.ch/docker.io/libray/redis:7-alpine
 
   celery:
     container_name: oais_celery
