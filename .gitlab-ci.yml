@@ -24,7 +24,7 @@ check-black:
 
 django-tests:
   stage: test
-  image: registry.cern.ch/docker.io/docker/compose
+  image: registry.cern.ch/docker.io/library/docker:20.10.16
   services:
     - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
       alias: docker
