@@ -29,6 +29,7 @@ django-tests:
     - registry.cern.ch/docker.io/library/docker:20.10.16-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: tcp://docker:2376/
   script:
     - docker-compose -f test-compose.yml up --exit-code-from django
   tags:
