@@ -1,4 +1,3 @@
-from oais_platform.oais.exceptions import ServiceUnavailable
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 

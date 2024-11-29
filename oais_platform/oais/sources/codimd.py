@@ -1,4 +1,5 @@
 import json
+import logging
 from operator import itemgetter
 
 import requests
@@ -25,11 +26,16 @@ class CodiMD(AbstractSource):
             )
         except Exception:
             raise ServiceUnavailable("Cannot perform search")
-        data = json.loads(req.text)
-        records = data["history"]
 
         if not req.ok:
             raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
+
+        try:
+            data = json.loads(req.text)
+            records = data["history"]
+        except json.JSONDecodeError:
+            logging.error(f"Response was not valid JSON: {req.text}")
+            return []
 
         return records
 

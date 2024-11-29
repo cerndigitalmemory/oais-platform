@@ -1270,9 +1270,15 @@ def notify_source(self, archive_id, step_id, api_key=None):
     if archive.state != ArchiveState.AIP:
         return {"status": 1, "errormsg": f"Archive {archive.id} is not an AIP."}
 
-    notification_endpoint = Source.objects.get(
-        name=archive.source
-    ).notification_endpoint
+    try:
+        notification_endpoint = Source.objects.get(
+            name=archive.source
+        ).notification_endpoint
+    except Source.DoesNotExist:
+        return {
+            "status": 1,
+            "errormsg": f"Source object with name {archive.source} does not exist.",
+        }
     if not notification_endpoint or len(notification_endpoint) == 0:
         return {
             "status": 1,
