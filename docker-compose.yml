@@ -79,7 +79,7 @@ services:
   # Redis
   redis:
     container_name: oais_redis
-    image: registry.cern.ch/docker.io/libray/redis:7-alpine
+    image: registry.cern.ch/docker.io/library/redis:7-alpine
 
   celery:
     container_name: oais_celery
