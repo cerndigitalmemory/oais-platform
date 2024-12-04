@@ -284,14 +284,21 @@ class Archive(models.Model):
             if Steps.PUSH_TO_CTA not in next_steps:
                 next_steps.append(Steps.PUSH_TO_CTA)
 
-            source = Source.objects.all().filter(name=self.source)
-            if (
-                len(source) > 0
-                and source[0].notification_enabled
-                and source[0].notification_endpoint
-                and Steps.NOTIFY_SOURCE not in next_steps
-            ):
-                next_steps.append(Steps.NOTIFY_SOURCE)
+            try:
+                source = Source.objects.get(name=self.source)
+                if (
+                    source
+                    and source[0].notification_enabled
+                    and source[0].notification_endpoint
+                    and Steps.NOTIFY_SOURCE not in next_steps
+                ):
+                    next_steps.append(Steps.NOTIFY_SOURCE)
+            except Source.DoesNotExist:
+                logging.warning(f"Source with name {self.source} does not exists.")
+            except Source.MultipleObjectsReturned:
+                logging.warning(
+                    f"Source with name {self.source} returned multiple objects."
+                )
 
         return next_steps
 
