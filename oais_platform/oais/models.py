@@ -288,8 +288,8 @@ class Archive(models.Model):
                 source = Source.objects.get(name=self.source)
                 if (
                     source
-                    and source[0].notification_enabled
-                    and source[0].notification_endpoint
+                    and source.notification_enabled
+                    and source.notification_endpoint
                     and Steps.NOTIFY_SOURCE not in next_steps
                 ):
                     next_steps.append(Steps.NOTIFY_SOURCE)
