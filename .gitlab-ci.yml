@@ -6,7 +6,7 @@ stages:
 
 check-isort:
   stage: isort
-  image: python:3.11
+  image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
     - pip install isort
@@ -15,7 +15,7 @@ check-isort:
 
 check-black:
   stage: black
-  image: python:3.11
+  image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
     - pip install black
@@ -24,13 +24,14 @@ check-black:
 
 django-tests:
   stage: test
-  image: docker/compose:1.27.4
+  image: registry.cern.ch/docker.io/library/docker:20.10.16
   services:
-    - docker:dind
+    - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
+      alias: docker
   variables:
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: "/certs"
   script:
+    - docker info
     - docker-compose -f test-compose.yml up --exit-code-from django
   tags:
     - docker-privileged-xl

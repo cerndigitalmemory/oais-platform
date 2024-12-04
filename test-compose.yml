@@ -13,7 +13,7 @@ services:
       - django
   db:
     container_name: oais_test_psql
-    image: postgres:12-alpine
+    image: registry.cern.ch/docker.io/library/postgres:13.1
     environment:
       - POSTGRES_DB=oais_platform
       - POSTGRES_USER=postgres
@@ -23,14 +23,14 @@ services:
       - postgres:/data/postgres
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 1s
       timeout: 10s
       retries: 50
 
   pgadmin:
     container_name: oais_test_pgadmin
-    image: dpage/pgadmin4
+    image: registry.cern.ch/docker.io/dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
@@ -71,15 +71,14 @@ services:
       - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
       - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     env_file:
       - ./.env.dev
 
   # Redis
   redis:
     container_name: oais_test_redis
-    image: redis:alpine
+    image: registry.cern.ch/docker.io/library/redis:7-alpine
 
   celery:
     container_name: oais_test_celery

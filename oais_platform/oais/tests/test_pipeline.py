@@ -25,7 +25,12 @@ class PipelineTests(APITestCase):
 
         self.creator = User.objects.create_user("creator", password="pw")
         self.source = Source.objects.create(
-            name="test", longname="Test", api_url="test.test/api", classname="Local"
+            name="test",
+            longname="Test",
+            api_url="test.test/api",
+            classname="Local",
+            notification_enabled=True,
+            notification_endpoint="test.test/api/notify",
         )
         self.creator_api_key = ApiKey.objects.create(
             user=self.creator, source=self.source, key="abcd1234"
@@ -69,6 +74,10 @@ class PipelineTests(APITestCase):
             ),  # invalid order
             (
                 [Steps.VALIDATION, Steps.CHECKSUM, Steps.HARVEST],
+                status.HTTP_400_BAD_REQUEST,
+            ),  # invalid order
+            (
+                [Steps.HARVEST, Steps.VALIDATION, Steps.CHECKSUM, Steps.NOTIFY_SOURCE],
                 status.HTTP_400_BAD_REQUEST,
             ),  # invalid order
         ]
@@ -165,6 +174,14 @@ class PipelineTests(APITestCase):
                 },
                 status.HTTP_200_OK,
             ),
+            (
+                {
+                    "task": "notify_source",
+                    "pipeline": [Steps.NOTIFY_SOURCE],
+                    "prev_step": Steps.ARCHIVE,
+                },
+                status.HTTP_200_OK,
+            ),
         ]
     )
     def test_execute_pipeline_one_step(self, input, status_code):
@@ -219,6 +236,10 @@ class PipelineTests(APITestCase):
                     )
                 case Steps.EXTRACT_TITLE:
                     task.assert_called_once_with(self.archive.id, latest_step.id)
+                case Steps.NOTIFY_SOURCE:
+                    task.assert_called_once_with(
+                        self.archive.id, latest_step.id, self.creator_api_key.key
+                    )
                 case _:
                     task.assert_called_once_with(
                         self.archive.id, latest_step.id, latest_step.output_data
