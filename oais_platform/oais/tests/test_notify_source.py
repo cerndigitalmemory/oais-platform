@@ -23,6 +23,7 @@ class NotifySourceTests(APITestCase):
             api_url="test.test/api",
             classname="Local",
             notification_endpoint="test.test/api/notify",
+            notification_enabled=True,
         )
         self.creator_api_key = ApiKey.objects.create(
             user=self.creator, source=self.source, key="abcd1234"
@@ -70,7 +71,20 @@ class NotifySourceTests(APITestCase):
             f"Source object with name {self.archive.source} does not exist.",
         )
 
-    def test_notify_source_no_noti_endpoint(self):
+    def test_notify_source_notification_disabled(self):
+        self.setup_aip()
+        self.source.notification_enabled = False
+        self.source.save()
+
+        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+
+        self.assertEqual(result["status"], 1)
+        self.assertEqual(
+            result["errormsg"],
+            f"Notify source disabled for {self.archive.source}.",
+        )
+
+    def test_notify_source_no_notification_endpoint(self):
         self.setup_aip()
         self.source.notification_endpoint = None
         self.source.save()

@@ -287,6 +287,7 @@ class Archive(models.Model):
             source = Source.objects.all().filter(name=self.source)
             if (
                 len(source) > 0
+                and source[0].notification_enabled
                 and source[0].notification_endpoint
                 and Steps.NOTIFY_SOURCE not in next_steps
             ):

@@ -8,12 +8,12 @@ services:
     ports:
       - 80:80
     volumes:
-      - ../oais-web:/oais_web
+      - ./oais-web:/oais_web
     depends_on:
       - django
   db:
     container_name: oais_psql
-    image: registry.cern.ch/docker.io/library/postgres:13.1
+    image: registry.cern.ch/docker.io/library/postgres:14
     environment:
       - POSTGRES_DB=oais_platform
       - POSTGRES_USER=postgres

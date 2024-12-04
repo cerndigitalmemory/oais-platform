@@ -1271,15 +1271,18 @@ def notify_source(self, archive_id, step_id, api_key=None):
         return {"status": 1, "errormsg": f"Archive {archive.id} is not an AIP."}
 
     try:
-        notification_endpoint = Source.objects.get(
-            name=archive.source
-        ).notification_endpoint
+        source = Source.objects.get(name=archive.source)
     except Source.DoesNotExist:
         return {
             "status": 1,
             "errormsg": f"Source object with name {archive.source} does not exist.",
         }
-    if not notification_endpoint or len(notification_endpoint) == 0:
+    if not source.notification_enabled:
+        return {
+            "status": 1,
+            "errormsg": f"Notify source disabled for {archive.source}.",
+        }
+    if not source.notification_endpoint or len(source.notification_endpoint) == 0:
         return {
             "status": 1,
             "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
@@ -1287,7 +1290,7 @@ def notify_source(self, archive_id, step_id, api_key=None):
 
     try:
         get_source(archive.source).notify_source(
-            archive, notification_endpoint, api_key
+            archive, source.notification_endpoint, api_key
         )
         return {
             "status": 0,
