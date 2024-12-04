@@ -29,6 +29,7 @@ class PipelineTests(APITestCase):
             longname="Test",
             api_url="test.test/api",
             classname="Local",
+            notification_enabled=True,
             notification_endpoint="test.test/api/notify",
         )
         self.creator_api_key = ApiKey.objects.create(
