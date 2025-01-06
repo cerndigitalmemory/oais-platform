@@ -100,7 +100,7 @@ class BatchAnnounceTests(APITestCase):
             )
 
             bic.process(
-                recid="2779856",
+                recid="2857550",
                 source="cds",
                 target=batch_announce_folder,
                 loglevel=0,
@@ -145,7 +145,7 @@ class BatchAnnounceTests(APITestCase):
             )
 
             bic.process(
-                recid="2779856",
+                recid="2857550",
                 source="cds",
                 target=batch_announce_folder,
                 loglevel=0,
@@ -205,7 +205,7 @@ class BatchAnnounceTests(APITestCase):
             )
 
             bic.process(
-                recid="2779856",
+                recid="2857550",
                 source="cds",
                 target=batch_announce_folder,
                 loglevel=0,
@@ -237,7 +237,7 @@ class BatchAnnounceTests(APITestCase):
             os.remove(os.path.join(path_to_sip, "data/meta/sip.json"))
 
             bic.process(
-                recid="2779856",
+                recid="2857550",
                 source="cds",
                 target=batch_announce_folder,
                 loglevel=0,
@@ -272,7 +272,7 @@ class BatchAnnounceTests(APITestCase):
             os.remove(os.path.join(path_to_sip, "data/meta/sip.json"))
 
             sip2 = bic.process(
-                recid="2779856",
+                recid="2857550",
                 source="cds",
                 target=batch_announce_folder,
                 loglevel=0,
