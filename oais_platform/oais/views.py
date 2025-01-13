@@ -46,7 +46,6 @@ from oais_platform.oais.permissions import (
     filter_archives_for_user,
     filter_archives_public,
     filter_collections_by_user_perms,
-    filter_jobs_by_user_perms,
     filter_records_by_user_perms,
     filter_steps_by_user_perms,
     has_user_archive_edit_rights,
@@ -936,8 +935,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     def get_queryset(self):
         internal = self.request.GET.get("internal")
 
-        if internal == "true":
-            return filter_jobs_by_user_perms(super().get_queryset(), self.request.user)
+        if internal == "only":
+            return filter_collections_by_user_perms(
+                super().get_queryset(), self.request.user, internal=True
+            )
+        elif internal == "false":
+            return filter_collections_by_user_perms(
+                super().get_queryset(), self.request.user, internal=False
+            )
         else:
             return filter_collections_by_user_perms(
                 super().get_queryset(), self.request.user
@@ -1070,8 +1075,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Returns all Tag names and ids
         """
-        tags = self.get_queryset().values("id", "title")
-        serializer = CollectionNameSerializer(tags, many=True)
+        tags = self.get_queryset().values("id", "title", "timestamp")
+        serializer = CollectionNameSerializer(tags.order_by("-timestamp"), many=True)
         return Response({"result": serializer.data})
 
 

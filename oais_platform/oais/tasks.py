@@ -3,7 +3,6 @@ import logging
 import ntpath
 import os
 import shutil
-import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin
 
@@ -19,6 +18,7 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
 from oais_platform.oais.models import (
+    ApiKey,
     Archive,
     ArchiveState,
     Collection,
@@ -1301,3 +1301,87 @@ def notify_source(self, archive_id, step_id, api_key=None):
             "status": 1,
             "errormsg": str(e),
         }
+
+
+@shared_task(ame="periodic_harvest", bind=True, ignore_result=True)
+def periodic_harvest(self, source_name, creator_name, pipeline):
+    logging.info(f"Starting the periodic harvest for {source_name}.")
+
+    try:
+        source = Source.objects.get(name=source_name)
+    except Source.DoesNotExist:
+        logging.error(f"Source with name {source_name} does not exist.")
+        return
+
+    try:
+        creator = User.objects.get(username=creator_name)
+    except User.DoesNotExist:
+        logging.error(f"User with name {creator_name} does not exist.")
+        return
+
+    api_key = None
+    try:
+        api_key = ApiKey.objects.get(source=source, user=creator).key
+    except ApiKey.DoesNotExist:
+        logging.warning(
+            f"User with name {creator_name} does not have API key set for the given source, only public records will be available."
+        )
+
+    collection_name = f"{source_name} - automatic harvest"
+    last_harvest = (
+        Collection.objects.filter(title__contains=collection_name, internal=True)
+        .order_by("-timestamp")
+        .first()
+    )
+    last_harvest_time = None
+    if not last_harvest:
+        logging.info(f"First harvest for source {source_name}.")
+    else:
+        last_harvest_time = last_harvest.timestamp
+        logging.info(
+            f"Last harvest for source {source_name} was at {last_harvest_time}."
+        )
+
+    new_harvest_time = timezone.now()
+    try:
+        records_to_harvest = get_source(source_name, api_key).get_records_to_harvest(
+            last_harvest_time
+        )
+    except Exception as e:
+        logging.error(f"Error while querying {source_name}: {str(e)}")
+        return
+
+    logging.info(
+        f"Total number of IDs to harvest for source {source_name}: {len(records_to_harvest)}."
+    )
+
+    if len(records_to_harvest) < 1:
+        logging.info(f"There are no new records to harvest for {source_name}.")
+        return
+
+    new_harvest = Collection.objects.create(
+        internal=True,
+        creator=creator,
+        title=collection_name,
+        description=f"Automatic harvest for {source_name} started at {new_harvest_time.strftime('%Y-%m-%d %H:%M:%S')}",
+    )
+    for record in records_to_harvest:
+        try:
+            archive = Archive.objects.create(
+                recid=record["recid"],
+                title=record["title"],
+                source=source_name,
+                source_url=record["source_url"],
+                creator=creator,
+            )
+            new_harvest.add_archive(archive.id)
+            for step in pipeline:
+                archive.add_step_to_pipeline(step)
+
+            execute_pipeline(archive.id, api_key)
+        except Exception as e:
+            logging.error(
+                f"Error while processing {record['recid']} from {source_name}: {str(e)}"
+            )
+
+    logging.info(f"All harvests were started for source {source_name}.")

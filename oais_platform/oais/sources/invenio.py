@@ -1,6 +1,7 @@
 import configparser
 import json
 import os
+import urllib.parse
 
 import requests
 
@@ -183,3 +184,23 @@ class Invenio(AbstractSource):
             raise Exception(
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
+
+    def get_records_to_harvest(self, last_harvest):
+        query = ""
+        if last_harvest:
+            query = urllib.parse.quote_plus(
+                f"updated:[{last_harvest.strftime('%Y-%m-%dT%H:%M:%S')} TO *]"
+            )
+        page = 1
+        size = 50
+        records_to_harvest = []
+
+        result = self.search(query, page, size)
+        records_to_harvest += result["results"]
+        if result["total_num_hits"] > size:
+            while page * size < result["total_num_hits"]:
+                page += 1
+                result = self.search(query, page, size)
+                records_to_harvest += result["results"]
+
+        return records_to_harvest

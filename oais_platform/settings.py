@@ -27,6 +27,7 @@ from os import environ
 from pathlib import Path
 
 import sentry_sdk
+from celery.schedules import crontab
 from sentry_sdk.integrations.django import DjangoIntegration
 
 ## General Django settings
@@ -59,6 +60,14 @@ CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
+
+CELERY_BEAT_SCHEDULE = {
+    "cds-rdm-weekly": {
+        "task": "oais_platform.oais.tasks.periodic_harvest",
+        "schedule": crontab(hour=2, minute=0, day_of_week=0),
+        "args": ("cds-rdm-sandbox", "oais.admin", [2, 3, 4, 5, 11]),
+    },
+}
 
 ## Authentication
 # See https://auth.docs.cern.ch/user-documentation/oidc/config/ for
