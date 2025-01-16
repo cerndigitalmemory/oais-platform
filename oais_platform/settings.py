@@ -27,6 +27,7 @@ from os import environ
 from pathlib import Path
 
 import sentry_sdk
+from celery.schedules import crontab
 from sentry_sdk.integrations.django import DjangoIntegration
 
 ## General Django settings
@@ -59,6 +60,14 @@ CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
+
+CELERY_BEAT_SCHEDULE = {
+    "cds-rdm-weekly": {
+        "task": "oais_platform.oais.tasks.periodic_harvest",
+        "schedule": crontab(hour=13, minute=00, day_of_week=5),
+        "args": ("dev-cds-rdm", "oais.admin", [2, 3, 4, 5, 11]),
+    },
+}
 
 ## Authentication
 # See https://auth.docs.cern.ch/user-documentation/oidc/config/ for
@@ -314,6 +323,7 @@ BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
 AM_WAITING_TIME_LIMIT = 5
+AM_CONCURRENCY_LIMT = 100
 
 # Pipeline creation step limit
 PIPELINE_SIZE_LIMIT = 10

@@ -3,7 +3,6 @@ import logging
 import ntpath
 import os
 import shutil
-import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin
 
@@ -18,7 +17,9 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
+from oais_platform.oais.exceptions import RateLimitExceeded
 from oais_platform.oais.models import (
+    ApiKey,
     Archive,
     ArchiveState,
     Collection,
@@ -31,6 +32,7 @@ from oais_platform.oais.sources.utils import get_source
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
+    AM_CONCURRENCY_LIMT,
     AM_REL_DIRECTORY,
     AM_SS_API_KEY,
     AM_SS_URL,
@@ -539,7 +541,9 @@ def invenio(self, archive_id, step_id, input_data=None):
     return {"status": 0, "id": invenio_id, "artifact": output_invenio_artifact}
 
 
-@shared_task(name="process", bind=True, ignore_result=True, after_return=finalize)
+@shared_task(
+    name="process", bind=True, ignore_result=True, after_return=finalize, max_retries=3
+)
 def process(self, archive_id, step_id, api_key=None, input_data=None):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
@@ -568,7 +572,15 @@ def process(self, archive_id, step_id, api_key=None, input_data=None):
             token=api_key,
         )
     except Exception as e:
-        return {"status": 1, "errormsg": str(e)}
+        if any(
+            rate_limit_error in str(e)
+            for rate_limit_error in ["Rate limit exceeded", "429"]
+        ):
+            # If the source's rate limit is exceeded retry 1 min later
+            logger.error("Source's rate limit was exceeded.")
+            raise self.retry(exc=e, countdown=60)
+        else:
+            return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
 
@@ -663,6 +675,7 @@ def checksum(self, archive_id, step_id, input_data):
     name="archivematica",
     bind=True,
     ignore_result=True,
+    max_retries=10,
 )
 def archivematica(self, archive_id, step_id, input_data):
     """
@@ -670,13 +683,21 @@ def archivematica(self, archive_id, step_id, input_data):
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
+    current_am_tasks = PeriodicTask.objects.filter(
+        task="check_am_status", enabled=True
+    ).count()
+    if current_am_tasks >= AM_CONCURRENCY_LIMT:
+        raise self.retry(
+            countdown=60 * 5, exc=Exception("Archivematica concurrency limit reached.")
+        )
+
+    current_step = Step.objects.get(pk=step_id)
+    current_step.set_status(Status.IN_PROGRESS)
+
     archive = Archive.objects.get(pk=archive_id)
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
-
-    current_step = Step.objects.get(pk=step_id)
-    current_step.set_status(Status.IN_PROGRESS)
 
     archive_id = current_step.archive
 
@@ -830,7 +851,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
                 # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
                 # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
                 time_passed = (timezone.now() - step.start_date).total_seconds()
-                logger.info(f"Waiting in queue, time passed: {time_passed}s")
+                logger.info(f"Waiting in AM queue, time passed: {time_passed}s")
                 if time_passed > 60 * AM_WAITING_TIME_LIMIT:
                     logger.info(
                         f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
@@ -1257,7 +1278,13 @@ def extract_title(self, archive_id, step_id):
         }
 
 
-@shared_task(name="notify_source", bind=True, ignore_result=True, after_return=finalize)
+@shared_task(
+    name="notify_source",
+    bind=True,
+    ignore_result=True,
+    after_return=finalize,
+    max_retries=5,
+)
 def notify_source(self, archive_id, step_id, api_key=None):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
@@ -1296,8 +1323,94 @@ def notify_source(self, archive_id, step_id, api_key=None):
             "status": 0,
             "errormsg": None,
         }
+    except RateLimitExceeded as e:
+        self.retry(exc=e, countdown=60)
     except Exception as e:
         return {
             "status": 1,
             "errormsg": str(e),
         }
+
+
+@shared_task(ame="periodic_harvest", bind=True, ignore_result=True)
+def periodic_harvest(self, source_name, creator_name, pipeline):
+    logging.info(f"Starting the periodic harvest for {source_name}.")
+
+    try:
+        source = Source.objects.get(name=source_name)
+    except Source.DoesNotExist:
+        logging.error(f"Source with name {source_name} does not exist.")
+        return
+
+    try:
+        creator = User.objects.get(username=creator_name)
+    except User.DoesNotExist:
+        logging.error(f"User with name {creator_name} does not exist.")
+        return
+
+    api_key = None
+    try:
+        api_key = ApiKey.objects.get(source=source, user=creator).key
+    except ApiKey.DoesNotExist:
+        logging.warning(
+            f"User with name {creator_name} does not have API key set for the given source, only public records will be available."
+        )
+
+    collection_name = f"{source_name} - automatic harvest"
+    last_harvest = (
+        Collection.objects.filter(title__contains=collection_name, internal=True)
+        .order_by("-timestamp")
+        .first()
+    )
+    last_harvest_time = None
+    if not last_harvest:
+        logging.info(f"First harvest for source {source_name}.")
+    else:
+        last_harvest_time = last_harvest.timestamp
+        logging.info(
+            f"Last harvest for source {source_name} was at {last_harvest_time}."
+        )
+
+    new_harvest_time = timezone.now()
+    try:
+        records_to_harvest = get_source(source_name, api_key).get_records_to_harvest(
+            last_harvest_time
+        )
+    except Exception as e:
+        logging.error(f"Error while querying {source_name}: {str(e)}")
+        return
+
+    logging.info(
+        f"Total number of IDs to harvest for source {source_name}: {len(records_to_harvest)}."
+    )
+
+    if len(records_to_harvest) < 1:
+        logging.info(f"There are no new records to harvest for {source_name}.")
+        return
+
+    new_harvest = Collection.objects.create(
+        internal=True,
+        creator=creator,
+        title=collection_name,
+        description=f"Automatic harvest for {source_name} started at {new_harvest_time.strftime('%Y-%m-%d %H:%M:%S')}",
+    )
+    for record in records_to_harvest:
+        try:
+            archive = Archive.objects.create(
+                recid=record["recid"],
+                title=record["title"],
+                source=source_name,
+                source_url=record["source_url"],
+                creator=creator,
+            )
+            new_harvest.add_archive(archive.id)
+            for step in pipeline:
+                archive.add_step_to_pipeline(step)
+
+            execute_pipeline(archive.id, api_key)
+        except Exception as e:
+            logging.error(
+                f"Error while processing {record['recid']} from {source_name}: {str(e)}"
+            )
+
+    logging.info(f"All harvests were started for source {source_name}.")
