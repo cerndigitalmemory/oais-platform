@@ -1,4 +1,4 @@
-bagit-create==git+https://gitlab.cern.ch/digitalmemory/bagit-create@cds-dev
+git+https://gitlab.cern.ch/digitalmemory/bagit-create@cds-dev
 Django==5.0.6
 djangorestframework==3.14.0
 pymarc==4.0.0
