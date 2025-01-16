@@ -64,8 +64,8 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_BEAT_SCHEDULE = {
     "cds-rdm-weekly": {
         "task": "oais_platform.oais.tasks.periodic_harvest",
-        "schedule": crontab(hour=2, minute=0, day_of_week=0),
-        "args": ("cds-rdm-sandbox", "oais.admin", [2, 3, 4, 5, 11]),
+        "schedule": crontab(hour=13, minute=00, day_of_week=5),
+        "args": ("dev-cds-rdm", "oais.admin", [2, 3, 4, 5, 11]),
     },
 }
 
@@ -323,6 +323,7 @@ BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
 AM_WAITING_TIME_LIMIT = 5
+AM_CONCURRENCY_LIMT = 100
 
 # Pipeline creation step limit
 PIPELINE_SIZE_LIMIT = 10

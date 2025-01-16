@@ -17,3 +17,9 @@ class DoesNotExist(APIException):
     status_code = 404
     default_detail = "DoesNotExist"
     default_code = "does_not_exist"
+
+
+class RateLimitExceeded(APIException):
+    status_code = 429
+    default_detail = "RateLimitExceeded"
+    default_code = "rate_limit_exceeded"

@@ -5,7 +5,7 @@ import urllib.parse
 
 import requests
 
-from oais_platform.oais.exceptions import ServiceUnavailable
+from oais_platform.oais.exceptions import RateLimitExceeded, ServiceUnavailable
 from oais_platform.oais.models import Status, Steps
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
@@ -179,7 +179,9 @@ class Invenio(AbstractSource):
         )
 
         if req.status_code == 202:
-            return True
+            return 0
+        elif req.status_code == 429:
+            raise RateLimitExceeded()
         else:
             raise Exception(
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
