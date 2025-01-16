@@ -280,7 +280,11 @@ class Archive(models.Model):
         ) and self.state != ArchiveState.NONE:
             next_steps.append(Steps.EXTRACT_TITLE)
 
-        if self.state == ArchiveState.AIP:
+        if self.state == ArchiveState.AIP or Steps.ARCHIVE in list(
+            Step.objects.filter(id__in=self.pipeline_steps).values_list(
+                "name", flat=True
+            )
+        ):
             if Steps.PUSH_TO_CTA not in next_steps:
                 next_steps.append(Steps.PUSH_TO_CTA)
 

@@ -64,8 +64,8 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_BEAT_SCHEDULE = {
     "cds-rdm-weekly": {
         "task": "oais_platform.oais.tasks.periodic_harvest",
-        "schedule": crontab(hour=13, minute=00, day_of_week=5),
-        "args": ("dev-cds-rdm", "oais.admin", [2, 3, 4, 5, 11]),
+        "schedule": crontab(hour=16, minute=30, day_of_week=4),
+        "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
     },
 }
 
