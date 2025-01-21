@@ -100,14 +100,14 @@ class Archive(models.Model):
     last_completed_step = models.ForeignKey(
         # Circular reference, use quoted string used to get a lazy reference
         "Step",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         null=True,
         related_name="last_completed_step",
     )
     last_step = models.ForeignKey(
         # Circular reference, use quoted string used to get a lazy reference
         "Step",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         null=True,
         related_name="last_step",
     )
@@ -192,6 +192,18 @@ class Archive(models.Model):
         self.last_modification_timestamp = timezone.now()
         # Normal logic of the save method
         super(Archive, self).save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # delete all steps related to this archive
+        self.last_completed_step.delete()
+        self.last_step.delete()
+        for id in self.pipeline_steps:
+            try:
+                step = Step.objects.get(id=id)
+                step.delete()
+            except Exception:
+                pass
+        super().delete(*args, **kwargs)
 
     def set_state(self):
         try:
@@ -314,7 +326,7 @@ class Step(models.Model):
 
     id = models.AutoField(primary_key=True)
     # The archival process this step is in
-    archive = models.ForeignKey(Archive, on_delete=models.PROTECT, related_name="steps")
+    archive = models.ForeignKey(Archive, on_delete=models.CASCADE, related_name="steps")
     name = models.IntegerField(choices=Steps.choices)
     create_date = models.DateTimeField(default=timezone.now)
     start_date = models.DateTimeField(default=None, null=True)
@@ -325,7 +337,7 @@ class Step(models.Model):
     input_data = models.TextField(null=True, default=None)
     input_step = models.ForeignKey(
         "self",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="step",
         null=True,
         blank=True,

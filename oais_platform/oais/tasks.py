@@ -4,6 +4,7 @@ import ntpath
 import os
 import shutil
 import xml.etree.ElementTree as ET
+from time import sleep
 from urllib.parse import urljoin
 
 import bagit_create
@@ -144,7 +145,10 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                 archive.set_last_completed_step(step_id)
 
             # Execute the remainig steps in the pipeline
-            execute_pipeline(archive_id)
+            api_key = None
+            if len(args) >= 4:
+                api_key = args[3]
+            execute_pipeline(archive_id, api_key=api_key)
         else:
             # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)
@@ -196,21 +200,21 @@ def run_step(step, archive_id, api_key=None):
         archive.set_last_step(step.id)
 
     if step.name == Steps.HARVEST:
-        process.delay(step.archive.id, step.id, api_key, input_data=step.input_data)
+        process.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.VALIDATION:
-        validate.delay(step.archive.id, step.id, step.input_data)
+        validate.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.CHECKSUM:
-        checksum.delay(step.archive.id, step.id, step.input_data)
+        checksum.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.ARCHIVE:
-        archivematica.delay(step.archive.id, step.id, step.input_data)
+        archivematica.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.INVENIO_RDM_PUSH:
-        invenio.delay(step.archive.id, step.id, step.input_data)
+        invenio.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.PUSH_TO_CTA:
-        push_to_cta.delay(step.archive.id, step.id, step.input_data)
+        push_to_cta.delay(step.archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.EXTRACT_TITLE:
-        extract_title.delay(archive.id, step.id)
+        extract_title.delay(archive.id, step.id, step.input_data, api_key)
     elif step.name == Steps.NOTIFY_SOURCE:
-        notify_source.delay(archive_id, step.id, api_key)
+        notify_source.delay(archive_id, step.id, step.input_data, api_key)
 
     return step
 
@@ -278,7 +282,7 @@ def create_path_artifact(name, path, localpath):
 
 
 @shared_task(name="push_to_cta", bind=True, ignore_result=True)
-def push_to_cta(self, archive_id, step_id, input_data=None):
+def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
@@ -331,7 +335,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job]),
+        args=json.dumps([archive.id, step.id, submitted_job, api_key]),
         expire_seconds=3600.0,
     )
 
@@ -341,7 +345,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None):
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
-def check_fts_job_status(self, archive_id, step_id, job_id):
+def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     """
     Check the status of a FTS job.
     If finished, set the corresponding step as completed and remove the
@@ -362,7 +366,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
     logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
     if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(self, task_name, step, archive_id, job_id)
+        _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
         if step.output_data["artifact"]:
@@ -370,7 +374,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id):
         _remove_periodic_task_on_failure(task_name, step, result)
 
 
-def _handle_completed_fts_job(self, task_name, step, archive_id, job_id):
+def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
     except Exception as e:
@@ -395,7 +399,7 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id):
         status=states.SUCCESS,
         retval=status,
         task_id=None,
-        args=[archive_id, step.id],
+        args=[archive_id, step.id, None, api_key],
         kwargs=None,
         einfo=None,
     )
@@ -412,7 +416,7 @@ def fts_delegate(self):
 @shared_task(
     name="processInvenio", bind=True, ignore_result=True, after_return=finalize
 )
-def invenio(self, archive_id, step_id, input_data=None):
+def invenio(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Publish an Archive on the configured InvenioRDM instance
     If the Archive was already published, create a new version of the Record.
@@ -542,9 +546,9 @@ def invenio(self, archive_id, step_id, input_data=None):
 
 
 @shared_task(
-    name="process", bind=True, ignore_result=True, after_return=finalize, max_retries=3
+    name="process", bind=True, ignore_result=True, after_return=finalize, max_retries=5
 )
-def process(self, archive_id, step_id, api_key=None, input_data=None):
+def process(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
@@ -572,21 +576,28 @@ def process(self, archive_id, step_id, api_key=None, input_data=None):
             token=api_key,
         )
     except Exception as e:
-        if any(
-            rate_limit_error in str(e)
-            for rate_limit_error in ["Rate limit exceeded", "429"]
-        ):
-            # If the source's rate limit is exceeded retry 1 min later
-            logger.error("Source's rate limit was exceeded.")
-            raise self.retry(exc=e, countdown=60)
-        else:
-            return {"status": 1, "errormsg": str(e)}
+        return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
 
     # If bagit returns an error return the error message
     if bagit_result["status"] == 1:
-        return {"status": 1, "errormsg": str(bagit_result["errormsg"])}
+        error_msg = str(bagit_result["errormsg"])
+        retry = False
+        if "429" in error_msg:
+            logger.error("Rate limit exceeded.")
+            retry = True
+        elif "503" in error_msg:
+            logger.error("Service unavailable.")
+            retry = True
+
+        if retry:
+            if self.request.retries >= self.max_retries:
+                return {"status": 1, "errormsg": "Max retries exceeded."}
+            else:
+                raise self.retry(exc=Exception(error_msg), countdown=2 * 60)
+        else:
+            return {"status": 1, "errormsg": error_msg}
 
     sip_folder_name = bagit_result["foldername"]
 
@@ -606,7 +617,7 @@ def process(self, archive_id, step_id, api_key=None, input_data=None):
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
-def validate(self, archive_id, step_id, input_data):
+def validate(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Validate the a folder against the CERN SIP specification,
     using the OAIS utils package
@@ -635,7 +646,7 @@ def validate(self, archive_id, step_id, input_data):
 
 
 @shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
-def checksum(self, archive_id, step_id, input_data):
+def checksum(self, archive_id, step_id, input_data=None, api_key=None):
     archive = Archive.objects.get(pk=archive_id)
     path_to_sip = archive.path_to_sip
 
@@ -677,7 +688,7 @@ def checksum(self, archive_id, step_id, input_data):
     ignore_result=True,
     max_retries=10,
 )
-def archivematica(self, archive_id, step_id, input_data):
+def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Submit the SIP of the passed Archive to Archivematica
     preparing the call to the Archivematica API
@@ -686,12 +697,23 @@ def archivematica(self, archive_id, step_id, input_data):
     current_am_tasks = PeriodicTask.objects.filter(
         task="check_am_status", enabled=True
     ).count()
-    if current_am_tasks >= AM_CONCURRENCY_LIMT:
-        raise self.retry(
-            countdown=60 * 5, exc=Exception("Archivematica concurrency limit reached.")
-        )
-
     current_step = Step.objects.get(pk=step_id)
+    if current_am_tasks >= AM_CONCURRENCY_LIMT:
+        if self.request.retries >= self.max_retries:
+            current_step.set_status(Status.FAILED)
+            current_step.set_output_data(
+                {
+                    "status": 1,
+                    "errormsg": "Server cannot handle more requests and the max retries have been exceeded. Try again later.",
+                }
+            )
+            return {"status": 1, "errormsg": "Max retries exceeded."}
+        else:
+            raise self.retry(
+                countdown=60 * 10,
+                exc=Exception("Archivematica concurrency limit reached."),
+            )
+
     current_step.set_status(Status.IN_PROGRESS)
 
     archive = Archive.objects.get(pk=archive_id)
@@ -753,9 +775,7 @@ def archivematica(self, archive_id, step_id, input_data):
                 interval=schedule,
                 name=f"Archivematica status for step: {current_step.id}",
                 task="check_am_status",
-                args=json.dumps(
-                    [package, current_step.id, archive_id.id, transfer_name]
-                ),
+                args=json.dumps([package, current_step.id, archive_id.id, api_key]),
                 expire_seconds=60.0,
             )
     except requests.HTTPError as e:
@@ -806,7 +826,7 @@ def archivematica(self, archive_id, step_id, input_data):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id, archive_id, transfer_name=None):
+def check_am_status(self, message, step_id, archive_id, api_key=None):
     """
     Check the status of an Archivematica job by polling its API.
     The related Step is updated with the information returned from Archivematica
@@ -891,7 +911,7 @@ def check_am_status(self, message, step_id, archive_id, transfer_name=None):
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
             _handle_completed_am_package(
-                self, task_name, am, step, am_status, archive_id
+                self, task_name, am, step, am_status, archive_id, api_key
             )
         except Exception as e:
             logger.warning(
@@ -926,7 +946,9 @@ def _get_am_client():
     return am
 
 
-def _handle_completed_am_package(self, task_name, am, step, am_status, archive_id):
+def _handle_completed_am_package(
+    self, task_name, am, step, am_status, archive_id, api_key
+):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
@@ -960,7 +982,7 @@ def _handle_completed_am_package(self, task_name, am, step, am_status, archive_i
             status=states.SUCCESS,
             retval={"status": 0},
             task_id=None,
-            args=[archive_id, step.id],
+            args=[archive_id, step.id, None, api_key],
             kwargs=None,
             einfo=None,
         )
@@ -1152,7 +1174,7 @@ def announce_sip(announce_path, creator, return_archive=False):
 
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
-def copy_sip(self, archive_id, step_id, input_data):
+def copy_sip(self, archive_id, step_id, input_data, api_key=None):
     """
     Given a path, copy it into the platform SIP storage
     If successful, save the final path in the passed Archive
@@ -1246,7 +1268,7 @@ def _add_error_to_tag_description(tag, path, errormsg):
 
 
 @shared_task(name="extract_title", bind=True, ignore_result=True, after_return=finalize)
-def extract_title(self, archive_id, step_id):
+def extract_title(self, archive_id, step_id, input_data=None, api_key=None):
     # For archives without title try to extract it from the metadata
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
@@ -1285,7 +1307,7 @@ def extract_title(self, archive_id, step_id):
     after_return=finalize,
     max_retries=5,
 )
-def notify_source(self, archive_id, step_id, api_key=None):
+def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
@@ -1391,26 +1413,38 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
     new_harvest = Collection.objects.create(
         internal=True,
         creator=creator,
-        title=collection_name,
-        description=f"Automatic harvest for {source_name} started at {new_harvest_time.strftime('%Y-%m-%d %H:%M:%S')}",
+        description=f"Starting automatic harvests for {source_name} is in progress.",
     )
-    for record in records_to_harvest:
-        try:
-            archive = Archive.objects.create(
-                recid=record["recid"],
-                title=record["title"],
-                source=source_name,
-                source_url=record["source_url"],
-                creator=creator,
-            )
-            new_harvest.add_archive(archive.id)
-            for step in pipeline:
-                archive.add_step_to_pipeline(step)
+    new_harvest.title = f"{collection_name} ({new_harvest.id})"
+    new_harvest.timestamp = new_harvest_time
+    new_harvest.save()
 
-            execute_pipeline(archive.id, api_key)
-        except Exception as e:
-            logging.error(
-                f"Error while processing {record['recid']} from {source_name}: {str(e)}"
-            )
+    batch_size = 100
+    for i in range(0, len(records_to_harvest), batch_size):
+        for record in records_to_harvest[i : i + batch_size]:
+            try:
+                archive = Archive.objects.create(
+                    recid=record["recid"],
+                    title=record["title"],
+                    source=source_name,
+                    source_url=record["source_url"],
+                    creator=creator,
+                )
+                new_harvest.add_archive(archive.id)
+                for step in pipeline:
+                    archive.add_step_to_pipeline(step)
 
+                execute_pipeline(archive.id, api_key)
+            except Exception as e:
+                logging.error(
+                    f"Error while processing {record['recid']} from {source_name}: {str(e)}"
+                )
+        logger.info(
+            f"A batch of automatic harvests has been started for {source_name}."
+        )
+        sleep(5 * 60)
+
+    new_harvest.set_description(
+        f"All automatic harvests were started for source {source_name}."
+    )
     logging.info(f"All harvests were started for source {source_name}.")

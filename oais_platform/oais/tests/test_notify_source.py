@@ -51,7 +51,9 @@ class NotifySourceTests(APITestCase):
         self.archive.set_aip_path("aip/test/path2")
 
     def test_notify_source_not_aip(self):
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 1)
         self.assertEqual(
@@ -63,7 +65,9 @@ class NotifySourceTests(APITestCase):
         self.archive.source = "new source"
         self.archive.save()
 
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 1)
         self.assertEqual(
@@ -76,7 +80,9 @@ class NotifySourceTests(APITestCase):
         self.source.notification_enabled = False
         self.source.save()
 
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 1)
         self.assertEqual(
@@ -89,7 +95,9 @@ class NotifySourceTests(APITestCase):
         self.source.notification_endpoint = None
         self.source.save()
 
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 1)
         self.assertEqual(
@@ -102,7 +110,9 @@ class NotifySourceTests(APITestCase):
         self.source.classname = "LocalNotifyNotImpl"
         self.source.save()
 
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 1)
         self.assertEqual(
@@ -112,7 +122,9 @@ class NotifySourceTests(APITestCase):
     def test_notify_source_success(self):
         self.setup_aip()
 
-        result = notify_source(self.archive.id, self.step.id, self.creator_api_key.key)
+        result = notify_source(
+            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+        )
 
         self.assertEqual(result["status"], 0)
         self.assertEqual(result["errormsg"], None)

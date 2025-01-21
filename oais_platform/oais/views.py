@@ -847,7 +847,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     ).key
                 except Exception:
                     api_key = None
-                process.delay(step.archive.id, step.id, api_key)
+                process.delay(
+                    step.archive.id, step.id, input_data=None, api_key=api_key
+                )
 
         serializer = self.get_serializer(step)
         return Response(serializer.data)

@@ -72,6 +72,14 @@ class ArchiveAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
     resource_link.short_description = "Resource"
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "pipeline_steps" in form.base_fields:
+            # Gives error for empty list so escape the validation
+            field = form.base_fields["pipeline_steps"]
+            field.required = False
+        return form
+
 
 @admin.register(Step)
 class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):

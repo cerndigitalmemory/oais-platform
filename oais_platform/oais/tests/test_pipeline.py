@@ -231,18 +231,26 @@ class PipelineTests(APITestCase):
                     task.assert_called_once_with(
                         self.archive.id,
                         latest_step.id,
+                        latest_step.output_data,
                         self.creator_api_key.key,
-                        input_data=latest_step.output_data,
                     )
                 case Steps.EXTRACT_TITLE:
-                    task.assert_called_once_with(self.archive.id, latest_step.id)
+                    task.assert_called_once_with(
+                        self.archive.id, latest_step.id, None, self.creator_api_key.key
+                    )
                 case Steps.NOTIFY_SOURCE:
                     task.assert_called_once_with(
-                        self.archive.id, latest_step.id, self.creator_api_key.key
+                        self.archive.id,
+                        latest_step.id,
+                        latest_step.output_data,
+                        self.creator_api_key.key,
                     )
                 case _:
                     task.assert_called_once_with(
-                        self.archive.id, latest_step.id, latest_step.output_data
+                        self.archive.id,
+                        latest_step.id,
+                        latest_step.output_data,
+                        self.creator_api_key.key,
                     )
 
     def test_edit_manifests(self):

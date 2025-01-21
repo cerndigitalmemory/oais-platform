@@ -102,4 +102,5 @@ class UploadTests(APITestCase):
                     Archive.objects.latest("id").id,
                     latest_step.id,
                     latest_step.output_data,
+                    None,
                 )

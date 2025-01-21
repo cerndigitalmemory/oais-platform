@@ -20,7 +20,7 @@ class ArchivematicaCreateTests(APITestCase):
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
         create_package.return_value = 0
-        result = archivematica.apply(args=[self.archive.id, self.step.id, None])
+        result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -38,14 +38,14 @@ class ArchivematicaCreateTests(APITestCase):
                 create_package.return_value,
                 self.step.id,
                 self.archive.id,
-                self.archive.path_to_sip + "::Archive_" + str(self.archive.id),
+                None,
             ],
         )
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_create_package(self, create_package):
         create_package.return_value = -1
-        result = archivematica.apply(args=[self.archive.id, self.step.id, None])
+        result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -65,7 +65,7 @@ class ArchivematicaCreateTests(APITestCase):
         create_package.side_effect = requests.exceptions.HTTPError(
             request=unauthorized_request
         )
-        result = archivematica.apply(args=[self.archive.id, self.step.id, None])
+        result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -83,7 +83,7 @@ class ArchivematicaCreateTests(APITestCase):
         bad_request = requests.Request()
         bad_request.status_code = 400
         create_package.side_effect = requests.exceptions.HTTPError(request=bad_request)
-        result = archivematica.apply(args=[self.archive.id, self.step.id, None])
+        result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -100,7 +100,7 @@ class ArchivematicaCreateTests(APITestCase):
     def test_archivematica_failed_other_exception(self, create_package):
         exception_msg = "Unexpected exception occurred"
         create_package.side_effect = Exception(exception_msg)
-        result = archivematica.apply(args=[self.archive.id, self.step.id, None])
+        result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
