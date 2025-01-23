@@ -765,7 +765,8 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             return {"status": 1, "errormsg": errormsg}
         else:
             current_step.set_status(Status.WAITING)
-
+            # overwrite the start date so the waiting limit is counted from here
+            current_step.set_start_date()
             # Create the scheduler
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=60, period=IntervalSchedule.SECONDS
@@ -1442,7 +1443,7 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
         logger.info(
             f"A batch of automatic harvests has been started for {source_name}."
         )
-        sleep(5 * 60)
+        sleep(15 * 60)
 
     new_harvest.set_description(
         f"All automatic harvests were started for source {source_name}."
