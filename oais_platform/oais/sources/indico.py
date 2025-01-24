@@ -4,12 +4,8 @@ import os
 
 import requests
 
-from oais_platform.oais.exceptions import ServiceUnavailable
+from oais_platform.oais.exceptions import ConfigFileUnavailable, ServiceUnavailable
 from oais_platform.oais.sources.abstract_source import AbstractSource
-
-
-class ConfigFileUnavailable(Exception):
-    pass
 
 
 class Indico(AbstractSource):

@@ -6,11 +6,8 @@ import oais_platform.oais.sources.codimd
 import oais_platform.oais.sources.indico
 import oais_platform.oais.sources.invenio
 import oais_platform.oais.sources.local
+from oais_platform.oais.exceptions import InvalidSource
 from oais_platform.oais.models import Source
-
-
-class InvalidSource(Exception):
-    pass
 
 
 def get_source(source_name, api_token=None):

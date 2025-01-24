@@ -19,7 +19,13 @@ class DoesNotExist(APIException):
     default_code = "does_not_exist"
 
 
-class RateLimitExceeded(APIException):
-    status_code = 429
-    default_detail = "RateLimitExceeded"
-    default_code = "rate_limit_exceeded"
+class ConfigFileUnavailable(Exception):
+    pass
+
+
+class InvalidSource(Exception):
+    pass
+
+
+class RetryableException(Exception):
+    pass

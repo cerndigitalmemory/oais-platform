@@ -5,7 +5,11 @@ import urllib.parse
 
 import requests
 
-from oais_platform.oais.exceptions import RateLimitExceeded, ServiceUnavailable
+from oais_platform.oais.exceptions import (
+    ConfigFileUnavailable,
+    RetryableException,
+    ServiceUnavailable,
+)
 from oais_platform.oais.models import Status, Steps
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
@@ -17,10 +21,6 @@ def get_dict_value(dct, keys):
         except KeyError:
             return None
     return dct
-
-
-class ConfigFileUnavailable(Exception):
-    pass
 
 
 class Invenio(AbstractSource):
@@ -180,8 +180,8 @@ class Invenio(AbstractSource):
 
         if req.status_code == 202:
             return 0
-        elif req.status_code == 429:
-            raise RateLimitExceeded()
+        elif req.status_code in [408, 429, 502, 503, 504]:
+            raise RetryableException(f"Request returned status code {req.status_code}.")
         else:
             raise Exception(
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
@@ -199,6 +199,7 @@ class Invenio(AbstractSource):
 
         result = self.search(query, page, size)
         records_to_harvest += result["results"]
+
         if result["total_num_hits"] > size:
             while page * size < result["total_num_hits"]:
                 page += 1

@@ -18,7 +18,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.exceptions import RateLimitExceeded
+from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -587,8 +587,17 @@ def process(self, archive_id, step_id, input_data=None, api_key=None):
         if "429" in error_msg:
             logger.error("Rate limit exceeded.")
             retry = True
+        elif "408" in error_msg:
+            logger.error("Request timeout.")
+            retry = True
+        elif "502" in error_msg:
+            logger.error("Bad gateway.")
+            retry = True
         elif "503" in error_msg:
             logger.error("Service unavailable.")
+            retry = True
+        elif "504" in error_msg:
+            logger.error("Gateway timeout.")
             retry = True
 
         if retry:
@@ -958,8 +967,12 @@ def _handle_completed_am_package(
         periodic_task = PeriodicTask.objects.get(name=task_name)
     except Exception as e:
         logger.warning(e)
-        step.set_status(Status.FAILED)
-        return
+        if step.status == Status.COMPLETED:
+            logger.info(f"Step {step.id} already completed.")
+            return
+        else:
+            step.set_status(Status.FAILED)
+            return
 
     uuid = am_status["uuid"]
     am.package_uuid = uuid
@@ -1346,7 +1359,7 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
             "status": 0,
             "errormsg": None,
         }
-    except RateLimitExceeded as e:
+    except RetryableException as e:
         self.retry(exc=e, countdown=60)
     except Exception as e:
         return {
