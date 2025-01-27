@@ -718,8 +718,13 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             )
             return {"status": 1, "errormsg": "Max retries exceeded."}
         else:
+            current_step.set_output_data(
+                {
+                    "message": f"Archivematics is busy, retrying in {10 * (self.request.retries + 1)} minutes."
+                }
+            )
             raise self.retry(
-                countdown=60 * 10,
+                countdown=60 * 10 * (self.request.retries + 1),
                 exc=Exception("Archivematica concurrency limit reached."),
             )
 
