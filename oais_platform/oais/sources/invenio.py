@@ -194,7 +194,7 @@ class Invenio(AbstractSource):
                 f"updated:[{last_harvest.strftime('%Y-%m-%dT%H:%M:%S')} TO *]"
             )
         page = 1
-        size = 50
+        size = 100
         records_to_harvest = []
 
         result = self.search(query, page, size)

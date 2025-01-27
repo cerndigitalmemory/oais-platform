@@ -42,6 +42,8 @@ from oais_platform.settings import (
     AM_URL,
     AM_USERNAME,
     AM_WAITING_TIME_LIMIT,
+    AUTOMATIC_HARVEST_BATCH_DELAY,
+    AUTOMATIC_HARVEST_BATCH_SIZE,
     BASE_URL,
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
@@ -1438,32 +1440,51 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
     new_harvest.timestamp = new_harvest_time
     new_harvest.save()
 
-    batch_size = 100
-    for i in range(0, len(records_to_harvest), batch_size):
-        for record in records_to_harvest[i : i + batch_size]:
-            try:
-                archive = Archive.objects.create(
-                    recid=record["recid"],
-                    title=record["title"],
-                    source=source_name,
-                    source_url=record["source_url"],
-                    creator=creator,
-                )
-                new_harvest.add_archive(archive.id)
-                for step in pipeline:
-                    archive.add_step_to_pipeline(step)
-
-                execute_pipeline(archive.id, api_key)
-            except Exception as e:
-                logging.error(
-                    f"Error while processing {record['recid']} from {source_name}: {str(e)}"
-                )
-        logger.info(
-            f"A batch of automatic harvests has been started for {source_name}."
+    batch_size = AUTOMATIC_HARVEST_BATCH_SIZE
+    for iteration, i in enumerate(
+        range(0, len(records_to_harvest), batch_size), start=0
+    ):
+        batch_harvest.apply_async(
+            args=[
+                records_to_harvest[i : i + batch_size],
+                creator.id,
+                source_name,
+                pipeline,
+                new_harvest.id,
+                api_key,
+            ],
+            countdown=60 * AUTOMATIC_HARVEST_BATCH_DELAY * iteration,
         )
-        sleep(15 * 60)
 
     new_harvest.set_description(
-        f"All automatic harvests were started for source {source_name}."
+        f"All automatic harvests were scheduled for source {source_name}."
     )
-    logging.info(f"All harvests were started for source {source_name}.")
+    logging.info(f"All harvests were scheduled for source {source_name}.")
+
+
+@shared_task(ame="batch_harvest", bind=True, ignore_result=True)
+def batch_harvest(
+    self, records_to_harvest, creator_id, source_name, pipeline, collection_id, api_key
+):
+    harvest_tag = Collection.objects.get(id=collection_id)
+    for record in records_to_harvest:
+        try:
+            archive = Archive.objects.create(
+                recid=record["recid"],
+                title=record["title"],
+                source=source_name,
+                source_url=record["source_url"],
+                creator__id=creator_id,
+            )
+            harvest_tag.add_archive(archive.id)
+            for step in pipeline:
+                archive.add_step_to_pipeline(step)
+
+            execute_pipeline(archive.id, api_key)
+        except Exception as e:
+            logging.error(
+                f"Error while processing {record['recid']} from {source_name}: {str(e)}"
+            )
+        logging.info(
+            f"A batch of automatic harvests has been started for {source_name}."
+        )
