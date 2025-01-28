@@ -1474,7 +1474,7 @@ def batch_harvest(
                 title=record["title"],
                 source=source_name,
                 source_url=record["source_url"],
-                creator__id=creator_id,
+                creator_id=creator_id,
             )
             harvest_tag.add_archive(archive.id)
             for step in pipeline:
@@ -1485,6 +1485,4 @@ def batch_harvest(
             logging.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"
             )
-        logging.info(
-            f"A batch of automatic harvests has been started for {source_name}."
-        )
+    logging.info(f"A batch of automatic harvests has been started for {source_name}.")
