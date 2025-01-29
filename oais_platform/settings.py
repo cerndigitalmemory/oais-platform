@@ -60,6 +60,7 @@ CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 172800}  # 48 hours
 
 CELERY_BEAT_SCHEDULE = {
     "cds-rdm-weekly": {
