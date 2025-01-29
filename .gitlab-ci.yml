@@ -9,7 +9,7 @@ check-isort:
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
-    - pip install isort
+    - pip install isort==5.13
   script:
     - isort --profile black -c --skip "migrations" .
 
@@ -18,7 +18,7 @@ check-black:
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
-    - pip install black
+    - pip install black==24.10
   script:
     - black . --check --exclude "oais_platform/oais/migrations"
 
