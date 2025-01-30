@@ -4,7 +4,6 @@ import ntpath
 import os
 import shutil
 import xml.etree.ElementTree as ET
-from time import sleep
 from urllib.parse import urljoin
 
 import bagit_create
@@ -793,7 +792,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 name=f"Archivematica status for step: {current_step.id}",
                 task="check_am_status",
                 args=json.dumps([package, current_step.id, archive_id.id, api_key]),
-                expire_seconds=60.0,
+                expire_seconds=55.0,
             )
     except requests.HTTPError as e:
         if e.request.status_code == 403:
@@ -974,12 +973,6 @@ def _handle_completed_am_package(
         periodic_task = PeriodicTask.objects.get(name=task_name)
     except Exception as e:
         logger.warning(e)
-        if step.status == Status.COMPLETED:
-            logger.info(f"Step {step.id} already completed.")
-            return
-        else:
-            step.set_status(Status.FAILED)
-            return
 
     uuid = am_status["uuid"]
     am.package_uuid = uuid
