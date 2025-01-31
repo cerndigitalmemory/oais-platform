@@ -256,7 +256,8 @@ def execute_pipeline(archive_id, api_key=None, force_continue=False):
         else:
             return None
 
-    return run_step(step, archive.id, api_key)
+    if step.status == Status.WAITING:
+        return run_step(step, archive.id, api_key)
 
 
 def create_path_artifact(name, path, localpath):
@@ -968,12 +969,6 @@ def _handle_completed_am_package(
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
-
-    try:
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-    except Exception as e:
-        logger.warning(e)
-
     uuid = am_status["uuid"]
     am.package_uuid = uuid
     aip = am.get_package_details()
@@ -1001,7 +996,13 @@ def _handle_completed_am_package(
             einfo=None,
         )
 
-        periodic_task.delete()
+        try:
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+        except PeriodicTask.DoesNotExist as e:
+            logger.warning(e)
+        except Exception as e:
+            logger.error(e)
     else:
         logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
         # If the path artifact is not complete try again
@@ -1017,14 +1018,16 @@ def _remove_periodic_task_on_failure(task_name, step, output_data):
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
-    except Exception as e:
+        periodic_task.delete()
+    except PeriodicTask.DoesNotExist as e:
         logger.warning(e)
+    except Exception as e:
+        logger.error(e)
         return
 
     step.set_output_data(output_data)
 
     logger.warning(f"Step {step.id} failed. Step status: {step.status}")
-    periodic_task.delete()
 
 
 def prepare_invenio_payload(archive):
