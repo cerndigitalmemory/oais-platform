@@ -19,25 +19,15 @@ from . import pipeline
 class Profile(models.Model):
     # Each profile is linked to a user and identified by the same PK
     #  and it's used to save additional per-user values
-    #  (e.g. configuration, preferences, API tokens)
+    #  (e.g. configuration, preferences, department)
     #  accessible as user.profile.VALUE
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
-    # make sure default here is a callable returning a list
-    cern_roles = ArrayField(models.CharField(max_length=500), default=list, blank=True)
+    department = models.CharField(max_length=10, default=None, null=True)
 
     class Meta:
         permissions = [
             ("can_view_system_settings", "Can view System Settings"),
         ]
-
-    def update(self, data):
-        for key in data:
-            setattr(self, key, data[key])
-        self.save()
-
-    def update_roles(self, data):
-        setattr(self, "cern_roles", data)
-        self.save()
 
 
 @receiver(post_save, sender=User)

@@ -95,6 +95,11 @@ OIDC_RP_SIGN_ALGO = "RS256"
 # This is used to fetch the user information from the SPA.
 LOGIN_REDIRECT_URL = "/index.html#/login/callback"
 
+# Authorization service endpoint to query API token
+AUTH_SERVICE_TOKEN_ENDPOINT = "https://auth.cern.ch/auth/realms/cern/api-access/token"
+# Base url for authorization service API
+AUTH_SERVICE_ENDPOINT = "https://authorization-service-api.web.cern.ch/api/v1.0/"
+
 AUTHENTICATION_BACKENDS = [
     "oais_platform.oais.auth.CERNAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
