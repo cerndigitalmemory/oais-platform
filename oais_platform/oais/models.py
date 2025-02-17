@@ -195,8 +195,10 @@ class Archive(models.Model):
 
     def delete(self, *args, **kwargs):
         # delete all steps related to this archive
-        self.last_completed_step.delete()
-        self.last_step.delete()
+        if self.last_completed_step:
+            self.last_completed_step.delete()
+        if self.last_step:
+            self.last_step.delete()
         for id in self.pipeline_steps:
             try:
                 step = Step.objects.get(id=id)
