@@ -1,104 +1,168 @@
 from django.db.models import Q
-from guardian.shortcuts import get_objects_for_user
+from guardian.shortcuts import get_objects_for_user, get_perms
+from rest_framework import permissions
 
 from oais_platform.oais.models import Archive
 
 
-def filter_archives_by_user_creator(queryset, user):
-    """Filters a queryset of archives based on the user's permissions.
+class UserPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if view.action == "list":
+            return request.user.is_superuser
 
-    The queryset will be filtered to only include archives created by the user.
-    """
-    queryset = queryset.filter(creator=user)
-    return queryset
+        return request.user.is_authenticated
 
-
-def filter_archives_public(queryset):
-    """Filters a queryset of archives based on the user's permissions.
-
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will be filtered to include all public archives.
-    """
-    queryset = queryset.filter(restricted=False)
-    return queryset
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        if obj.id == request.user.id:
+            return True
+        return False
 
 
-def filter_archives_for_user(queryset, user):
-    """Filters a queryset of archives based on the user's permissions.
+class ArchivePermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser:
+            return True
+        if view.action in ["archives_unstage"]:
+            if self._can_view_archive_list(user, request.data["archives"]):
+                return self._can_approve_archive(user)
+            else:
+                return False
+        elif view.action in ["archive_action_intersection"]:
+            return self._can_view_archive_list(user, request.data["archives"])
+        elif view.action == "list" and request.GET.get("access", "all") == "public":
+            return True
+        else:
+            return user.is_authenticated
 
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will return all the archives user has been granted access to
-    but they are restricted.
-    """
-    if not user.has_perm("oais.can_access_all_archives"):
-        private_others_queryset = get_objects_for_user(user, "oais.view_archive")
-        private_owned_queryset = queryset.filter(Q(restricted=True) & Q(creator=user))
-        queryset = private_others_queryset | private_owned_queryset
-    return queryset
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.is_superuser:
+            return True
+        if view.action in ["archive_save_manifest"]:  # Actions that need edit right
+            return self._can_edit_archive(user, obj)
+        elif view.action in ["archive_unstage"]:  # Actions that need approve right
+            return self._can_approve_archive(user, obj)
+        elif view.action in [
+            "archive_run_pipeline"
+        ]:  # Actions that need execute_steps right
+            return self._can_execute_steps(user, obj)
+        else:
+            return self._can_view_archive(request.user, obj)
+
+    def _can_view_archive(self, user, archive):
+        if user.is_superuser or user.has_perm("oais.view_archive_all"):
+            return True
+        elif "oais.view_arhive" in get_perms(user, archive):
+            return True
+        elif archive.requester == user or archive.approver == user:
+            return True
+        return False
+
+    def _can_view_archive_list(self, user, archives):
+        for archive in archives:
+            if type(archive) is int:
+                archive = Archive.objects.get(id=archive)
+            elif type(archive) is dict:
+                archive = Archive.objects.get(id=archive["id"])
+            if not self._can_view_archive(user, archive):
+                return False
+        return True
+
+    def _can_edit_archive(self, user, archive):
+        if not self._can_view_archive(user, archive):
+            return False
+        if (
+            user.has_perm("oais.can_edit_all")
+            or archive.approver == user
+            or archive.requester == user
+        ):
+            return True
+        return False
+
+    def _can_approve_archive(self, user, archive=None):
+        if archive and not self._can_view_archive(user, archive):
+            return False
+        if user.has_perm("oais.can_approve_all"):
+            return True
+        return False
+
+    def _can_execute_steps(self, user, archive):
+        if not self._can_view_archive(user, archive):
+            return False
+        if user.has_perm("oais.can_execute_step"):
+            return True
+        return False
 
 
-def filter_all_archives_user_has_access(queryset, user):
-    """Filters a queryset of archives based on the user's permissions.
+class StepPermission(permissions.BasePermission):
+    archive_perms = ArchivePermission()
 
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will return all the archives user has access to
-    (Public, Private and Owned).
-    """
-    if not user.has_perm("oais.can_access_all_archives"):
-        private_queryset = get_objects_for_user(user, "oais.view_archive")
-        public_queryset = queryset.filter(restricted=False)
-        owned_queryset = queryset.filter(creator=user)
-        queryset = private_queryset | public_queryset | owned_queryset
+    def has_permission(self, request, view):
+        return request.user.is_authenticated
 
-    return queryset
+    def has_object_permission(self, request, view, obj):
+        return self.archive_perms._can_view_archive(request.user, obj.archive)
 
 
-def filter_steps_by_user_perms(queryset, user):
-    """Filters a queryset of steps based on the user's permissions.
+class TagPermission(permissions.BasePermission):
+    archive_perms = ArchivePermission()
 
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will be filtered to only include archives
-    created by the user.
-    """
-    if not user.has_perm("oais.can_access_all_archives"):
-        queryset = queryset.filter(archive__creator=user)
-    return queryset
+    def has_permission(self, request, view):
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.is_superuser:
+            return True
+        if view.action in ["create_tag", "add_arch", "remove_arch"]:
+            if not user.id == obj.creator.id:
+                return False
+            if request.data["archives"]:
+                return self.archive_perms._can_view_archive_list(
+                    user, request.data["archives"]
+                )
+            return True
+        if view.action in ["edit_tag", "delete_tag"]:
+            return user.id == obj.creator.id
+        return self.archive_perms._can_view_archive_list(
+            request.user, obj.archives.all()
+        )
 
 
-def filter_collections_by_user_perms(queryset, user, internal=None):
-    """Filters a queryset of collections based on the user's permissions.
+class SuperUserPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_superuser
 
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will be filtered to only include archives
-    created by the user.
-    """
-    if not user.has_perm("oais.can_access_all_archives"):
+    def has_object_permission(self, request, view, obj):
+        return request.user.is_superuser
+
+
+def filter_archives(queryset, user=None, visibility="all"):
+    match visibility:
+        case "all":
+            if user.is_superuser or user.has_perm("oais.view_archive_all"):
+                return queryset
+            permission_granted_queryset = get_objects_for_user(
+                user, "oais.view_archive"
+            )
+            return (
+                queryset.filter(
+                    Q(approver=user) | Q(requester=user) | Q(restricted=False)
+                )
+                | permission_granted_queryset
+            )
+        case "owned":
+            return queryset.filter(Q(approver=user) | Q(requester=user))
+        case "public":
+            return queryset.filter(restricted=False)
+
+
+def filter_collections(queryset, user, internal=None):
+    if not user.has_perm("oais.view_archive_all"):
         queryset = queryset.filter(creator=user)
     if internal is not None:
         queryset = queryset.filter(internal=internal)
     return queryset
-
-
-def filter_records_by_user_perms(queryset, user):
-    """Filters a queryset of records based on the user's permissions.
-
-    In particular, if the user does not have the "oais.can_access_all_archives"
-    permission, then the queryset will be filtered to only include archives
-    created by the user.
-    """
-    if not user.has_perm("oais.can_access_all_archives"):
-        queryset = queryset.filter(creator=user)
-    return queryset
-
-
-def has_user_archive_edit_rights(archive_id, user):
-    """
-    Returns true if the user has access rights for the archive or they are the creator of the archive
-    """
-    archive = Archive.objects.get(pk=archive_id)
-    if user.has_perm("oais.can_access_all_archives"):
-        return True
-    elif archive.creator == user:
-        return True
-    else:
-        return False

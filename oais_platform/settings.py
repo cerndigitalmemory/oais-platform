@@ -23,6 +23,7 @@ environment values.
 
 """
 
+from datetime import timedelta
 from os import environ
 from pathlib import Path
 
@@ -95,6 +96,11 @@ OIDC_RP_SIGN_ALGO = "RS256"
 # This is used to fetch the user information from the SPA.
 LOGIN_REDIRECT_URL = "/index.html#/login/callback"
 
+# Authorization service endpoint to query API token
+AUTH_SERVICE_TOKEN_ENDPOINT = "https://auth.cern.ch/auth/realms/cern/api-access/token"
+# Base url for authorization service API
+AUTH_SERVICE_ENDPOINT = "https://authorization-service-api.web.cern.ch/api/v1.0/"
+
 AUTHENTICATION_BACKENDS = [
     "oais_platform.oais.auth.CERNAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
@@ -119,7 +125,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "guardian",
-    "rest_framework.authtoken",
+    "rest_framework_simplejwt",
 ]
 
 MIDDLEWARE = [
@@ -223,6 +229,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -259,6 +266,13 @@ sentry_sdk.init(
     # something more human-readable.
     # release="myapp@1.0.0",
 )
+
+# JWT
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
 
 # ARCHIVEMATICA integration
 

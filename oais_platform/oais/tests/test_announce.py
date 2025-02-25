@@ -16,9 +16,7 @@ from oais_platform.oais.views import check_allowed_path
 
 class AnnounceTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user("user", "", "pw")
-        self.user.is_superuser = True
-        self.user.save()
+        self.user = User.objects.create_superuser("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
     def test_paths(self):
@@ -73,8 +71,8 @@ class AnnounceTests(APITestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
-                recid="2728246",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
             )
@@ -92,7 +90,7 @@ class AnnounceTests(APITestCase):
             response,
             response.wsgi_request.build_absolute_uri(
                 reverse(
-                    "archives-sgl-details",
+                    "archives-detail",
                     kwargs={"pk": latest_archive_id},
                 )
             ),
@@ -114,8 +112,8 @@ class AnnounceTests(APITestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
-                recid="2728246",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
             )

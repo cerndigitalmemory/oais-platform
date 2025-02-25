@@ -1,18 +1,18 @@
-from django.contrib.auth.models import Permission, User
+import logging
+
+import requests
+from django.contrib.auth.models import User
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
+
+from oais_platform.settings import (
+    AUTH_SERVICE_ENDPOINT,
+    AUTH_SERVICE_TOKEN_ENDPOINT,
+    OIDC_RP_CLIENT_ID,
+    OIDC_RP_CLIENT_SECRET,
+)
 
 
 class CERNAuthenticationBackend(OIDCAuthenticationBackend):
-    def get_userinfo(self, access_token, id_token, payload):
-        userinfo = super().get_userinfo(access_token, id_token, payload)
-        # Add the user's roles to the user information, so that they are
-        # accessible from the `claims` parameter of `filter_users_by_claims`,
-        # `create_user` and `update_user`.
-        #
-        # Note that `payload` is the verified and parsed payload of `id_token`.
-        userinfo["cern_roles"] = payload["cern_roles"]
-        return userinfo
-
     def filter_users_by_claims(self, claims):
         username = claims.get("cern_upn")
         if not username:
@@ -32,25 +32,43 @@ class CERNAuthenticationBackend(OIDCAuthenticationBackend):
     def update_user(self, user, claims):
         user.first_name = claims["given_name"]
         user.last_name = claims["family_name"]
-        user.profile.update_roles(claims["cern_roles"])
-        self.update_perms(user, claims["cern_roles"])
+        user.profile.department = self.get_user_department(user)
         user.save()
         return user
 
-    def update_perms(self, user, claims):
-        """
-        Given the user claims from SSO (granted by e-group memberships
-        configured in the SSO application), assign them permissions
-        """
-        can_unstage_perm = Permission.objects.get(codename="can_unstage")
+    def get_user_department(self, user):
+        api_token = self.get_auth_service_token()
+        authzsvc_endpoint = AUTH_SERVICE_ENDPOINT
+        identity = user.username
 
-        # First, reset every permission we map with this mechanism
-        user.user_permissions.remove(can_unstage_perm)
+        identities = requests.get(
+            "{0}Identity/{1}".format(authzsvc_endpoint, identity),
+            headers={"Authorization": "Bearer {}".format(api_token)},
+            verify=False,
+        )
+        try:
+            return identities.json()["data"]["cernDepartment"]
+        except Exception as e:
+            logging.warning("Could not determine User's department.")
+            logging.debug(str(e))
+            return None
 
-        # If the user has the 'oais-admin' claim (the CERN account is in the 'oais-admin' e-group)
-        #  or the 'can-create-archive' one (the CERN account is in the 'dmp-create-archives' e-group)
-        #  give them the 'can_unstage' permission
-        if "oais-admin" in claims or "can-create-archives" in claims:
-            user.user_permissions.add(can_unstage_perm)
+    def get_auth_service_token(self):
+        auth_service_api_token_endpoint = AUTH_SERVICE_TOKEN_ENDPOINT
 
-        return user
+        token_resp = requests.post(
+            auth_service_api_token_endpoint,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": OIDC_RP_CLIENT_ID,
+                "client_secret": OIDC_RP_CLIENT_SECRET,
+                "audience": "authorization-service-api",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            return token_resp.json()["access_token"]
+        except Exception as e:
+            logging.error("Could not obtain authorization service api token.")
+            logging.debug(str(e))
+            return None

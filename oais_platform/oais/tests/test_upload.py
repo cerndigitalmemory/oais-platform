@@ -1,30 +1,40 @@
-import json
-import ntpath
 import os
 import tempfile
 import zipfile
-from cmath import log
-from unittest import mock
 from unittest.mock import patch
 
 from bagit_create import main as bic
 from django.contrib.auth.models import User
-from django.core.files.uploadedfile import SimpleUploadedFile, TemporaryUploadedFile
+from django.core.files.uploadedfile import TemporaryUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tests.utils import TestSource
-from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_platform.oais.models import Archive, Step
 
 
 class UploadTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user("user", "", "pw")
+        self.user = User.objects.create_superuser("user", "", "pw")
         self.client.force_authenticate(user=self.user)
+
+    def test_harvest_forbidden(self):
+        testuser = User.objects.create_user("testuser", "", "pw")
+        self.client.force_authenticate(user=testuser)
+
+        f1 = tempfile.NamedTemporaryFile("w+t")
+        f1.seek(0)
+
+        url = reverse("upload-sip")
+
+        file = TemporaryUploadedFile(
+            name=f1.name, content_type="text/plain", size=0, charset="utf8"
+        )
+        response = self.client.post(url, {"file": file})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        f1.close()
 
     def test_harvest_wrong_file_format(self):
         f1 = tempfile.NamedTemporaryFile("w+t")
@@ -64,8 +74,8 @@ class UploadTests(APITestCase):
                 # Run Bagit Create with the following parameters:
                 # Save the results to tmpdir2
                 res = bic.process(
-                    recid="2728246",
-                    source="cds",
+                    recid="yz39b-yf220",
+                    source="cds-rdm-sandbox",
                     target=tmpdir2,
                     loglevel=0,
                 )
