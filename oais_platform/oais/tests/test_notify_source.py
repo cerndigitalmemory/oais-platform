@@ -16,7 +16,7 @@ from oais_platform.oais.tasks import notify_source
 class NotifySourceTests(APITestCase):
 
     def setUp(self):
-        self.creator = User.objects.create_user("creator", password="pw")
+        self.testuser = User.objects.create_user("testuser", password="pw")
         self.source = Source.objects.create(
             name="test",
             longname="Test",
@@ -25,15 +25,15 @@ class NotifySourceTests(APITestCase):
             notification_endpoint="test.test/api/notify",
             notification_enabled=True,
         )
-        self.creator_api_key = ApiKey.objects.create(
-            user=self.creator, source=self.source, key="abcd1234"
+        self.testuser_api_key = ApiKey.objects.create(
+            user=self.testuser, source=self.source, key="abcd1234"
         )
 
         self.archive = Archive.objects.create(
             recid="1",
             source=self.source.name,
             source_url="",
-            creator=self.creator,
+            requester=self.testuser,
             title="",
             state=ArchiveState.SIP,
             path_to_sip="sip/test/path",
@@ -52,7 +52,7 @@ class NotifySourceTests(APITestCase):
 
     def test_notify_source_not_aip(self):
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 1)
@@ -66,7 +66,7 @@ class NotifySourceTests(APITestCase):
         self.archive.save()
 
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 1)
@@ -81,7 +81,7 @@ class NotifySourceTests(APITestCase):
         self.source.save()
 
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 1)
@@ -96,7 +96,7 @@ class NotifySourceTests(APITestCase):
         self.source.save()
 
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 1)
@@ -111,7 +111,7 @@ class NotifySourceTests(APITestCase):
         self.source.save()
 
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 1)
@@ -123,7 +123,7 @@ class NotifySourceTests(APITestCase):
         self.setup_aip()
 
         result = notify_source(
-            self.archive.id, self.step.id, api_key=self.creator_api_key.key
+            self.archive.id, self.step.id, api_key=self.testuser_api_key.key
         )
 
         self.assertEqual(result["status"], 0)

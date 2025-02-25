@@ -1,9 +1,7 @@
 import json
 import os
 import shutil
-import subprocess
 import tempfile
-import time
 import zipfile
 from pathlib import PurePosixPath
 from shutil import make_archive
@@ -13,19 +11,18 @@ from wsgiref.util import FileWrapper
 from bagit_create import main as bic
 from django.conf import settings
 from django.contrib import auth
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
-from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.mixins import PaginationMixin
@@ -41,45 +38,34 @@ from oais_platform.oais.models import (
     UploadJob,
 )
 from oais_platform.oais.permissions import (
-    filter_all_archives_user_has_access,
-    filter_archives_by_user_creator,
-    filter_archives_for_user,
-    filter_archives_public,
-    filter_collections_by_user_perms,
-    filter_records_by_user_perms,
-    filter_steps_by_user_perms,
-    has_user_archive_edit_rights,
+    ArchivePermission,
+    StepPermission,
+    SuperUserPermission,
+    TagPermission,
+    UserPermission,
+    filter_archives,
+    filter_collections,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
+    ArchiveWithDuplicatesSerializer,
+    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
-    GroupSerializer,
     LoginSerializer,
-    SourceRecordSerializer,
     StepSerializer,
+    UploadJobSerializer,
     UserSerializer,
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
 
-from ..settings import (
-    ALLOW_LOCAL_LOGIN,
-    AM_ABS_DIRECTORY,
-    AM_REL_DIRECTORY,
-    AM_URL,
-    CELERY_BROKER_URL,
-    CELERY_RESULT_BACKEND,
-    INVENIO_API_TOKEN,
-    INVENIO_SERVER_URL,
-    PIPELINE_SIZE_LIMIT,
-)
+from ..settings import ALLOW_LOCAL_LOGIN, PIPELINE_SIZE_LIMIT
 from . import pipeline
 from .tasks import (
     announce_sip,
     batch_announce_task,
     create_step,
     execute_pipeline,
-    process,
     run_step,
 )
 
@@ -91,18 +77,19 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [UserPermission]
 
     @action(detail=True, url_path="archives", url_name="archives")
     def archives(self, request, pk=None):
         """
-        Returns all Archives of a User
+        Returns all Archives owned by the User
         """
         user = self.get_object()
-        archives = filter_all_archives_user_has_access(
-            # user.archives.all() returns every Archive the User has created
-            user.archives.all(),
-            request.user,
+
+        archives = filter_archives(
+            Archive.objects.all(),
+            user,
+            "owned",
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
@@ -117,7 +104,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             source = request.data["source"]
             new_key = request.data["key"]
             try:
-                source_obj = Source.objects.get(longname=source)
+                source_obj = Source.objects.get(id=source)
                 api_key = ApiKey.objects.get(user=user, source=source_obj)
                 if new_key:
                     api_key.key = new_key
@@ -143,14 +130,20 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
             # Append the API token, if it exists
             try:
-                user_data["api_token"] = Token.objects.get(user=user).key
+                user_data["api_token"] = str(
+                    RefreshToken.for_user(request.user).access_token
+                )
             except Exception:
                 pass
 
             sources = Source.objects.filter(enabled=True, has_restricted_records=True)
             user_data["api_key"] = []
             for source in sources:
-                entry = {"source": source.longname, "how_to": source.how_to_get_key}
+                entry = {
+                    "source_id": source.id,
+                    "source": source.longname,
+                    "how_to": source.how_to_get_key,
+                }
                 try:
                     api_key = ApiKey.objects.get(user=user, source=source)
                     entry["key"] = api_key.key
@@ -163,49 +156,86 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     @action(detail=False, url_path="me/tags", url_name="me-tags")
     def get_tags(self, request):
         """
-        Returns all Tags created by the User
+        Returns all not internal Tags accessible by the User
         """
-        try:
-            user = request.user
-        except InvalidSource:
-            raise BadRequest("Invalid request")
+        user = request.user
 
-        tags = Collection.objects.filter(creator=user, internal=False)
-        serializer = CollectionSerializer(tags, many=True)
+        tags = filter_collections(Collection.objects.all(), user, internal=False)
+        serializer = CollectionMinimalSerializer(tags, many=True)
         return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="me/staging-area",
+        url_name="me-staging-area",
+    )
+    def get_staging_area(self, request, pk=None):
+        """
+        Returns all Archives in the staging area of the User
+        """
+        user = request.user
+        archives = filter_archives(Archive.objects.all(), user)
+        staged_archives = archives.filter(staged=True)
+        resource_ids = staged_archives.values_list("resource__id", flat=True)
+
+        duplicates = archives.filter(resource__in=resource_ids).exclude(staged=True)
+
+        pagination = request.GET.get("paginated", "true")
+        if pagination == "false":
+            return Response(
+                ArchiveWithDuplicatesSerializer(
+                    staged_archives, many=True, context={"duplicates": duplicates}
+                ).data
+            )
+        else:
+            return self.make_paginated_response(
+                staged_archives,
+                ArchiveWithDuplicatesSerializer,
+                extra_context={"duplicates": duplicates},
+            )
+
+    @action(detail=False, methods=["POST"], url_path="me/stage", url_name="me-stage")
+    def add_to_staging_area(self, request):
+        """
+        Adds passed Archives to the staging area of the User
+        """
+        records = request.data["records"]
+        try:
+            for record in records:
+                # Always create a new archive instance
+                Archive.objects.create(
+                    recid=record["recid"],
+                    source=record["source"],
+                    source_url=record["source_url"],
+                    title=record["title"],
+                    requester=request.user,
+                    staged=True,
+                )
+            return Response({"status": 0, "errormsg": None})
+        except Exception as e:
+            return Response({"status": 1, "errormsg": e})
 
     @action(detail=False, url_path="me/stats", url_name="me-stats")
     def get_steps_status(self, request):
         """
-        Returns all Steps and status of the User
+        Returns all Steps for the given name and status of the User
         """
-        try:
-            status = request.data["status"]
-        except KeyError:
-            status = None
-
-        try:
-            name = request.data["name"]
-        except KeyError:
-            name = None
+        status = request.data.get("status")
+        name = request.data.get("name")
 
         user = request.user
-
-        if status and name:
-            steps = Step.objects.filter(
-                status=status, name=name, archive__creator=user
-            ).order_by("-start_date")
-        elif status:
-            steps = Step.objects.filter(status=status, archive__creator=user).order_by(
-                "-start_date"
-            )
-        elif name:
-            steps = Step.objects.filter(name=name, archive__creator=user).order_by(
-                "-start_date"
-            )
-        else:
-            steps = Step.objects.all().order_by("-start_date")
-        filtered_steps = filter_steps_by_user_perms(steps, request.user)
+        archives = filter_archives(
+            Archive.objects.all(),
+            user,
+            "owned",
+        )
+        step_filter = Q(archive__in=archives)
+        if status:
+            step_filter |= Q(status=status)
+        if name:
+            step_filter |= Q(name=name)
+        filtered_steps = Step.objects.filter(step_filter).order_by("-start_date")
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
 
@@ -240,6 +270,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             elif not source.has_public_records and not source.has_restricted_records:
                 status = INVALID
             entry = {
+                "id": source.id,
                 "name": source.name,
                 "longname": source.longname,
                 "status": status,
@@ -249,16 +280,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(data)
 
 
-class GroupViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    API endpoint that allows Groups to be viewed or edited
-    """
-
-    queryset = Group.objects.all()
-    serializer_class = GroupSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
 class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows Archives to be viewed or edited
@@ -266,7 +287,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     queryset = Archive.objects.all()
     serializer_class = ArchiveSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [ArchivePermission]
     default_page_size = 10
     filters_map = {
         "state": ["state"],
@@ -285,16 +306,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         page = self.request.GET.get("page", None)
         size = self.request.GET.get("size", self.default_page_size)
 
-        if visibility == "owned":
-            result = filter_archives_by_user_creator(
-                super().get_queryset(), self.request.user
+        if visibility in ["all", "owned", "public"]:
+            result = filter_archives(
+                super().get_queryset(), self.request.user, visibility
             )
-        elif visibility == "private":
-            result = filter_archives_for_user(super().get_queryset(), self.request.user)
-        elif visibility == "all":
-            result = filter_records_by_user_perms(
-                super().get_queryset(), self.request.user
-            )
+        else:
+            raise BadRequest("Invalid access parameter.")
 
         if page == "all":
             if not self.request.GET._mutable:
@@ -337,56 +354,36 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return self.make_paginated_response(result, ArchiveSerializer)
 
-    @action(detail=True, url_path="details", url_name="sgl-details")
-    def archive_details(self, request, pk=None):
+    @action(
+        detail=False, methods=["POST"], url_path="duplicates", url_name="duplicates"
+    )
+    def check_archived_records(self, request):
         """
-        Returns details of an identified Archive
+        Gets a list of records and searches the database for similar archives (same recid + source)
+        Then returns the list of records with an archive list field which containes the similar archives
         """
-        archives = filter_all_archives_user_has_access(
-            super().get_queryset(), request.user
-        )
-        archive = get_object_or_404(archives, pk=pk)
-        serializer = self.get_serializer(archive)
-        return Response(serializer.data)
+        records = request.data["records"]
 
-    @action(detail=False, methods=["POST"], url_path="details", url_name="mlt-details")
-    def archives_details(self, request):
-        """
-        Returns details of passed Archives such as Steps, Tags and duplicates
-        """
-        archives = request.data["archives"]
-        for archive in archives:
-            id = archive["id"]
-            current_archive = Archive.objects.get(pk=id)
-            serialized_archive_tags = filter_collections_by_user_perms(
-                current_archive.get_collections(), request.user
-            )
-            serialized_collections = CollectionSerializer(
-                serialized_archive_tags, many=True
-            )
-            archive["collections"] = serialized_collections.data
+        if records is None:
+            return Response(None)
 
-            steps = current_archive.steps.all().order_by("start_date")
-            steps_serializer = StepSerializer(steps, many=True)
-            archive["steps"] = steps_serializer.data
-
+        for record in records:
             try:
                 duplicates = Archive.objects.filter(
-                    recid=archive["recid"],
-                    source=archive["source"],
-                ).exclude(id=archive["id"])
-                archive_serializer = ArchiveSerializer(
-                    filter_archives_by_user_creator(
+                    recid=record["recid"], source=record["source"]
+                ).exclude(state=ArchiveState.NONE)
+                serializer = ArchiveSerializer(
+                    filter_archives(
                         duplicates,
                         request.user,
                     ),
                     many=True,
                 )
-                archive["duplicates"] = archive_serializer.data
+                record["archives"] = serializer.data
             except Archive.DoesNotExist:
-                archive["duplicates"] = None
+                record["archives"] = None
 
-        return Response(archives)
+        return Response(records)
 
     @action(detail=False, methods=["GET"], url_path="sources", url_name="sources")
     def archives_sources(self, request):
@@ -419,7 +416,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Returns the type of possible next Steps of an identified Archive
         """
-
         archive = self.get_object()
         next_steps = archive.get_next_steps()
 
@@ -431,10 +427,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns the Tag(s) the Archive has
         """
         archive = self.get_object()
-        collections = filter_collections_by_user_perms(
-            archive.get_collections(), request.user
-        )
-        return self.make_paginated_response(collections, CollectionSerializer)
+        collections = filter_collections(archive.get_collections(), request.user)
+        return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
     @action(
         detail=True,
@@ -446,8 +440,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Update the manifest for the specified Archive with the given content
         """
-        archive = Archive.objects.get(pk=pk)
-
+        archive = self.get_object()
         try:
             body = request.data
             if "manifest" not in body:
@@ -459,7 +452,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 archive=archive,
                 name=Steps.EDIT_MANIFEST,
                 input_step=archive.last_completed_step,
-                # change to waiting/not run
                 status=Status.IN_PROGRESS,
                 input_data=archive.manifest,
             )
@@ -473,41 +465,15 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             raise BadRequest("An error occured while saving the manifests.", e)
 
-    @action(detail=False, url_path="search", url_name="search")
-    def archives_search(self, request):
-        """
-        Returns similar Archives (same Source and Recid) if any, nothing otherwise
-        """
-        archive = self.get_object()
-        try:
-            archives = Archive.objects.filter(
-                recid=archive.recid, source=archive.source
-            ).exclude(id=archive["id"], state=ArchiveState.NONE)
-            serializer = ArchiveSerializer(
-                filter_archives_by_user_creator(
-                    archives,
-                    request.user,
-                ),
-                many=True,
-            )
-            return Response(serializer.data)
-        except Archive.DoesNotExist:
-            archives = None
-            return Response()
-
     @extend_schema(operation_id="sgl-unstage")
     @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
     def archive_unstage(self, request, pk=None):
         """
         Unstages the passed Archive, setting them to the Harvest stage
         """
-
-        # If the user has 'can_unstage' permission and it's not a superuser, return Unauthorized
-        if not (request.user.has_perm("oais.can_unstage") or request.user.is_superuser):
-            raise BadRequest("Unauthorized")
-
         archive = self.get_object()
-        archive.set_unstaged()
+
+        archive.set_unstaged(approver=request.user)
 
         step = Step.objects.create(
             archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
@@ -537,10 +503,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archives = request.data["archives"]
 
-        # If the user has 'can_unstage' permission and it's not a superuser, return Unauthorized
-        if not (request.user.has_perm("oais.can_unstage") or request.user.is_superuser):
-            raise BadRequest("Unauthorized")
-
         job_tag = Collection.objects.create(
             internal=True,
             creator=request.user,
@@ -549,7 +511,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         for archive in archives:
             archive = Archive.objects.get(id=archive["id"])
-            archive.set_unstaged()
+            archive.set_unstaged(approver=request.user)
             job_tag.add_archive(archive)
 
             step = Step.objects.create(
@@ -570,67 +532,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return Response(serializer.data)
 
-    # no @action to have recid and source variables in the url
-    def archive_create(self, request, recid, source):
-        """
-        Creates an Archive given a Source and a Record ID
-        """
-        try:
-            url = get_source(source).get_record_url(recid)
-        except InvalidSource:
-            raise BadRequest("Invalid source: ", source)
-
-        # Always create a new archive instance
-        archive = Archive.objects.create(
-            recid=recid,
-            source=source,
-            source_url=url,
-            creator=request.user,
-        )
-
-        return redirect(
-            reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
-        )
-
-    @extend_schema(request=SourceRecordSerializer, responses=ArchiveSerializer)
     @action(
-        detail=False,
+        detail=True,
         methods=["POST"],
-        url_path="create/harvest",
-        url_name="create-harvest",
+        url_path="delete-staged",
+        url_name="delete-staged",
     )
-    def archive_create_by_harvest(self, request):
-        """
-        Creates an Archive triggering its own harvesting, given the Source and Record ID
-        """
-        serializer = SourceRecordSerializer(data=request.data)
-        if serializer.is_valid():
-            source = serializer.data["source"]
-            recid = serializer.data["recid"]
-
-        try:
-            url = get_source(source).get_record_url(recid)
-        except InvalidSource:
-            raise BadRequest("Invalid source: ", source)
-
-        # Always create a new archive instance
-        archive = Archive.objects.create(
-            recid=recid,
-            source=source,
-            source_url=url,
-            creator=request.user,
-        )
-
-        return redirect(
-            reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
-        )
-
-    @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def archive_delete(self, request, pk=None):
         """
-        Deletes the passed Archive
+        Deletes the staged Archive
         """
         archive = self.get_object()
+        if not archive.staged:
+            raise BadRequest("Archive must be staged.")
         archive.delete()
         return Response()
 
@@ -639,19 +553,17 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Creates the pipline of Steps for the passed Archive and executes it
         """
+        self.get_object()
         run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
         archive_id = request.data["archive"]["id"]
 
-        if has_user_archive_edit_rights(pk, request.user):
-            try:
-                api_key = ApiKey.objects.get(
-                    source__name=request.data["archive"]["source"], user=request.user
-                ).key
-            except Exception:
-                api_key = None
-        else:
-            raise BadRequest("User has no rights to perform a step for this archive")
+        try:
+            api_key = ApiKey.objects.get(
+                source__name=request.data["archive"]["source"], user=request.user
+            ).key
+        except Exception:
+            api_key = None
 
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(pk=archive_id)
@@ -725,38 +637,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
 
-    def get_staging_area(self, request, pk=None):
-        """
-        Returns all Archives in the staging area of the User
-        """
-        archives = Archive.objects.filter(staged=True, creator=request.user)
-        pagination = request.GET.get("paginated", "true")
-
-        if pagination == "false":
-            return Response(ArchiveSerializer(archives, many=True).data)
-        else:
-            return self.make_paginated_response(archives, ArchiveSerializer)
-
-    def add_to_staging_area(self, request):
-        """
-        Adds passed Archives to the staging area of the User
-        """
-        records = request.data["records"]
-        try:
-            for record in records:
-                # Always create a new archive instance
-                Archive.objects.create(
-                    recid=record["recid"],
-                    source=record["source"],
-                    source_url=record["source_url"],
-                    title=record["title"],
-                    creator=request.user,
-                    staged=True,
-                )
-            return Response({"status": 0, "errormsg": None})
-        except Exception as e:
-            return Response({"status": 1, "errormsg": e})
-
     @action(detail=False, methods=["POST"], url_path="actions", url_name="actions")
     def archive_action_intersection(self, request, pk=None):
         """
@@ -765,7 +645,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archives = request.data["archives"]
         result = {}
         if len(archives) > 0:
-            first_state = archives[0]["state"]
+            first_state = Archive.objects.get(pk=archives[0]["id"]).state
             state_intersection = True
             next_steps_intersection = None
             all_last_step_failed = True
@@ -779,8 +659,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         state_intersection = False
 
                     if (
-                        all_last_step_failed
-                        and archive.last_step.status != Status.FAILED
+                        not archive.last_step
+                        or archive.last_step.status != Status.FAILED
                     ):
                         all_last_step_failed = False
 
@@ -815,54 +695,15 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = Step.objects.all().order_by("-start_date")
     serializer_class = StepSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [StepPermission]
 
     def get_queryset(self):
-        return filter_steps_by_user_perms(super().get_queryset(), self.request.user)
-
-    def approve_or_reject(self, request, permission, approved):
-        user = request.user
-        if not user.has_perm(permission):
-            raise PermissionDenied()
-
-        # Make sure the status of the archive is read and updated atomically,
-        # otherwise multiple harvesting task might be scheduled.
-        with transaction.atomic():
-            step = self.get_object()
-            if step.status != Status.WAITING_APPROVAL:
-                raise BadRequest("Archive is not waiting for approval")
-            if approved:
-                step.status = Status.IN_PROGRESS
-            else:
-                step.status = Status.REJECTED
-
-            step.save()
-
-        if approved:
-            if step.name == Steps.HARVEST:
-                step.set_status(Status.NOT_RUN)
-                try:
-                    api_key = ApiKey.objects.get(
-                        source__name=step.archive.source, user=request.user
-                    ).key
-                except Exception:
-                    api_key = None
-                process.delay(
-                    step.archive.id, step.id, input_data=None, api_key=api_key
-                )
-
-        serializer = self.get_serializer(step)
-        return Response(serializer.data)
+        user_archives = filter_archives(Archive.objects.all(), self.request.user, "all")
+        return Step.objects.filter(archive__in=user_archives).distinct()
 
     @action(detail=True, url_path="download-artifact", url_name="download-artifact")
     def download_artifact(self, request, pk=None):
         step = self.get_object()
-
-        if (
-            request.user.id is not step.archive.creator.id
-            and step.archive.restricted is True
-        ):
-            return HttpResponse(status=401)
 
         output_data = json.loads(step.output_data)
         # If this step has an "Artifact" in the output
@@ -897,24 +738,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     return response
         return HttpResponse(status=404)
 
-    @action(detail=True, methods=["POST"], url_path="approve", url_name="approve")
-    def approve(self, request, pk=None):
-        """
-        Approve an identified step
-        """
-        return self.approve_or_reject(
-            request, "oais.can_approve_archive", approved=True
-        )
-
-    @action(detail=True, methods=["POST"], url_path="reject", url_name="reject")
-    def reject(self, request, pk=None):
-        """
-        Reject an identified step
-        """
-        return self.approve_or_reject(
-            request, "oais.can_reject_archive", approved=False
-        )
-
     @action(
         detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
     )
@@ -931,24 +754,27 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CollectionMinimalSerializer
+    permission_classes = [TagPermission]
 
     def get_queryset(self):
         internal = self.request.GET.get("internal")
 
         if internal == "only":
-            return filter_collections_by_user_perms(
+            return filter_collections(
                 super().get_queryset(), self.request.user, internal=True
             )
         elif internal == "false":
-            return filter_collections_by_user_perms(
+            return filter_collections(
                 super().get_queryset(), self.request.user, internal=False
             )
         else:
-            return filter_collections_by_user_perms(
-                super().get_queryset(), self.request.user
-            )
+            return filter_collections(super().get_queryset(), self.request.user)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = CollectionSerializer(instance)
+        return Response(serializer.data)
 
     @action(detail=False, methods=["POST"], url_path="create", url_name="create")
     def create_tag(self, request):
@@ -981,6 +807,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Update a Tag with title, description
         """
+        tag = self.get_object()
         title = request.data["title"]
         description = request.data["description"]
 
@@ -990,11 +817,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             raise BadRequest("A tag with the same name already exists!")
         else:
             with transaction.atomic():
-                tag = self.get_object()
-
-            tag.set_title(title)
-            tag.set_description(description)
-            tag.set_modification_timestamp()
+                tag.set_title(title)
+                tag.set_description(description)
+                tag.set_modification_timestamp()
 
             serializer = CollectionSerializer(tag, many=False)
             return Response(serializer.data)
@@ -1004,15 +829,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Delete a Tag
         """
-        # This is about deleting tags not archives, create new perm in permissions.py?
-        # user = request.user
-        # if not user.has_perm("oais.can_reject_archive"):
-        #     raise PermissionDenied()
-
         with transaction.atomic():
             tag = self.get_object()
-
-        tag.delete()
+            tag.delete()
         return Response()
 
     @action(detail=True, url_path="archives")
@@ -1023,38 +842,34 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         tag = self.get_object()
         return self.make_paginated_response(tag, CollectionSerializer)
 
-    def add_or_remove_arch(self, request, permission, add):
-        # user = request.user
-        # if not user.has_perm(permission):
-        #     raise PermissionDenied()
-
+    def add_or_remove_arch(self, request, add):
         if request.data["archives"] is None:
-            raise Exception("No archives selected")
+            raise BadRequest("No archives selected")
         else:
             archives = request.data["archives"]
 
         with transaction.atomic():
             tag = self.get_object()
 
-        if add:
-            if isinstance(archives, list):
-                for archive in archives:
-                    tag.add_archive(archive)
-            else:
-                tag.add_archive(archives)
+            if add:
+                if isinstance(archives, list):
+                    for archive in archives:
+                        tag.add_archive(archive)
+                else:
+                    raise BadRequest("Field 'archives' must be a list.")
 
-        else:
-            if isinstance(archives, list):
-                for archive in archives:
-                    if type(archive) == int:
-                        tag.remove_archive(archive)
-                    else:
-                        tag.remove_archive(archive["id"])
             else:
-                tag.remove_archive(archives)
+                if isinstance(archives, list):
+                    for archive in archives:
+                        if type(archive) is int:
+                            tag.remove_archive(archive)
+                        else:
+                            tag.remove_archive(archive["id"])
+                else:
+                    raise BadRequest("Field 'archives' must be a list.")
 
-        tag.set_modification_timestamp()
-        tag.save()
+            tag.set_modification_timestamp()
+            tag.save()
         serializer = self.get_serializer(tag)
         return Response(serializer.data)
 
@@ -1063,14 +878,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Adds identified Tag to the passed Archives
         """
-        return self.add_or_remove_arch(request, "oais.can_approve_archive", add=True)
+        return self.add_or_remove_arch(request, add=True)
 
     @action(detail=True, methods=["POST"], url_path="remove")
     def remove_arch(self, request, pk=None):
         """
         Removes identified Tag from the passed Archives
         """
-        return self.add_or_remove_arch(request, "oais.can_reject_archive", add=False)
+        return self.add_or_remove_arch(request, add=False)
 
     @action(detail=False, methods=["GET"], url_path="names")
     def get_name_list(self, request, pk=None):
@@ -1088,7 +903,8 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = UploadJob.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [SuperUserPermission]
+    serializer_class = UploadJobSerializer
 
     @action(detail=False, methods=["POST"], url_path="create", url_name="create-job")
     def create_job(self, request):
@@ -1182,7 +998,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             recid = sip_json["recid"]
             url = get_source(source).get_record_url(recid)
             archive = Archive.objects.create(
-                recid=recid, source=source, source_url=url, creator=request.user
+                recid=recid, source=source, source_url=url, requester=request.user
             )
 
             step = Step.objects.create(
@@ -1222,38 +1038,6 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             raise BadRequest({"status": 1, "msg": e})
 
 
-# called by /settings
-@api_view(["GET"])
-def get_settings(request):
-    """
-    Returns a collection of (read-only) the main configuration values and some
-    information about the backend
-    """
-
-    # Try to get the commit hash of the backend
-    try:
-        githash = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-            .decode("ascii")
-            .strip()
-        )
-    except Exception:
-        githash = "n/a"
-
-    data = {
-        "am_url": AM_URL,
-        "AM_ABS_DIRECTORY": AM_ABS_DIRECTORY,
-        "AM_REL_DIRECTORY": AM_REL_DIRECTORY,
-        "git_hash": githash,
-        "CELERY_BROKER_URL": CELERY_BROKER_URL,
-        "CELERY_RESULT_BACKEND": CELERY_RESULT_BACKEND,
-        "INVENIO_SERVER_URL": INVENIO_SERVER_URL,
-        "INVENIO_API_TOKEN": INVENIO_API_TOKEN,
-    }
-
-    return Response(data)
-
-
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def statistics(request):
@@ -1265,70 +1049,6 @@ def statistics(request):
     return Response(data)
 
 
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def check_archived_records(request):
-    """
-    Gets a list of records and searches the database for similar archives (same recid + source)
-    Then returns the list of records with an archive list field which containes the similar archives
-    """
-    records = request.data["recordList"]
-
-    if records is None:
-        return Response(None)
-
-    for record in records:
-        try:
-            archives = Archive.objects.filter(
-                recid=record["recid"], source=record["source"]
-            ).exclude(state=ArchiveState.NONE)
-            serializer = ArchiveSerializer(
-                filter_archives_by_user_creator(
-                    archives,
-                    request.user,
-                ),
-                many=True,
-            )
-            record["archives"] = serializer.data
-        except Archive.DoesNotExist:
-            record["archives"] = None
-
-    return Response(records)
-
-
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def harvest(request, id):
-    """
-    Creates an Archive given the Source and Recid and assigns a havert Step to it
-    """
-    archive = Archive.objects.get(pk=id)
-
-    Step.objects.create(
-        archive=archive, name=Steps.HARVEST, status=Status.WAITING_APPROVAL
-    )
-
-    return redirect(
-        reverse("archives-sgl-details", request=request, kwargs={"pk": archive.id})
-    )
-
-
-@api_view()
-@permission_classes([permissions.IsAuthenticated])
-def get_staged_archives(request):
-    """
-    Get all staged archives
-    """
-    try:
-        user = request.user
-    except InvalidSource:
-        raise BadRequest("Invalid request")
-
-    archives = Archive.objects.filter(staged=True, creator=user)
-    serializer = ArchiveSerializer(archives, many=True)
-    return Response(serializer.data)
-
-
 @extend_schema_view(
     post=extend_schema(
         description="""Creates an Archive given an UploadedFile
@@ -1336,7 +1056,7 @@ def get_staged_archives(request):
     )
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([SuperUserPermission])
 def upload_sip(request):
     file = request.FILES.getlist("file")[0]
     step = None
@@ -1374,7 +1094,7 @@ def upload_sip(request):
             recid=recid,
             source=source,
             source_url=url,
-            creator=request.user,
+            requester=request.user,
         )
 
         step = Step.objects.create(
@@ -1463,265 +1183,6 @@ def search_by_id(request, source, recid):
 
 
 @api_view(["POST"])
-# @permission_classes([permissions.IsAuthenticated])
-def search_query(request):
-    """
-    Gets the API request from the ReactSearchkit component and returns
-    the results based on the elasticsearch response
-    """
-    # Starts time calculation of the operation
-    start_time = time.time()
-
-    """
-    Creates a list of dictionaries for the BucketAggregation component
-
-    More info:
-    https://inveniosoftware.github.io/react-searchkit/docs/filters-aggregations
-    """
-    sources = Source.objects.all().values_list("name", flat=True)
-    visibilities = ["private", "public", "owned"]
-    source_buckets = list()
-    visibility_buckets = list()
-    for source in sources:
-        source_buckets.append({"key": source, "doc_count": 0})
-    for visibility in visibilities:
-        visibility_buckets.append({"key": visibility, "doc_count": 0})
-
-    """
-    Get request body
-    """
-    body = request.data
-
-    """
-    Get pagination parameters
-    """
-    results_from, results_size = 0, 20
-    if "from" in body:
-        results_from = body["from"]
-
-    if "size" in body:
-        results_size = body["size"]
-
-    """
-    Gets the API request data based and parses it according to
-    the elasticsearch API request
-
-    {"query":{
-        "query_string":{
-            "query":"example_query"
-            }
-        },
-        "size":10,
-        "from":0,
-        "aggs":{
-            "tags_agg":{
-                "terms":{
-                    "field":"tags"
-    }}}}}
-    """
-
-    if "query" not in body:
-        search_query = ""
-    else:
-        """
-        If there is no query in body, return all the results
-        """
-        query = body["query"]
-
-        if "query_string" not in query:
-            raise BadRequest("Missing parameter query_string")
-        query_string = query["query_string"]
-
-        if "query" not in query_string:
-            raise BadRequest("Missing parameter search_query")
-        search_query = query_string["query"]
-
-    post_filter = None
-    if "post_filter" not in body:
-        """
-        Post filter indicates that there are not active filters in the search request.
-        In that case a search in the database is executed without further filtering
-        """
-        try:
-            results = Archive.objects.filter(
-                Q(recid__contains=search_query)
-                | Q(title__contains=search_query)
-                | Q(id__contains=search_query)
-            )
-            unfiltered_results = results
-
-            unfiltered_serializer = ArchiveSerializer(unfiltered_results, many=True)
-            filtered_serializer = ArchiveSerializer(results, many=True)
-        except Exception:
-            raise BadRequest("Error while performing search")
-    else:
-        post_filter = body["post_filter"]
-        if "bool" not in post_filter:
-            raise BadRequest("Parameter Error: bool is not in body")
-        post_filter = post_filter["bool"]
-        if "must" not in post_filter:
-            raise BadRequest("Parameter Error: must is not in body")
-        post_filter = post_filter["must"]
-        source_filter, visibility_filter = None, None
-        for filter in post_filter:
-            if "terms" not in filter:
-                raise BadRequest("Parameter Error: terms is not in body")
-            filter = filter["terms"]
-            if "source" in filter:
-                source_filter = filter["source"]
-            if "visibility" in filter:
-                visibility_filter = filter["visibility"]
-            if (source_filter is None) and (visibility_filter is None):
-                raise BadRequest("Parameter Error: Filtering parameter is not in body")
-
-        # try:
-        # Make the search at the database
-        # If there is no visibility selected then return all public, private and owned records
-        unfiltered_results = filter_all_archives_user_has_access(
-            Archive.objects.filter(
-                Q(recid__contains=search_query)
-                | Q(title__contains=search_query)
-                | Q(id__contains=search_query)
-            ),
-            request.user,
-        )
-        results = unfiltered_results
-        if visibility_filter:
-            if visibility_filter[0] == "public":
-                results = filter_archives_public(
-                    Archive.objects.filter(
-                        Q(recid__contains=search_query)
-                        | Q(title__contains=search_query)
-                    )
-                )
-            elif visibility_filter[0] == "private":
-                results = filter_archives_for_user(
-                    Archive.objects.filter(
-                        Q(recid__contains=search_query)
-                        | Q(title__contains=search_query)
-                    ),
-                    request.user,
-                )
-            elif visibility_filter[0] == "owned":
-                results = filter_archives_by_user_creator(
-                    Archive.objects.filter(
-                        Q(recid__contains=search_query)
-                        | Q(title__contains=search_query)
-                    ),
-                    request.user,
-                )
-
-        if source_filter:
-            results = results.filter(source__in=source_filter)
-
-        unfiltered_serializer = ArchiveSerializer(unfiltered_results, many=True)
-        filtered_serializer = ArchiveSerializer(results, many=True)
-
-        # except Exception:
-        #     raise BadRequest("Error while performing search")
-
-    # try:
-    """
-    Create response similar to Elasticsearch response:
-
-    {
-        "took": TIME ELAPSED,
-        "timed_out" : false,
-        "hits" : {
-            "total":{
-                "value" : NUMBER OF RESULTS
-                "relation" : "eq"
-            },
-            "max_score" : ELASTIC SEARCH MAX SCORE GIVEN,
-            "hits" : [ARCHIVE LIST OF RESULTS]
-        }
-        "aggregations":{
-            "first_agg": {
-                "doc_count_error_upper_bound":0,
-                "sum_other_doc_count":0,
-                "buckets": [BUCKET LIST]
-            }
-
-        }
-    }
-    """
-    response = dict()
-    hits = dict()
-    aggDetails = dict()
-
-    response["took"] = time.time() - start_time
-    response["timeout"] = False
-    hits["total"] = {"value": len(results), "relation": "eq"}
-    hits["max_score"] = 5
-    result_list = []
-    """
-    Create pagination by returning different results according to the results_from and results_size variables.
-    If the results_size is bigger than the results index length, then it is changed to match the exact length
-    """
-    if results_from + results_size > len(results):
-        results_size = len(results) - results_from
-
-    for i in range(results_from, results_from + results_size):
-        hitsDetails = dict()
-        hitsDetails["_index"] = "random"
-        hitsDetails["_type"] = "doc"
-        hitsDetails["_id"] = "CustomID"
-        hitsDetails["_score"] = 5
-        result = filtered_serializer.data[i]
-        hitsDetails["_source"] = result
-
-        result_list.append(hitsDetails)
-
-    for j in range(len(unfiltered_results)):
-        result = unfiltered_serializer.data[j]
-        if result["source"] in sources:
-            current_src = result["source"]
-            for source in source_buckets:
-                if source["key"] == current_src:
-                    source["doc_count"] = source["doc_count"] + 1
-
-    for j in range(len(results)):
-        result = unfiltered_serializer.data[j]
-        public = False
-        owned = False
-        if not result["restricted"]:
-            public = True
-        if result["creator"]:
-            creator = result["creator"]
-            if creator["id"] == request.user.id:
-                owned = True
-        for visibility in visibility_buckets:
-            if visibility["key"] == "public":
-                if public:
-                    visibility["doc_count"] = visibility["doc_count"] + 1
-            if visibility["key"] == "owned":
-                if owned:
-                    visibility["doc_count"] = visibility["doc_count"] + 1
-
-    # Here we need to parse filters based on request
-    aggDetails["sources"] = {
-        "doc_count_error_upper_bound": 0,
-        "sum_other_doc_count": 0,
-        "buckets": source_buckets,
-    }
-
-    aggDetails["visibility_agg"] = {
-        "doc_count_error_upper_bound": 0,
-        "sum_other_doc_count": 0,
-        "buckets": visibility_buckets,
-    }
-
-    hits["hits"] = result_list
-    response["aggregations"] = aggDetails
-    response["hits"] = hits
-
-    # except Exception:
-    #     raise BadRequest("Error while creating response")
-
-    return Response(response)
-
-
-@api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def parse_url(request):
     url = request.data["url"]
@@ -1791,31 +1252,14 @@ def logout(request):
     return Response({"status": "success"})
 
 
-@permission_classes([permissions.IsAuthenticated])
-def check_for_tag_name_duplicate(title, creator):
-    """
-    Given the tag title and the creator checks if there is another tag with the same name
-    created by the same person.
-    """
-    try:
-        Collection.objects.get(title=title, creator=creator)
-        return True
-    except Collection.DoesNotExist:
-        return False
-
-
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([SuperUserPermission])
 def announce(request):
     """
     Announce the path of SIP to import it into the system.
     The SIP will be validated, copied to the platform designated storage and
     an Archive will be created
     """
-
-    if not request.user.is_superuser:
-        raise BadRequest("Unauthorized")
-
     # Get the path passed in the request
     announce_path = request.data["announce_path"]
 
@@ -1834,7 +1278,7 @@ def announce(request):
     if announce_response["status"] == 0:
         return redirect(
             reverse(
-                "archives-sgl-details",
+                "archives-detail",
                 request=request,
                 kwargs={"pk": announce_response["archive_id"]},
             )
@@ -1845,17 +1289,13 @@ def announce(request):
 
 
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([SuperUserPermission])
 def batch_announce(request):
     """
     Announce the path of folder containing SIP folders to import it into the system.
     The SIPs will be validated, copied to the platform designated storage and
     Archives will be created
     """
-
-    if not request.user.is_superuser:
-        raise BadRequest("Unauthorized")
-
     # Get the path passed in the request
     announce_path = request.data["batch_announce_path"]
     batch_tag = request.data["batch_tag"]
@@ -1905,6 +1345,13 @@ def batch_announce(request):
     return redirect(reverse("tags-detail", request=None, kwargs={"pk": tag.id}))
 
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def sources(request):
+    sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
+    return Response(sources)
+
+
 def check_allowed_path(path, username):
     allowed_starting_paths = [
         f"/eos/home-{username[0]}/{username}/",
@@ -1916,8 +1363,13 @@ def check_allowed_path(path, username):
         return False
 
 
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-def sources(request):
-    sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
-    return Response(sources)
+def check_for_tag_name_duplicate(title, creator):
+    """
+    Given the tag title and the creator checks if there is another tag with the same name
+    created by the same person.
+    """
+    try:
+        Collection.objects.get(title=title, creator=creator)
+        return True
+    except Collection.DoesNotExist:
+        return False

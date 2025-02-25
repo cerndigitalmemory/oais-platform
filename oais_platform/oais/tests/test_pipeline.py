@@ -21,9 +21,14 @@ from oais_platform.settings import PIPELINE_SIZE_LIMIT
 
 class PipelineTests(APITestCase):
     def setUp(self):
-        self.permission = Permission.objects.get(codename="can_access_all_archives")
+        self.permission = Permission.objects.get(codename="view_archive_all")
+        self.execute_permission = Permission.objects.get(codename="can_execute_step")
+        self.edit_permission = Permission.objects.get(codename="can_edit_all")
 
-        self.creator = User.objects.create_user("creator", password="pw")
+        self.testuser = User.objects.create_user("testuser", password="pw")
+        self.testuser.user_permissions.add(self.execute_permission)
+        self.testuser.save()
+
         self.source = Source.objects.create(
             name="test",
             longname="Test",
@@ -32,8 +37,8 @@ class PipelineTests(APITestCase):
             notification_enabled=True,
             notification_endpoint="test.test/api/notify",
         )
-        self.creator_api_key = ApiKey.objects.create(
-            user=self.creator, source=self.source, key="abcd1234"
+        self.testuser_api_key = ApiKey.objects.create(
+            user=self.testuser, source=self.source, key="abcd1234"
         )
         self.other_user = User.objects.create_user("other", password="pw")
 
@@ -41,7 +46,8 @@ class PipelineTests(APITestCase):
             recid="1",
             source=self.source.name,
             source_url="",
-            creator=self.creator,
+            requester=self.testuser,
+            approver=self.testuser,
             title="",
             state=ArchiveState.SIP,
         )
@@ -83,7 +89,7 @@ class PipelineTests(APITestCase):
         ]
     )
     def test_execute_pipeline_invalid_input(self, pipeline, status_code):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.testuser)
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -96,7 +102,7 @@ class PipelineTests(APITestCase):
         self.assertEqual(Step.objects.count(), self.init_step_count)
 
     def test_execute_pipeline_ongoing_execution(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.testuser)
 
         pipeline = [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH]
 
@@ -114,6 +120,35 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(len(archive.pipeline_steps), len(pipeline))
         self.assertEqual(Step.objects.count(), self.init_step_count + len(pipeline))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_execute_pipeline_forbidden(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        pipeline = [Steps.VALIDATION, Steps.CHECKSUM]
+
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_execute_pipeline_with_perms(self):
+        self.other_user.user_permissions.add(self.permission)
+        self.other_user.user_permissions.add(self.execute_permission)
+        self.other_user.save()
+        self.client.force_authenticate(user=self.other_user)
+
+        pipeline = [Steps.VALIDATION, Steps.CHECKSUM]
+
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            format="json",
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     @parameterized.expand(
@@ -187,7 +222,7 @@ class PipelineTests(APITestCase):
     def test_execute_pipeline_one_step(self, input, status_code):
 
         with patch(f'oais_platform.oais.tasks.{input["task"]}.delay') as task:
-            self.client.force_authenticate(user=self.creator)
+            self.client.force_authenticate(user=self.testuser)
 
             step_count = 0
 
@@ -232,29 +267,65 @@ class PipelineTests(APITestCase):
                         self.archive.id,
                         latest_step.id,
                         latest_step.output_data,
-                        self.creator_api_key.key,
+                        self.testuser_api_key.key,
                     )
                 case Steps.EXTRACT_TITLE:
                     task.assert_called_once_with(
-                        self.archive.id, latest_step.id, None, self.creator_api_key.key
+                        self.archive.id, latest_step.id, None, self.testuser_api_key.key
                     )
                 case Steps.NOTIFY_SOURCE:
                     task.assert_called_once_with(
                         self.archive.id,
                         latest_step.id,
                         latest_step.output_data,
-                        self.creator_api_key.key,
+                        self.testuser_api_key.key,
                     )
                 case _:
                     task.assert_called_once_with(
                         self.archive.id,
                         latest_step.id,
                         latest_step.output_data,
-                        self.creator_api_key.key,
+                        self.testuser_api_key.key,
                     )
 
     def test_edit_manifests(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.testuser)
+
+        self.assertEqual(self.archive.manifest, None)
+
+        url = reverse("archives-save-manifest", args=[self.archive.id])
+        response = self.client.post(
+            url,
+            {"manifest": {"test": "test"}},
+            format="json",
+        )
+
+        self.archive.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.archive.manifest, {"test": "test"})
+
+    def test_edit_manifests_forbidden(self):
+        self.other_user.user_permissions.add(self.permission)
+        self.other_user.save()
+        self.client.force_authenticate(user=self.other_user)
+
+        self.assertEqual(self.archive.manifest, None)
+
+        url = reverse("archives-save-manifest", args=[self.archive.id])
+        response = self.client.post(
+            url,
+            {"manifest": {"test": "test"}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_edit_manifests_with_perms(self):
+        self.other_user.user_permissions.add(self.permission)
+        self.other_user.user_permissions.add(self.edit_permission)
+        self.other_user.save()
+        self.client.force_authenticate(user=self.other_user)
 
         self.assertEqual(self.archive.manifest, None)
 

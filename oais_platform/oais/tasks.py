@@ -1119,7 +1119,7 @@ def prepare_invenio_payload(archive):
     return data
 
 
-def announce_sip(announce_path, creator, return_archive=False):
+def announce_sip(announce_path, user, return_archive=False):
     """
     Given a filesystem path and a user:
 
@@ -1168,7 +1168,8 @@ def announce_sip(announce_path, creator, return_archive=False):
             recid=recid,
             source=source,
             source_url=url,
-            creator=creator,
+            approver=user,
+            requester=user,
             title=f"{source} - {recid}",
         )
 
@@ -1372,7 +1373,7 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
 
 
 @shared_task(ame="periodic_harvest", bind=True, ignore_result=True)
-def periodic_harvest(self, source_name, creator_name, pipeline):
+def periodic_harvest(self, source_name, username, pipeline):
     logging.info(f"Starting the periodic harvest for {source_name}.")
 
     try:
@@ -1382,17 +1383,17 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
         return
 
     try:
-        creator = User.objects.get(username=creator_name)
+        user = User.objects.get(username=username)
     except User.DoesNotExist:
-        logging.error(f"User with name {creator_name} does not exist.")
+        logging.error(f"User with name {username} does not exist.")
         return
 
     api_key = None
     try:
-        api_key = ApiKey.objects.get(source=source, user=creator).key
+        api_key = ApiKey.objects.get(source=source, user=user).key
     except ApiKey.DoesNotExist:
         logging.warning(
-            f"User with name {creator_name} does not have API key set for the given source, only public records will be available."
+            f"User with name {username} does not have API key set for the given source, only public records will be available."
         )
 
     collection_name = f"{source_name} - automatic harvest"
@@ -1429,7 +1430,7 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
 
     new_harvest = Collection.objects.create(
         internal=True,
-        creator=creator,
+        creator=user,
         description=f"Starting automatic harvests for {source_name} is in progress.",
     )
     new_harvest.title = f"{collection_name} ({new_harvest.id})"
@@ -1443,7 +1444,7 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
         batch_harvest.apply_async(
             args=[
                 records_to_harvest[i : i + batch_size],
-                creator.id,
+                user.id,
                 source_name,
                 pipeline,
                 new_harvest.id,
@@ -1460,7 +1461,7 @@ def periodic_harvest(self, source_name, creator_name, pipeline):
 
 @shared_task(ame="batch_harvest", bind=True, ignore_result=True)
 def batch_harvest(
-    self, records_to_harvest, creator_id, source_name, pipeline, collection_id, api_key
+    self, records_to_harvest, user_id, source_name, pipeline, collection_id, api_key
 ):
     harvest_tag = Collection.objects.get(id=collection_id)
     for record in records_to_harvest:
@@ -1470,7 +1471,8 @@ def batch_harvest(
                 title=record["title"],
                 source=source_name,
                 source_url=record["source_url"],
-                creator_id=creator_id,
+                requester_id=user_id,
+                approver_id=user_id,
             )
             harvest_tag.add_archive(archive.id)
             for step in pipeline:

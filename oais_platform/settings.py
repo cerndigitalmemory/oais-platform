@@ -23,6 +23,7 @@ environment values.
 
 """
 
+from datetime import timedelta
 from os import environ
 from pathlib import Path
 
@@ -124,7 +125,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "guardian",
-    "rest_framework.authtoken",
+    "rest_framework_simplejwt",
 ]
 
 MIDDLEWARE = [
@@ -228,6 +229,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -264,6 +266,13 @@ sentry_sdk.init(
     # something more human-readable.
     # release="myapp@1.0.0",
 )
+
+# JWT
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
 
 # ARCHIVEMATICA integration
 

@@ -17,9 +17,7 @@ from oais_platform.oais.tasks import batch_announce_task
 
 class BatchAnnounceTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user("user", "", "pw")
-        self.user.is_superuser = True
-        self.user.save()
+        self.user = User.objects.create_superuser("user", "", "pw")
         self.client.force_authenticate(user=self.user)
 
         self.tag = Collection.objects.create(

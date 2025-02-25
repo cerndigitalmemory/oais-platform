@@ -26,7 +26,7 @@ class Profile(models.Model):
 
     class Meta:
         permissions = [
-            ("can_view_system_settings", "Can view System Settings"),
+            ("can_execute_step", "Can execute steps"),
         ]
 
 
@@ -82,8 +82,11 @@ class Archive(models.Model):
     source_url = models.CharField(max_length=100)
     recid = models.CharField(max_length=50)
     source = models.CharField(max_length=50)
-    creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="archives"
+    requester = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, related_name="requested_archives"
+    )
+    approver = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, related_name="approved_archives"
     )
     timestamp = models.DateTimeField(default=timezone.now)
     last_modification_timestamp = models.DateTimeField(default=timezone.now)
@@ -117,8 +120,9 @@ class Archive(models.Model):
     class Meta:
         ordering = ["-id"]
         permissions = (
-            ("grant_view_right", "Grant view right"),
-            ("can_unstage", "Can unstage a record and start the pipeline"),
+            ("can_approve_all", "Can approve any record and start the pipeline"),
+            ("view_archive_all", "Can view all archives"),
+            ("can_edit_all", "Can edit all archives"),
         )
 
     def set_last_completed_step(self, step_id):
@@ -145,8 +149,9 @@ class Archive(models.Model):
     def get_collections(self):
         return self.archive_collections.all()
 
-    def set_unstaged(self):
+    def set_unstaged(self, approver=None):
         self.staged = False
+        self.approver = approver
         self.save()
 
     def set_path(self, new_path):
@@ -336,13 +341,6 @@ class Step(models.Model):
     )
     output_data = models.TextField(null=True, default=None)
 
-    class Meta:
-        permissions = [
-            ("can_access_all_archives", "Can access all the archival requests"),
-            ("can_approve_archive", "Can approve an archival request"),
-            ("can_reject_archive", "Can reject an archival request"),
-        ]
-
     def set_status(self, status):
         self.status = status
         self.save()
@@ -417,10 +415,6 @@ class Collection(models.Model):
     """
     A collection of multiple archives
     """
-
-    permissions = [
-        ("can_access_all_archives"),
-    ]
 
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=50, null=True, default="Untitled")

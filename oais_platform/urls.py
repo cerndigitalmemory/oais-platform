@@ -15,13 +15,13 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 from rest_framework import routers
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from oais_platform.oais import views
 
 # Register class-based views
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="users")
-router.register(r"groups", views.GroupViewSet, basename="groups")
 router.register(r"archives", views.ArchiveViewSet, basename="archives")
 router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
@@ -65,28 +65,6 @@ urlpatterns = [
                 path("logout/", views.logout, name="logout"),
                 ## Main API surface
                 path("", include(router.urls)),
-                # Retrieve and update the Staging Area
-                path(
-                    "users/me/staging-area/",
-                    views.ArchiveViewSet.as_view(
-                        {"get": "get_staging_area", "post": "add_to_staging_area"}
-                    ),
-                    name="staging_area",
-                ),
-                # Create an Archive from the given Record and source ID, harvesting it
-                path(
-                    "archives/create/<str:recid>/<str:source>/",
-                    views.ArchiveViewSet.as_view({"post": "archive_create"}),
-                    name="archives-create",
-                ),
-                # Check if a Resource has already Archives for it
-                path(
-                    "records/check",
-                    views.check_archived_records,
-                    name="check_archived_records",
-                ),
-                # Trigger the harvest of the given Archive
-                path("harvest/<int:id>/", views.harvest, name="harvest"),
                 # Upload a SIP
                 path("upload/sip", views.upload_sip, name="upload-sip"),
                 # Parse full URL of a supported source to find the record ID
@@ -102,9 +80,6 @@ urlpatterns = [
                     views.search_by_id,
                     name="search_by_id",
                 ),
-                path("search-query/", views.search_query, name="search_query"),
-                # Retrieve system settings
-                path("settings/", views.get_settings, name="get_settings"),
                 # Upload a SIP by announcing its location (e.g. EOS)
                 path(
                     "upload/announce/",
@@ -119,6 +94,10 @@ urlpatterns = [
                 ),
                 path("stats/", views.statistics, name="statistics"),
                 path("sources/", views.sources, name="sources"),
+                path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+                path(
+                    "token/refresh/", TokenRefreshView.as_view(), name="token_refresh"
+                ),
             ]
         ),
     ),

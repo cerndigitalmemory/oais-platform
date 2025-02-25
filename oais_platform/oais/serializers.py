@@ -10,6 +10,7 @@ from oais_platform.oais.models import (
     Resource,
     Source,
     Step,
+    UploadJob,
 )
 
 
@@ -37,11 +38,11 @@ class ResourceSerializer(serializers.ModelSerializer):
 class SourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Source
-        fields = "__all__"
+        fields = ["id", "name", "longname", "enabled", "description", "how_to_get_key"]
 
 
 class APIKeySerializer(serializers.ModelSerializer):
-    source = serializers.SlugRelatedField(read_only=True, slug_field="name")
+    source = SourceSerializer
 
     class Meta:
         model = ApiKey
@@ -49,6 +50,7 @@ class APIKeySerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    is_superuser = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
 
     class Meta:
@@ -59,19 +61,26 @@ class UserSerializer(serializers.ModelSerializer):
             "permissions",
             "first_name",
             "last_name",
+            "is_superuser",
         ]
 
+    def get_is_superuser(self, obj):
+        return obj.is_superuser
+
     def get_permissions(self, obj):
-        if type(obj) == utils.AttrDict:
+        if type(obj) is utils.AttrDict:
             id = obj["id"]
             obj = User.objects.get(pk=id)
         return obj.get_all_permissions()
 
 
-class GroupSerializer(serializers.ModelSerializer):
+class UserMinimalSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Group
-        fields = ["url", "name"]
+        model = User
+        fields = [
+            "id",
+            "username",
+        ]
 
 
 class StepSerializer(serializers.ModelSerializer):
@@ -107,7 +116,8 @@ class LastStepSerializer(serializers.ModelSerializer):
 
 
 class ArchiveSerializer(serializers.ModelSerializer):
-    creator = UserSerializer()
+    approver = UserMinimalSerializer()
+    requester = UserMinimalSerializer()
     resource = ResourceSerializer()
     last_step = LastStepSerializer(many=False, read_only=True)
     last_update = serializers.CharField(source="last_modification_timestamp")
@@ -119,7 +129,8 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "source_url",
             "recid",
             "source",
-            "creator",
+            "approver",
+            "requester",
             "timestamp",
             "last_step",
             "last_completed_step",
@@ -134,14 +145,47 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "last_update",
         ]
 
-    def get_last_step(self, instance):
-        last_step = instance.steps.all().order_by("-start_date")[0]
-        return last_step
+
+class ArchiveWithDuplicatesSerializer(ArchiveSerializer):  # Extending BookSerializer
+    duplicates = serializers.SerializerMethodField()
+
+    class Meta(ArchiveSerializer.Meta):
+        fields = ArchiveSerializer.Meta.fields + ["duplicates"]
+
+    def get_duplicates(self, obj):
+        duplicates = self.context.get("duplicates").filter(resource__id=obj.resource.id)
+        results = []
+        for d in duplicates:
+            results.append({"id": d.id, "timestamp": d.timestamp})
+        return results
+
+
+class ArchiveMinimalSerializer(serializers.ModelSerializer):
+    approver = UserMinimalSerializer()
+    requester = UserMinimalSerializer()
+    last_step = LastStepSerializer(many=False, read_only=True)
+    last_update = serializers.CharField(source="last_modification_timestamp")
+
+    class Meta:
+        model = Archive
+        fields = [
+            "id",
+            "source_url",
+            "recid",
+            "source",
+            "approver",
+            "requester",
+            "timestamp",
+            "last_step",
+            "title",
+            "state",
+            "last_update",
+        ]
 
 
 class CollectionSerializer(serializers.ModelSerializer):
-    archives = ArchiveSerializer(many=True)
-    creator = UserSerializer()
+    archives = ArchiveMinimalSerializer(many=True)
+    creator = UserMinimalSerializer()
 
     class Meta:
         model = Collection
@@ -156,12 +200,46 @@ class CollectionSerializer(serializers.ModelSerializer):
         ]
 
 
+class CollectionMinimalSerializer(serializers.ModelSerializer):
+    creator = UserMinimalSerializer()
+    archive_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Collection
+        fields = [
+            "id",
+            "title",
+            "description",
+            "creator",
+            "timestamp",
+            "last_modification_date",
+            "archive_count",
+        ]
+
+    def get_archive_count(self, obj):
+        return obj.archives.count()
+
+
 class CollectionNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Collection
         fields = [
             "id",
             "title",
+        ]
+
+
+class UploadJobSerializer(serializers.ModelSerializer):
+    creator = UserMinimalSerializer()
+
+    class Meta:
+        model = UploadJob
+        fields = [
+            "id",
+            "creator",
+            "timestamp",
+            "tmp_dir",
+            "sip_dir",
         ]
 
 

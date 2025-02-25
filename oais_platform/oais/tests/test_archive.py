@@ -1,5 +1,3 @@
-from unittest import skip
-
 from django.contrib.auth.models import Permission, User
 from django.db import IntegrityError
 from django.urls import reverse
@@ -7,23 +5,36 @@ from parameterized import parameterized
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, ArchiveState, Resource, Step
+from oais_platform.oais.models import Archive, ArchiveState, Collection, Resource, Step
 
 
 class ArchiveTests(APITestCase):
     def setUp(self):
-        self.permission = Permission.objects.get(codename="can_access_all_archives")
-
-        self.creator = User.objects.create_user("creator", password="pw")
+        self.permission = Permission.objects.get(codename="view_archive_all")
+        self.approve_permission = Permission.objects.get(codename="can_approve_all")
+        self.superuser = User.objects.create_superuser("superuser", password="pw")
+        self.requester = User.objects.create_user("requester", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
 
         self.private_archive = Archive.objects.create(
             recid="1",
             source="test",
             source_url="",
-            creator=self.creator,
+            requester=self.requester,
             restricted=True,
         )
+
+        self.private_tag = Collection.objects.create(
+            internal=False,
+            creator=self.requester,
+        )
+        self.private_tag.add_archive(self.private_archive)
+
+        self.superuser_tag = Collection.objects.create(
+            internal=False,
+            creator=self.superuser,
+        )
+        self.superuser_tag.add_archive(self.private_archive)
 
         self.public_archives = []
         resources = [
@@ -36,30 +47,33 @@ class ArchiveTests(APITestCase):
                 recid=r[0],
                 source=r[1],
                 source_url="",
-                creator=self.creator,
+                requester=self.requester,
                 restricted=False,
                 title=r[2],
             )
             self.public_archives.append(archive)
 
-    @skip("GET public Archives operation is unsupported")
-    def test_archive_list_creator_public(self):
-        self.client.force_authenticate(user=self.creator)
-
+    def test_archive_list_public(self):
         url = reverse("archives-list")
         response = self.client.get(url, {"access": "public"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(len(response.data["results"]), len(self.public_archives))
+        for result in response.data["results"]:
+            self.assertEqual(
+                result["id"]
+                in list(map(lambda archive: archive.id, self.public_archives)),
+                True,
+            )
 
     @parameterized.expand(
         [
-            ({"access": "private"}, {"status": status.HTTP_200_OK, "size": 1}),
-            ({"access": "owned"}, {"status": status.HTTP_200_OK, "size": 4}),
+            ({"access": "all"}, {"status": status.HTTP_200_OK, "size": 4}),
+            ({"access": "owned"}, {"status": status.HTTP_200_OK, "size": 0}),
         ]
     )
-    def test_archive_list_creator(self, access, output):
-        self.client.force_authenticate(user=self.creator)
+    def test_archive_list_superuser(self, access, output):
+        self.client.force_authenticate(user=self.superuser)
 
         url = reverse("archives-list")
         response = self.client.get(url, access, format="json")
@@ -67,24 +81,29 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, output["status"])
         self.assertEqual(len(response.data["results"]), output["size"])
 
-    @skip("GET public Archives operation is unsupported")
-    def test_archive_list_other_user_public(self):
-        self.client.force_authenticate(user=self.other_user)
-
-        url = reverse("archives-list")
-        response = self.client.get(url, {"access": "public"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
-
     @parameterized.expand(
         [
-            ({"access": "private"}, {"status": status.HTTP_200_OK, "size": 0}),
+            ({"access": "all"}, {"status": status.HTTP_200_OK, "size": 3}),
             ({"access": "owned"}, {"status": status.HTTP_200_OK, "size": 0}),
         ]
     )
     def test_archive_list_other_user(self, access, output):
         self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archives-list")
+        response = self.client.get(url, access, format="json")
+
+        self.assertEqual(response.status_code, output["status"])
+        self.assertEqual(len(response.data["results"]), output["size"])
+
+    @parameterized.expand(
+        [
+            ({"access": "all"}, {"status": status.HTTP_200_OK, "size": 4}),
+            ({"access": "owned"}, {"status": status.HTTP_200_OK, "size": 4}),
+        ]
+    )
+    def test_archive_list_requester_user(self, access, output):
+        self.client.force_authenticate(user=self.requester)
 
         url = reverse("archives-list")
         response = self.client.get(url, access, format="json")
@@ -99,7 +118,7 @@ class ArchiveTests(APITestCase):
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("archives-list")
-        response = self.client.get(url, {"access": "private"}, format="json")
+        response = self.client.get(url, {"access": "all"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 4)
@@ -138,23 +157,20 @@ class ArchiveTests(APITestCase):
         if response.status_code == status.HTTP_200_OK:
             self.assertEqual(len(response.data["results"]), output["size"])
 
-    def test_archive_details_creator(self):
-        self.client.force_authenticate(user=self.creator)
+    def test_archive_details_requester(self):
+        self.client.force_authenticate(user=self.requester)
 
-        url = reverse("archives-sgl-details", args=[self.private_archive.id])
-        response = self.client.get(url, {"access": "owned"}, format="json")
+        url = reverse("archives-detail", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.private_archive.id)
 
-    def test_archive_details_creator_with_perm(self):
-        self.creator.user_permissions.add(self.permission)
-        self.creator.save()
+    def test_archive_details_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
 
-        self.client.force_authenticate(user=self.creator)
-
-        url = reverse("archives-sgl-details", args=[self.private_archive.id])
-        response = self.client.get(url, {"access": "owned"}, format="json")
+        url = reverse("archives-detail", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.private_archive.id)
@@ -162,8 +178,8 @@ class ArchiveTests(APITestCase):
     def test_archive_details_other_user(self):
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archives-sgl-details", args=[self.private_archive.id])
-        response = self.client.get(url, {"access": "private"}, format="json")
+        url = reverse("archives-detail", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -173,26 +189,14 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archives-sgl-details", args=[self.private_archive.id])
-        response = self.client.get(url, {"access": "private"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.private_archive.id)
-
-    def test_get_archive_details(self):
-        self.client.force_authenticate(user=self.creator)
-
-        url = reverse("archives-sgl-details", args=[self.private_archive.id])
-        response = self.client.get(
-            url,
-            format="json",
-        )
+        url = reverse("archives-detail", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.private_archive.id)
 
     def test_get_steps(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.requester)
 
         url = reverse("archives-steps", args=[self.private_archive.id])
         response = self.client.get(
@@ -214,11 +218,11 @@ class ArchiveTests(APITestCase):
         self.assertEqual(len(response.data), 2)
 
     def test_record_check_none(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.requester)
 
-        url = reverse("check_archived_records")
+        url = reverse("archives-duplicates")
         response = self.client.post(
-            url, {"recordList": [{"recid": "1", "source": "test"}]}, format="json"
+            url, {"records": [{"recid": "1", "source": "test"}]}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -226,13 +230,13 @@ class ArchiveTests(APITestCase):
         self.assertEqual(len(response.data[0]["archives"]), 0)
 
     def test_record_check(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.requester)
         Step.objects.create(archive=self.private_archive, name=5, status=4)
         Step.objects.create(archive=self.public_archives[0], name=5, status=4)
 
-        url = reverse("check_archived_records")
+        url = reverse("archives-duplicates")
         response = self.client.post(
-            url, {"recordList": [{"recid": "1", "source": "test"}]}, format="json"
+            url, {"records": [{"recid": "1", "source": "test"}]}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -248,7 +252,7 @@ class ArchiveTests(APITestCase):
             recid="1",
             source="test",
             source_url="",
-            creator=self.creator,
+            requester=self.requester,
             restricted=True,
         )
         self.assertEqual(Resource.objects.all().count(), 3)
@@ -256,7 +260,7 @@ class ArchiveTests(APITestCase):
             recid="2",
             source="test",
             source_url="",
-            creator=self.creator,
+            requester=self.requester,
             restricted=True,
         )
         self.assertEqual(Resource.objects.all().count(), 4)
@@ -265,7 +269,7 @@ class ArchiveTests(APITestCase):
             Resource.objects.create(recid="2", source="test")
 
     def test_get_archives_sources(self):
-        self.client.force_authenticate(user=self.creator)
+        self.client.force_authenticate(user=self.requester)
 
         url = reverse("archives-sources")
         response = self.client.get(
@@ -275,3 +279,235 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(list(response.data), ["source_1", "source_2", "test"])
+
+    def test_archive_tags_requester(self):
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("archives-tags", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["id"], self.private_tag.id)
+
+    def test_archive_tags_other_user(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archives-tags", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        self.requester.user_permissions.add(self.permission)
+        self.requester.save()
+
+        self.client.force_authenticate(user=self.requester)
+        response = self.client.get(url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_archive_unstage_forbidden(self):
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_archive_unstage_with_perms(self):
+        self.requester.user_permissions.add(self.approve_permission)
+        self.requester.save()
+
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["approver"]["id"], self.requester.id)
+
+    def test_archive_unstage_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["approver"]["id"], self.superuser.id)
+
+    def test_archive_mlt_unstage_forbidden(self):
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("archives-mlt-unstage")
+        response = self.client.post(
+            url, {"archives": [{"id": self.private_archive.id}]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_archive_mlt_unstage_with_perms(self):
+        self.requester.user_permissions.add(self.approve_permission)
+        self.requester.save()
+        self.client.force_authenticate(user=self.requester)
+
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.other_user,
+            restricted=True,
+            staged=True,
+        )
+
+        url = reverse("archives-mlt-unstage")
+        response = self.client.post(
+            url,
+            {"archives": [{"id": self.private_archive.id}, {"id": other_archive.id}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        response = self.client.post(
+            url, {"archives": [{"id": self.private_archive.id}]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_archive_mlt_unstage_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.other_user,
+            restricted=True,
+            staged=True,
+        )
+
+        url = reverse("archives-mlt-unstage")
+        response = self.client.post(
+            url,
+            {"archives": [{"id": self.private_archive.id}, {"id": other_archive.id}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_archive_delete_staged_other_user(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archives-delete-staged", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_archive_delete_staged_other_user_with_perms(self):
+        self.private_archive.staged = False
+        self.private_archive.save()
+        self.other_user.user_permissions.add(self.permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+        url = reverse("archives-delete-staged", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.private_archive.staged = True
+        self.private_archive.save()
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Archive.objects.filter(id=self.private_archive.id).count(), 0)
+
+    def test_archive_delete_staged_superuser(self):
+        self.private_archive.staged = False
+        self.private_archive.save()
+        self.client.force_authenticate(user=self.superuser)
+
+        url = reverse("archives-delete-staged", args=[self.private_archive.id])
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.private_archive.staged = True
+        self.private_archive.save()
+
+        response = self.client.post(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Archive.objects.filter(id=self.private_archive.id).count(), 0)
+
+    def test_archive_actions_forbidden(self):
+        self.client.force_authenticate(user=self.requester)
+
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.other_user,
+            restricted=True,
+            staged=True,
+        )
+
+        url = reverse("archives-actions")
+        response = self.client.post(
+            url,
+            {
+                "archives": [
+                    {"id": self.private_archive.id, "state": ArchiveState.NONE},
+                    {"id": other_archive.id, "state": ArchiveState.NONE},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_archive_actions_with_perms(self):
+        self.requester.user_permissions.add(self.permission)
+        self.requester.save()
+        self.client.force_authenticate(user=self.requester)
+
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.other_user,
+            restricted=True,
+            staged=True,
+        )
+
+        url = reverse("archives-actions")
+        response = self.client.post(
+            url,
+            {
+                "archives": [
+                    {"id": self.private_archive.id},
+                    {"id": other_archive.id},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["state_intersection"], True)
+        self.assertEqual(response.data["all_last_step_failed"], False)
+        self.assertEqual(response.data["can_continue"], False)
+
+    def test_archive_actions_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.other_user,
+            restricted=True,
+            staged=True,
+        )
+
+        url = reverse("archives-actions")
+        response = self.client.post(
+            url,
+            {
+                "archives": [
+                    {"id": self.private_archive.id},
+                    {"id": other_archive.id},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["state_intersection"], True)
+        self.assertEqual(response.data["all_last_step_failed"], False)
+        self.assertEqual(response.data["can_continue"], False)
