@@ -651,9 +651,18 @@ def validate(self, archive_id, step_id, input_data=None, api_key=None):
         return {"status": 1, "errormsg": "SIP does not exist"}
 
     # Runs validate_sip from oais_utils
-    validate_sip(sip_folder_name)
-
-    return {"status": 0, "errormsg": None, "foldername": sip_folder_name}
+    try:
+        result = validate_sip(sip_folder_name)
+        if result:
+            return {"status": 0, "errormsg": None, "foldername": sip_folder_name}
+        else:
+            return {"status": 1, "errormsg": "SIP validation failed."}
+    except Exception as e:
+        logger.error(f"SIP validation failed with exception: {str(e)}")
+        return {
+            "status": 1,
+            "errormsg": f"SIP validation failed with exception: {str(e)}",
+        }
 
 
 @shared_task(name="checksum", bind=True, ignore_result=True, after_return=finalize)
