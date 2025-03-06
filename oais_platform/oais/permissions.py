@@ -57,7 +57,11 @@ class ArchivePermission(permissions.BasePermission):
             return True
         elif "oais.view_arhive" in get_perms(user, archive):
             return True
-        elif archive.requester == user or archive.approver == user:
+        elif (
+            archive.requester == user
+            or archive.approver == user
+            or not archive.restricted
+        ):
             return True
         return False
 

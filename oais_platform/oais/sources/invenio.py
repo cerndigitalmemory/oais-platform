@@ -46,6 +46,7 @@ class Invenio(AbstractSource):
 
         self.headers = {
             "Content-Type": "application/json",
+            "User-Agent": "cern-preserve-platform-bot",
         }
 
         if token:
