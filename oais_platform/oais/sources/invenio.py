@@ -46,6 +46,7 @@ class Invenio(AbstractSource):
 
         self.headers = {
             "Content-Type": "application/json",
+            "User-Agent": "cern-digital-memory-bot",
         }
 
         if token:
