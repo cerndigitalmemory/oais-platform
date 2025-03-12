@@ -1039,12 +1039,12 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def statistics(request):
     data = {
-        "archives": Archive.objects.count(),
-        "harvest": Step.objects.filter(name=2).count(),
-        "announce": Step.objects.filter(name=8).count(),
+        "harvestedCount": Archive.objects.filter(state=2).count(),
+        "preservedCount": Archive.objects.filter(state=3).count(),
+        "pushedToRegistryCount": Step.objects.filter(name=7, status=4).values("archive").distinct().count(),
+        "pushedToTapeCount": Step.objects.filter(name=9, status=4).values("archive").distinct().count(),
     }
     return Response(data)
 
