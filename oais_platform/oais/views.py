@@ -1041,13 +1041,13 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(["GET"])
 def statistics(request):
     data = {
-        "harvestedCount": Archive.objects.filter(state=2).count(),
-        "preservedCount": Archive.objects.filter(state=3).count(),
-        "pushedToRegistryCount": Step.objects.filter(name=7, status=4)
+        "harvested_count": Archive.objects.filter(state=2).count(),
+        "preserved_count": Archive.objects.filter(state=3).count(),
+        "pushed_to_registry_count": Step.objects.filter(name=7, status=4)
         .values("archive")
         .distinct()
         .count(),
-        "pushedToTapeCount": Step.objects.filter(name=9, status=4)
+        "pushed_to_tape_count": Step.objects.filter(name=9, status=4)
         .values("archive")
         .distinct()
         .count(),
