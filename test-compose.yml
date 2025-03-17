@@ -51,6 +51,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/oais_platform
+      - ./coverage:/coverage
     command:
       # Wait for the database to be online
       # Run Django migrations (create tables on the db from the models)
@@ -59,7 +60,9 @@ services:
       >
       sh -c "python3 manage.py makemigrations &&
              python3 manage.py migrate &&
-             python3 manage.py test"
+             coverage run --source='oais' manage.py test &&
+             coverage xml &&
+             cp coverage.xml /coverage/"
     environment:
       # Point to the postgres service
       - DB_HOST=db

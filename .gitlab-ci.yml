@@ -33,6 +33,15 @@ django-tests:
   script:
     - docker info
     - docker-compose -f test-compose.yml up --exit-code-from django
+  after_script:
+    - docker cp $(docker-compose ps -q django):/coverage/coverage.xml .
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
   tags:
     - docker-privileged-xl
     
