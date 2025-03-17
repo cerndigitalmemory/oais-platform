@@ -34,12 +34,9 @@ django-tests:
     - docker info
     - docker-compose -f test-compose.yml up --exit-code-from django
   artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
     paths:
-      - coverage.xml
+      - coverage.txt
+  coverage: '/TOTAL.*\s+(\d+\%)$/'
   tags:
     - docker-privileged-xl
     

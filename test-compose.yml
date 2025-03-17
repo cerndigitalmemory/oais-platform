@@ -60,7 +60,7 @@ services:
       sh -c "python3 manage.py makemigrations &&
              python3 manage.py migrate &&
              coverage run --source='oais_platform' manage.py test &&
-             coverage xml"
+             coverage report > coverage.txt"
     environment:
       # Point to the postgres service
       - DB_HOST=db
