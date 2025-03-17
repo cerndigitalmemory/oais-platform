@@ -33,8 +33,6 @@ django-tests:
   script:
     - docker info
     - docker-compose -f test-compose.yml up --exit-code-from django
-  after_script:
-    - docker cp $(docker-compose ps -q oais_test_django):/coverage/coverage.xml .
   artifacts:
     reports:
       coverage_report:
