@@ -32,9 +32,9 @@ django-tests:
     DOCKER_TLS_CERTDIR: "/certs"
   script:
     - docker info
-    - docker-compose -f test-compose.yml up --exit-code-from django
+    - docker-compose -f test-compose.yml up --exit-code-from oais_test_django
   after_script:
-    - docker cp $(docker-compose ps -q django):/coverage/coverage.xml .
+    - docker cp $(docker-compose ps -q oais_test_django):/coverage/coverage.xml .
   artifacts:
     reports:
       coverage_report:

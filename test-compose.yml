@@ -62,6 +62,7 @@ services:
              python3 manage.py migrate &&
              coverage run --source='oais' manage.py test &&
              coverage xml &&
+             mkdir -p /coverage &&
              cp coverage.xml /coverage/"
     environment:
       # Point to the postgres service
