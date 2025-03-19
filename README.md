@@ -1,7 +1,7 @@
 # OAIS platform
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Python 3.7](https://img.shields.io/badge/python-3.7-blue.svg)](https://www.python.org/downloads/release/python-370/)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 
 This is the backend implementation of the OAIS Platform of the CERN Digital Memory, built on Django.
 
@@ -205,13 +205,6 @@ Make sure that:
 
 1. The FTS link has correctly mapped the certificate you are planning to use to the service account. This is usually automatic for user Grid certificates but not for Robot ones.
 2. The service account has permissions to read and write from the specified CTA space.
-
-### Local testing notes
-
-To test with a locally running Invenio RDM instance, add the source base URL as `https://host.docker.internal:5000/api`. This way the URL will be resolved to `127.0.0.1` inside the Docker container.
-
-To test with a specific branch of `bagit-create` replace the `requirements.txt` bagit-create entry with:
-`git+https://gitlab.cern.ch/digitalmemory/bagit-create@branch_name`.
 
 ## CI/CD
 
