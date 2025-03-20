@@ -1040,16 +1040,20 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
 @api_view(["GET"])
 def statistics(request):
-    harvested_count = Archive.objects.filter(state=2).count()
-    preserved_count = Archive.objects.filter(state=3).count()
+    harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
+    preserved_count = Archive.objects.filter(state=ArchiveState.AIP).count()
     data = {
         "harvested_count": harvested_count + preserved_count,
         "preserved_count": preserved_count,
-        "pushed_to_tape_count": Step.objects.filter(name=9, status=4)
+        "pushed_to_tape_count": Step.objects.filter(
+            name=Steps.PUSH_TO_CTA, status=Status.COMPLETED
+        )
         .values("archive")
         .distinct()
         .count(),
-        "pushed_to_registry_count": Step.objects.filter(name=7, status=4)
+        "pushed_to_registry_count": Step.objects.filter(
+            name=Steps.INVENIO_RDM_PUSH, status=Status.COMPLETED
+        )
         .values("archive")
         .distinct()
         .count(),
