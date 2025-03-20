@@ -1,8 +1,7 @@
-from django.contrib.auth.models import Permission
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from rest_framework import status
-from oais_platform.oais.models import Archive, ArchiveState, Step, Steps, Status
+from rest_framework.test import APITestCase
+from oais_platform.oais.models import Archive, Step, Steps, Status
 
 
 class StatisticsEndpointTest(APITestCase):
