@@ -1,7 +1,8 @@
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from oais_platform.oais.models import Archive, Step, Steps, Status
+
+from oais_platform.oais.models import Archive, Status, Step, Steps
 
 
 class StatisticsEndpointTest(APITestCase):
