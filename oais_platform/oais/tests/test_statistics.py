@@ -8,14 +8,21 @@ from oais_platform.oais.models import Archive, Status, Step, Steps
 class StatisticsEndpointTest(APITestCase):
     def setUp(self):
         archives = [Archive.objects.create() for _ in range(3)]
-
         step_data = [
+            # archive is harvested, preserved and pushed to tape and registry
             (Steps.CHECKSUM, archives[0]),
-            (Steps.CHECKSUM, archives[1]),
-            (Steps.CHECKSUM, archives[2]),
             (Steps.ARCHIVE, archives[0]),
-            (Steps.INVENIO_RDM_PUSH, archives[0]),
             (Steps.PUSH_TO_CTA, archives[0]),
+            (Steps.INVENIO_RDM_PUSH, archives[0]),
+            # archive is harvested, preserved, and pushed twice to both tape and registry
+            (Steps.CHECKSUM, archives[1]),
+            (Steps.ARCHIVE, archives[1]),
+            (Steps.INVENIO_RDM_PUSH, archives[1]),
+            (Steps.PUSH_TO_CTA, archives[1]),
+            (Steps.INVENIO_RDM_PUSH, archives[1]),
+            (Steps.PUSH_TO_CTA, archives[1]),
+            # archive is harvested
+            (Steps.CHECKSUM, archives[2]),
         ]
 
         for name, archive in step_data:
@@ -30,6 +37,6 @@ class StatisticsEndpointTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["harvested_count"], 3)
-        self.assertEqual(response.data["preserved_count"], 1)
-        self.assertEqual(response.data["pushed_to_tape_count"], 1)
-        self.assertEqual(response.data["pushed_to_registry_count"], 1)
+        self.assertEqual(response.data["preserved_count"], 2)
+        self.assertEqual(response.data["pushed_to_tape_count"], 2)
+        self.assertEqual(response.data["pushed_to_registry_count"], 2)
