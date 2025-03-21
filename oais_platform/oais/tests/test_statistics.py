@@ -7,36 +7,44 @@ from oais_platform.oais.models import Archive, Status, Step, Steps
 
 class StatisticsEndpointTest(APITestCase):
     def setUp(self):
-        archives = [Archive.objects.create() for _ in range(3)]
-        step_data = [
-            # archive is harvested, preserved and pushed to tape and registry
-            (Steps.CHECKSUM, archives[0]),
-            (Steps.ARCHIVE, archives[0]),
-            (Steps.PUSH_TO_CTA, archives[0]),
-            (Steps.INVENIO_RDM_PUSH, archives[0]),
-            # archive is harvested, preserved, and pushed twice to both tape and registry
-            (Steps.CHECKSUM, archives[1]),
-            (Steps.ARCHIVE, archives[1]),
-            (Steps.INVENIO_RDM_PUSH, archives[1]),
-            (Steps.PUSH_TO_CTA, archives[1]),
-            (Steps.INVENIO_RDM_PUSH, archives[1]),
-            (Steps.PUSH_TO_CTA, archives[1]),
-            # archive is harvested
-            (Steps.CHECKSUM, archives[2]),
-        ]
+        self.url = reverse("statistics")
 
-        for name, archive in step_data:
-            Step.objects.create(name=name, status=Status.COMPLETED, archive=archive)
-
-        for archive in archives:
+        self.harvested_archive = Archive.objects.create()
+        self.preserved_archive = Archive.objects.create()
+        self.pushed_archive = Archive.objects.create()
+        step_data = {
+            self.harvested_archive: [Steps.CHECKSUM],
+            self.preserved_archive: [Steps.CHECKSUM, Steps.ARCHIVE],
+            self.pushed_archive: [
+                Steps.CHECKSUM,
+                Steps.ARCHIVE,
+                Steps.PUSH_TO_CTA,
+                Steps.INVENIO_RDM_PUSH,
+            ],
+        }
+        for archive, steps in step_data.items():
+            for step in steps:
+                Step.objects.create(name=step, status=Status.COMPLETED, archive=archive)
             archive.save()
 
-    def test_statistics_endpoint(self):
-        url = reverse("statistics")
-        response = self.client.get(url, format="json")
-
+    def test_statistics(self):
+        response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["harvested_count"], 3)
         self.assertEqual(response.data["preserved_count"], 2)
-        self.assertEqual(response.data["pushed_to_tape_count"], 2)
-        self.assertEqual(response.data["pushed_to_registry_count"], 2)
+        self.assertEqual(response.data["pushed_to_tape_count"], 1)
+        self.assertEqual(response.data["pushed_to_registry_count"], 1)
+
+    def test_statistics_multiple_pushes(self):
+        for step in (Steps.INVENIO_RDM_PUSH, Steps.PUSH_TO_CTA):
+            Step.objects.create(
+                name=step, status=Status.COMPLETED, archive=self.pushed_archive
+            )
+        self.pushed_archive.save()
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["harvested_count"], 3)
+        self.assertEqual(response.data["preserved_count"], 2)
+        self.assertEqual(response.data["pushed_to_tape_count"], 1)
+        self.assertEqual(response.data["pushed_to_registry_count"], 1)
