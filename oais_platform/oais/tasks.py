@@ -72,18 +72,6 @@ logging.basicConfig(level=logging.INFO)
 try:
     # Get the FTS client ready
     fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=6, period=IntervalSchedule.HOURS
-    )
-    task_name = f"Delegating FTS certificate for {FTS_INSTANCE}"
-    periodic_task = PeriodicTask.objects.filter(name=task_name).count()
-    if periodic_task == 0:
-        PeriodicTask.objects.create(
-            interval=schedule,
-            name=task_name,
-            task="fts_delegate",
-            expire_seconds=21600.0,
-        )
 except Exception as e:
     logging.warning(f"Couldn't initialize the FTS client: {e}")
 
