@@ -371,8 +371,9 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
-        if step.output_data["artifact"]:
-            result["artifact"] = step.output_data["artifact"]
+        output_data = json.loads(step.output_data)
+        if output_data["artifact"]:
+            result["artifact"] = output_data["artifact"]
         _remove_periodic_task_on_failure(task_name, step, result)
 
 
