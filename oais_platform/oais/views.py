@@ -1039,12 +1039,24 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def statistics(request):
+    harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
+    preserved_count = Archive.objects.filter(state=ArchiveState.AIP).count()
     data = {
-        "archives": Archive.objects.count(),
-        "harvest": Step.objects.filter(name=2).count(),
-        "announce": Step.objects.filter(name=8).count(),
+        "harvested_count": harvested_count + preserved_count,
+        "preserved_count": preserved_count,
+        "pushed_to_tape_count": Step.objects.filter(
+            name=Steps.PUSH_TO_CTA, status=Status.COMPLETED
+        )
+        .values("archive")
+        .distinct()
+        .count(),
+        "pushed_to_registry_count": Step.objects.filter(
+            name=Steps.INVENIO_RDM_PUSH, status=Status.COMPLETED
+        )
+        .values("archive")
+        .distinct()
+        .count(),
     }
     return Response(data)
 
