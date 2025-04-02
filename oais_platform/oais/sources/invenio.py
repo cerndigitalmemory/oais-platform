@@ -119,6 +119,10 @@ class Invenio(AbstractSource):
         if self.config["status"]:
             status = get_dict_value(record, self.config["status"].split(","))
 
+        file_size = None
+        if self.config["file_size"]:
+            file_size = get_dict_value(record, self.config["file_size"].split(","))
+
         return {
             "source_url": get_dict_value(record, url_key_list),
             "recid": recid,
@@ -126,6 +130,7 @@ class Invenio(AbstractSource):
             "authors": authors,
             "source": self.source,
             "status": status,
+            "file_size": file_size,
         }
 
     def notify_source(self, archive, notification_endpoint, api_key=None):

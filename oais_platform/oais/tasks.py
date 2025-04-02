@@ -43,6 +43,7 @@ from oais_platform.settings import (
     AM_WAITING_TIME_LIMIT,
     AUTOMATIC_HARVEST_BATCH_DELAY,
     AUTOMATIC_HARVEST_BATCH_SIZE,
+    AUTOMATIC_HARVEST_MAX_FILE_SIZE,
     BASE_URL,
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
@@ -1484,10 +1485,32 @@ def batch_harvest(
                 approver_id=user_id,
             )
             harvest_tag.add_archive(archive.id)
-            for step in pipeline:
-                archive.add_step_to_pipeline(step)
 
-            execute_pipeline(archive.id, api_key)
+            if (
+                "file_size" in record
+                and record["file_size"]
+                and record["file_size"] > AUTOMATIC_HARVEST_MAX_FILE_SIZE
+            ):
+                logging.warning(
+                    f"Record {record['recid']} from {source_name} is too large to be harvested."
+                )
+                failed_harvest = Step.objects.create(
+                    name=Steps.HARVEST,
+                    status=Status.FAILED,
+                    archive=archive,
+                )
+                failed_harvest.set_output_data(
+                    {
+                        "status": 1,
+                        "errormsg": "Record is too large to be harvested.",
+                    }
+                )
+                archive.set_last_step(failed_harvest)
+            else:
+                for step in pipeline:
+                    archive.add_step_to_pipeline(step)
+
+                execute_pipeline(archive.id, api_key)
         except Exception as e:
             logging.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"
