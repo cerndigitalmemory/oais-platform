@@ -369,8 +369,8 @@ class CollectionTests(APITestCase):
 
     def test_return_only_archives_of_collection(self):
         """
-        Creates a empty collection with no archives
-        Tries to retrieve all archvies connected to the collection
+        Creates a collection with no archives
+        Tries to retrieve all archives connected to the collection
         """
         self.client.force_authenticate(user=self.superuser)
         url = reverse("tags-archives", args=[self.collection.id])
@@ -383,7 +383,7 @@ class CollectionTests(APITestCase):
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["id"], self.archive1.id)
 
-    def test_empty_collection_archives_should_be_0(self):
+    def test_collection_without_archives_results_must_be_0(self):
         """
         Creates a empty collection with no archives
         Tries to retrieve all archvies connected to the collection
