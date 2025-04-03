@@ -189,7 +189,7 @@ class CollectionSerializer(serializers.ModelSerializer):
 
     def get_archives_count(self, instance):
         return instance.archives.count()
-    
+
     class Meta:
         model = Collection
         fields = [
