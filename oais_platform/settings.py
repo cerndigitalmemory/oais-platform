@@ -65,7 +65,7 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 172800}  # 48 hours
 
 CELERY_BEAT_SCHEDULE = {
     "cds-rdm-weekly": {
-        "task": "oais_platform.oais.tasks.periodic_harvest",
+        "task": "periodic_harvest",
         "schedule": crontab(hour=2, minute=00, day_of_week=0),
         "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
     },
