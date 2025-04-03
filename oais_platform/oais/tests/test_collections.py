@@ -400,7 +400,7 @@ class CollectionTests(APITestCase):
     def test_collection_without_archives_results_must_be_0(self):
         """
         Creates a empty collection with no archives
-        Tries to retrieve all archvies connected to the collection
+        Tries to retrieve all archives connected to the collection
         """
         collection_without_archives = Collection.objects.create(
             title="test_without_archives", internal=False, creator=self.superuser
