@@ -756,10 +756,12 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     queryset = Collection.objects.all()
     serializer_class = CollectionMinimalSerializer
     permission_classes = [TagPermission]
+    default_page_size = 10
 
     def get_queryset(self):
         internal = self.request.GET.get("internal")
-
+        size = self.request.GET.get("size", self.default_page_size)
+        self.pagination_class.page_size = size
         if internal == "only":
             return filter_collections(
                 super().get_queryset(), self.request.user, internal=True
@@ -840,7 +842,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns all Archives with a specific Tag
         """
         tag = self.get_object()
-        return self.make_paginated_response(tag, CollectionSerializer)
+        archives = tag.archives.all()
+        return self.make_paginated_response(archives, ArchiveSerializer)
 
     def add_or_remove_arch(self, request, add):
         if request.data["archives"] is None:
