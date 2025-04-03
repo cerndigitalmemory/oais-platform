@@ -49,7 +49,6 @@ from oais_platform.oais.permissions import (
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     ArchiveWithDuplicatesSerializer,
-    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
     LoginSerializer,
@@ -161,7 +160,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = request.user
 
         tags = filter_collections(Collection.objects.all(), user, internal=False)
-        serializer = CollectionMinimalSerializer(tags, many=True)
+        serializer = CollectionSerializer(tags, many=True)
         return Response(serializer.data)
 
     @action(
@@ -428,7 +427,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         collections = filter_collections(archive.get_collections(), request.user)
-        return self.make_paginated_response(collections, CollectionMinimalSerializer)
+        return self.make_paginated_response(collections, CollectionSerializer)
 
     @action(
         detail=True,
@@ -754,7 +753,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionMinimalSerializer
+    serializer_class = CollectionSerializer
     permission_classes = [TagPermission]
     default_page_size = 10
 
