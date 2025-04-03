@@ -836,7 +836,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             tag.delete()
         return Response()
 
-    @action(detail=True, url_path="archives")
+    @action(detail=True, url_path="archives", url_name="archives")
     def get_tagged_archives(self, request, pk=None):
         """
         Returns all Archives with a specific Tag

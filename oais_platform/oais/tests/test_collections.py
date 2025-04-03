@@ -109,8 +109,7 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.collection.id)
-        self.assertEqual(len(response.data["archives"]), 1)
-        self.assertEqual(response.data["archives"][0]["id"], self.archive1.id)
+        self.assertEqual(len(response.data["archives_count"]), 1)
 
     def test_collection_create(self):
         """
