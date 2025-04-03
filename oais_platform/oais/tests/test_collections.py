@@ -18,6 +18,7 @@ class CollectionTests(APITestCase):
         self.archive1 = Archive.objects.create(
             recid="1", source="test_archive", requester=self.requester
         )
+
         self.serializer1 = ArchiveSerializer(self.archive1, many=False)
 
         self.collection = Collection.objects.create(
@@ -366,3 +367,38 @@ class CollectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["title"], "new test")
         self.assertEqual(response.data["description"], "new test description")
+
+    def test_return_only_archives_of_collection(self):
+        """
+        Creates a empty collection with no archives
+        Tries to retrieve all archvies connected to the collection
+        """
+        self.client.force_authenticate(user=self.superuser)
+        url = reverse("tags-archives", args=[self.collection.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["id"], self.archive1.id)
+
+    def test_empty_collection_archives_should_be_0(self):
+        """
+        Creates a empty collection with no archives
+        Tries to retrieve all archvies connected to the collection
+        """
+        collection_without_archives = Collection.objects.create(
+            title="test_without_archives", internal=False, creator=self.superuser
+        )
+
+        self.client.force_authenticate(user=self.superuser)
+        url = reverse("tags-archives", args=[collection_without_archives.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 0)
