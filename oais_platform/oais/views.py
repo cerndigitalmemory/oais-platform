@@ -755,12 +755,12 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     queryset = Collection.objects.all()
     serializer_class = CollectionSerializer
     permission_classes = [TagPermission]
-    default_page_size = 10
 
     def get_queryset(self):
+        page_size = self.request.GET.get("size", None)
+        if page_size is not None:
+            self.pagination_class.page_size = page_size
         internal = self.request.GET.get("internal")
-        size = self.request.GET.get("size", self.default_page_size)
-        self.pagination_class.page_size = size
         if internal == "only":
             return filter_collections(
                 super().get_queryset(), self.request.user, internal=True

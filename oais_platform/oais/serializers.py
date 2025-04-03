@@ -202,6 +202,7 @@ class CollectionSerializer(serializers.ModelSerializer):
             "archives_count",
         ]
 
+
 class CollectionNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Collection

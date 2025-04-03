@@ -204,7 +204,7 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(results.status_code, status.HTTP_200_OK)
         self.assertEqual(results.data["count"], 1)
-        self.assertEqual(data[0]["archive_count"], 1)
+        self.assertEqual(data[0]["archives_count"], 1)
 
     def test_archive_add(self):
         """
@@ -232,7 +232,7 @@ class CollectionTests(APITestCase):
 
         # Archives before add
         self.assertEqual(results.data["count"], 1)
-        self.assertEqual(data[0]["archive_count"], 0)
+        self.assertEqual(data[0]["archives_count"], 0)
 
         response_collection_id = response.data["id"]
         add_archive = reverse("tags-add-arch", args=[response_collection_id])
@@ -248,7 +248,7 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(results2.status_code, status.HTTP_200_OK)
         self.assertEqual(results2.data["count"], 1)
-        self.assertEqual(data[0]["archive_count"], 1)
+        self.assertEqual(data[0]["archives_count"], 1)
 
     def test_archive_remove(self):
         """
@@ -276,7 +276,7 @@ class CollectionTests(APITestCase):
         # Check if there is one archive in the beginning
         self.assertEqual(results.status_code, status.HTTP_200_OK)
         self.assertEqual(results.data["count"], 1)
-        self.assertEqual(data[0]["archive_count"], 1)
+        self.assertEqual(data[0]["archives_count"], 1)
 
         # Remove the archive from the collection
         response_collection_id = response.data["id"]
@@ -292,7 +292,7 @@ class CollectionTests(APITestCase):
         # Check if collection is there and there is no archive
         self.assertEqual(results2.status_code, status.HTTP_200_OK)
         self.assertEqual(results2.data["count"], 1)
-        self.assertEqual(data[0]["archive_count"], 0)
+        self.assertEqual(data[0]["archives_count"], 0)
 
     def test_check_duplicate_create(self):
         """
@@ -382,6 +382,20 @@ class CollectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["id"], self.archive1.id)
+
+    def test_without_perms_archives_should_not_be_available(self):
+        """
+        Tries to retrieve all archives connected to the collection without permissions
+        Should return 403
+        """
+        self.client.force_authenticate(user=self.other_user)
+        url = reverse("tags-archives", args=[self.collection.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_collection_without_archives_results_must_be_0(self):
         """
