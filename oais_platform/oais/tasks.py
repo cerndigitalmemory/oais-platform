@@ -363,6 +363,28 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         if output_data["artifact"]:
             result["artifact"] = output_data["artifact"]
         _remove_periodic_task_on_failure(task_name, step, result)
+        _retry_push_to_cta_once(archive_id, step, api_key)
+
+
+def _retry_push_to_cta_once(archive_id, last_step, api_key=None):
+    archive = Archive.objects.get(id=archive_id)
+    previous_tries_count = Step.objects.filter(
+        archive=archive, name=Steps.PUSH_TO_CTA
+    ).count()
+    if previous_tries_count > 1:
+        return
+    step = create_step(
+        step_name=last_step.name,
+        archive=archive,
+        input_step_id=last_step.id,
+        input_data=last_step.output_data,
+    )
+    next_steps = Step.objects.filter(input_step__id=last_step.id).exclude(id=step.id)
+    for next_step in next_steps:
+        next_step.set_input_step(step)
+    archive.pipeline_steps.insert(0, step.id)
+    archive.save()
+    execute_pipeline(archive_id, api_key=api_key, force_continue=True)
 
 
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
