@@ -146,7 +146,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
         ]
 
 
-class ArchiveWithDuplicatesSerializer(ArchiveSerializer):  # Extending BookSerializer
+class ArchiveWithDuplicatesSerializer(ArchiveSerializer):
     duplicates = serializers.SerializerMethodField()
 
     class Meta(ArchiveSerializer.Meta):
