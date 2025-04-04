@@ -70,7 +70,7 @@ CELERY_BEAT_SCHEDULE = {
         "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
     },
     "fts-delegate": {
-        "task": "oais_platform.oais.tasks.fts_delegate",
+        "task": "fts_delegate",
         "schedule": crontab(hour="*/6", minute=00),
         "options": {
             "expires": 21600.0,
