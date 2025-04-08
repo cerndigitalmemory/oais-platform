@@ -369,7 +369,7 @@ class CollectionTests(APITestCase):
 
     def test_return_only_archives_of_collection(self):
         """
-        Creates a collection with no archives
+        Creates a collection with one archive
         Tries to retrieve all archives connected to the collection
         """
         self.client.force_authenticate(user=self.superuser)
@@ -386,7 +386,7 @@ class CollectionTests(APITestCase):
     def test_without_perms_archives_should_not_be_available(self):
         """
         Tries to retrieve all archives connected to the collection without permissions
-        Should return 403
+        Should return 404
         """
         self.client.force_authenticate(user=self.other_user)
         url = reverse("tags-archives", args=[self.collection.id])
