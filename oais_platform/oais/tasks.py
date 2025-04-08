@@ -1464,7 +1464,7 @@ def periodic_harvest(self, source_name, username, pipeline):
 
         PeriodicTask.objects.create(
             interval=schedule,  # need to set but one off is true
-            name=f"Automatic harvest {source_name}, batch {i + 1} to {batch_upper_limit}",
+            name=f"{new_harvest.title}, batch {i + 1} to {batch_upper_limit}",
             task="batch_harvest",
             args=json.dumps(
                 [batch, user.id, source_name, pipeline, new_harvest.id, api_key]
