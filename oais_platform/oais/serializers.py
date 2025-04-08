@@ -187,9 +187,6 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
 
-    def get_archives_count(self, instance):
-        return instance.archives.count()
-
     class Meta:
         model = Collection
         fields = [
