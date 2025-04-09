@@ -184,7 +184,7 @@ class ArchiveMinimalSerializer(serializers.ModelSerializer):
 
 
 class CollectionSerializer(serializers.ModelSerializer):
-    archives = ArchiveMinimalSerializer(many=True)
+    archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
 
     class Meta:
@@ -196,28 +196,8 @@ class CollectionSerializer(serializers.ModelSerializer):
             "creator",
             "timestamp",
             "last_modification_date",
-            "archives",
+            "archives_count",
         ]
-
-
-class CollectionMinimalSerializer(serializers.ModelSerializer):
-    creator = UserMinimalSerializer()
-    archive_count = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Collection
-        fields = [
-            "id",
-            "title",
-            "description",
-            "creator",
-            "timestamp",
-            "last_modification_date",
-            "archive_count",
-        ]
-
-    def get_archive_count(self, obj):
-        return obj.archives.count()
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):

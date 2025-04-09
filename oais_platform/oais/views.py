@@ -49,7 +49,6 @@ from oais_platform.oais.permissions import (
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     ArchiveWithDuplicatesSerializer,
-    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
     LoginSerializer,
@@ -161,7 +160,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = request.user
 
         tags = filter_collections(Collection.objects.all(), user, internal=False)
-        serializer = CollectionMinimalSerializer(tags, many=True)
+        serializer = CollectionSerializer(tags, many=True)
         return Response(serializer.data)
 
     @action(
@@ -428,7 +427,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         collections = filter_collections(archive.get_collections(), request.user)
-        return self.make_paginated_response(collections, CollectionMinimalSerializer)
+        return self.make_paginated_response(collections, CollectionSerializer)
 
     @action(
         detail=True,
@@ -754,12 +753,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionMinimalSerializer
+    serializer_class = CollectionSerializer
     permission_classes = [TagPermission]
 
     def get_queryset(self):
+        page_size = self.request.GET.get("size", None)
+        if page_size is not None:
+            self.pagination_class.page_size = page_size
         internal = self.request.GET.get("internal")
-
         if internal == "only":
             return filter_collections(
                 super().get_queryset(), self.request.user, internal=True
@@ -834,13 +835,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             tag.delete()
         return Response()
 
-    @action(detail=True, url_path="archives")
+    @action(detail=True, url_path="archives", url_name="archives")
     def get_tagged_archives(self, request, pk=None):
         """
         Returns all Archives with a specific Tag
         """
         tag = self.get_object()
-        return self.make_paginated_response(tag, CollectionSerializer)
+        archives = tag.archives.all()
+        return self.make_paginated_response(archives, ArchiveSerializer)
 
     def add_or_remove_arch(self, request, add):
         if request.data["archives"] is None:
