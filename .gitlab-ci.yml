@@ -2,7 +2,7 @@ stages:
   - isort
   - black
   - test
-  - deploy
+  - create_image
 
 check-isort:
   stage: isort
@@ -43,10 +43,16 @@ django-tests:
   tags:
     - docker-privileged-xl
     
-trigger-deploy:
-  stage: deploy
+create_image:
+  stage: create_image
   only:
-    - develop
-    - qa
-    - main
-  trigger: digitalmemory/openshift-deploy
+    - tags  # This ensures the job only runs when there is a tag
+  script:
+    # Log in to GitLab Container Registry using GitLab CI/CD environment variables
+    - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+
+    # Build the Docker image (adjust the Dockerfile path if necessary)
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME .
+
+    # Push the image to the GitLab Container Registry
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
