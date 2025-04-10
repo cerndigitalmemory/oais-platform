@@ -157,6 +157,24 @@ class ArchiveTests(APITestCase):
         if response.status_code == status.HTTP_200_OK:
             self.assertEqual(len(response.data["results"]), output["size"])
 
+    def test_archives_filtered_exclude_tag(self):
+        expected_archives_size = 3
+        self.other_user.user_permissions.add(self.permission)
+        self.other_user.save()
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archives-filter")
+        response = self.client.post(url, {
+            "access": "all",
+            "filters": {
+                "exclude_tag": self.private_tag.id,
+            },
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), expected_archives_size)
+
+
     def test_archive_details_requester(self):
         self.client.force_authenticate(user=self.requester)
 
