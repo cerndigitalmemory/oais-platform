@@ -353,8 +353,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 case _:
                     raise BadRequest("Invalid request")
 
-        result = result.filter(query).exclude(exclude_query
-                                              ).order_by("-last_modification_timestamp")
+        result = (
+            result.filter(query)
+            .exclude(exclude_query)
+            .order_by("-last_modification_timestamp")
+        )
 
         return self.make_paginated_response(result, ArchiveSerializer)
 

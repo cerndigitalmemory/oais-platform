@@ -165,15 +165,18 @@ class ArchiveTests(APITestCase):
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("archives-filter")
-        response = self.client.post(url, {
-            "access": "all",
-            "filters": {
-                "exclude_tag": self.private_tag.id,
+        response = self.client.post(
+            url,
+            {
+                "access": "all",
+                "filters": {
+                    "exclude_tag": self.private_tag.id,
+                },
             },
-        }, format="json")
+            format="json",
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), expected_archives_size)
-
 
     def test_archive_details_requester(self):
         self.client.force_authenticate(user=self.requester)
