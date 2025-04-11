@@ -141,10 +141,17 @@ class ArchiveTests(APITestCase):
                 {"access": "all", "filters": {"source": "test2", "query": "1"}},
                 {"status": status.HTTP_200_OK, "size": 0},
             ),
+            (
+                lambda self: {"access": "all", "filters": {"exclude_tag": str(self.private_tag.id)}},
+                {"status": status.HTTP_200_OK, "size": 3},
+            ),
             ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
         ]
     )
     def test_archives_filtered(self, data, output):
+        if callable(data):
+                data = data(self)  # Resolve the lambda function
+
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
 
@@ -156,27 +163,6 @@ class ArchiveTests(APITestCase):
 
         if response.status_code == status.HTTP_200_OK:
             self.assertEqual(len(response.data["results"]), output["size"])
-
-    def test_archives_filtered_exclude_tag(self):
-        expected_archives_size = 3
-        self.other_user.user_permissions.add(self.permission)
-        self.other_user.save()
-
-        self.client.force_authenticate(user=self.other_user)
-
-        url = reverse("archives-filter")
-        response = self.client.post(
-            url,
-            {
-                "access": "all",
-                "filters": {
-                    "exclude_tag": self.private_tag.id,
-                },
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), expected_archives_size)
 
     def test_archive_details_requester(self):
         self.client.force_authenticate(user=self.requester)

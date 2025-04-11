@@ -342,11 +342,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 for query_arg in self.filters_map[key]:
                     filter_query = Q(**{query_arg: value})
                     if "exclude" in key:
-                        exclude_subquery &= filter_query
+                        exclude_subquery |= filter_query        
                     else:
-                        subquery &= filter_query
-                query &= subquery
+                        subquery |= filter_query
                 exclude_query &= exclude_subquery
+                query &= subquery
+                
         except Exception as error:
             match error:
                 case KeyError():
