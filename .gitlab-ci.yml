@@ -2,7 +2,7 @@ stages:
   - isort
   - black
   - test
-  - deploy
+  - build
 
 check-isort:
   stage: isort
@@ -43,10 +43,23 @@ django-tests:
   tags:
     - docker-privileged-xl
     
-trigger-deploy:
-  stage: deploy
-  only:
-    - develop
-    - qa
-    - main
-  trigger: digitalmemory/openshift-deploy
+build-image:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:latest
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    # Configure Kaniko to authenticate with GitLab Container Registry
+    - mkdir -p /kaniko/.docker
+    - >
+      echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" 
+      > /kaniko/.docker/config.json
+
+    # Build and push the Docker image
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/Dockerfile"
+      --destination "$IMAGE_NAME"
+      --cache=true
