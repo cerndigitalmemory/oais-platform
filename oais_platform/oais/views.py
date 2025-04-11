@@ -292,6 +292,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "state": ["state"],
         "source": ["source"],
         "tag": ["archive_collections__id"],
+        "exclude_tag": ["archive_collections__id"],
         "step_name": ["last_step__name"],
         "step_status": ["last_step__status"],
         "query": ["title__icontains", "recid__icontains"],
@@ -328,20 +329,25 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns an Archive list based on the filters set
         """
         result = self.get_queryset()
-
         if "filters" not in request.data:
             raise BadRequest("No filters")
-
         filters = request.data["filters"]
 
         try:
             query = Q()
+            exclude_query = Q()
             for key, value in filters.items():
                 subquery = Q()
+                exclude_subquery = Q()
                 for query_arg in self.filters_map[key]:
-                    subquery |= Q(**{query_arg: value})
-
+                    filter_query = Q(**{query_arg: value})
+                    if "exclude" in key:
+                        exclude_subquery |= filter_query
+                    else:
+                        subquery |= filter_query
+                exclude_query &= exclude_subquery
                 query &= subquery
+
         except Exception as error:
             match error:
                 case KeyError():
@@ -349,7 +355,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 case _:
                     raise BadRequest("Invalid request")
 
-        result = result.filter(query).order_by("-last_modification_timestamp")
+        result = (
+            result.filter(query)
+            .exclude(exclude_query)
+            .order_by("-last_modification_timestamp")
+        )
 
         return self.make_paginated_response(result, ArchiveSerializer)
 

@@ -141,10 +141,20 @@ class ArchiveTests(APITestCase):
                 {"access": "all", "filters": {"source": "test2", "query": "1"}},
                 {"status": status.HTTP_200_OK, "size": 0},
             ),
+            (
+                lambda self: {
+                    "access": "all",
+                    "filters": {"exclude_tag": str(self.private_tag.id)},
+                },
+                {"status": status.HTTP_200_OK, "size": 3},
+            ),
             ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
         ]
     )
     def test_archives_filtered(self, data, output):
+        if callable(data):
+            data = data(self)  # Resolve the lambda function
+
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
 
