@@ -17,6 +17,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
+from oais_platform.oais.apps import fts
 from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import (
     ApiKey,
@@ -57,8 +58,6 @@ from oais_platform.settings import (
     SIP_UPSTREAM_BASEPATH,
 )
 
-from .fts import FTS
-
 # Get the version of BagIt Create in use
 bic_version = bagit_create.version.get_version()
 
@@ -68,12 +67,6 @@ logger = get_task_logger(__name__)
 logger.setLevel("DEBUG")
 ## Standard logger
 logging.basicConfig(level=logging.INFO)
-
-try:
-    # Get the FTS client ready
-    fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
-except Exception as e:
-    logging.warning(f"Couldn't initialize the FTS client: {e}")
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
