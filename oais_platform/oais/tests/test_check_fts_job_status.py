@@ -21,9 +21,9 @@ class CheckFTSJobStatusTests(APITestCase):
             task="check_fts_job_status",
         )
 
-    @patch("oais_platform.oais.apps.fts.job_status")
-    def test_fts_job_status_success(self, job_status):
-        job_status.return_value = {"job_state": "FINISHED"}
+    @patch("oais_platform.oais.tasks.fts")
+    def test_fts_job_status_success(self, fts):
+        fts.job_status.return_value = {"job_state": "FINISHED"}
         print(f"Status before task: {Step.objects.get(id=self.step.id).status}")
         print(f"Number of steps before task: {Step.objects.all().count()}")
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
@@ -36,9 +36,9 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         self.assertEqual(Step.objects.exclude(status=Status.COMPLETED).exists(), False)
 
-    @patch("oais_platform.oais.apps.fts.job_status")
-    def test_fts_job_status_failed(self, job_status):
-        job_status.return_value = {"job_state": "FAILED"}
+    @patch("oais_platform.oais.tasks.fts")
+    def test_fts_job_status_failed(self, fts):
+        fts.job_status.return_value = {"job_state": "FAILED"}
         print(f"Status before task: {Step.objects.get(id=self.step.id).status}")
         print(f"Number of steps before task: {Step.objects.all().count()}")
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
@@ -48,14 +48,14 @@ class CheckFTSJobStatusTests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(Step.objects.exclude(status=Status.FAILED).exists(), True)
 
-    @patch("oais_platform.oais.apps.fts.job_status")
-    def test_fts_job_statusfailed_multiple_times(self, job_status):
+    @patch("oais_platform.oais.tasks.fts")
+    def test_fts_job_statusfailed_multiple_times(self, fts):
         print(f"Status before task: {Step.objects.get(id=self.step.id).status}")
         print(f"Number of steps before task: {Step.objects.all().count()}")
         Step.objects.create(
             archive=self.archive, name=Steps.PUSH_TO_CTA, status=Status.FAILED
         )
-        job_status.return_value = {"job_state": "FAILED"}
+        fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
         self.step.refresh_from_db()
         print(f"Status after task: {Step.objects.get(id=self.step.id).status}")
