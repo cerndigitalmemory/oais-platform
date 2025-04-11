@@ -48,9 +48,6 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
-    FTS_GRID_CERT,
-    FTS_GRID_CERT_KEY,
-    FTS_INSTANCE,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
@@ -61,12 +58,9 @@ from oais_platform.settings import (
 # Get the version of BagIt Create in use
 bic_version = bagit_create.version.get_version()
 
-# Set up logging
-## Logger to be used inside Celery tasks
+# Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
 logger.setLevel("DEBUG")
-## Standard logger
-logging.basicConfig(level=logging.INFO)
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
