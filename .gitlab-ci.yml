@@ -1,11 +1,11 @@
 stages:
-  - isort
-  - black
+  - format
   - test
+  - build
   - deploy
 
 check-isort:
-  stage: isort
+  stage: format
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
@@ -15,7 +15,7 @@ check-isort:
     - isort --profile black -c --skip "migrations" .
 
 check-black:
-  stage: black
+  stage: format
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
@@ -43,10 +43,60 @@ django-tests:
   tags:
     - docker-privileged-xl
     
-trigger-deploy:
+build-image:
+  stage: build
+  image:
+    name: registry.cern.ch/gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    # Configure Kaniko to authenticate with GitLab Container Registry
+    - mkdir -p /kaniko/.docker
+    - >
+      echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" 
+      > /kaniko/.docker/config.json
+
+    # Build and push the Docker image
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}"
+      --cache=true
+
+.deploy_template: &deploy_template
   stage: deploy
-  only:
-    - develop
-    - qa
-    - main
-  trigger: digitalmemory/openshift-deploy
+  when: manual
+  image: registry.cern.ch/docker.io/library/docker:20.10.16
+  services:
+    - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  allow_failure: false
+  script:
+    - |
+      docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+      docker pull ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+      docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} \
+        ${CI_REGISTRY_IMAGE}:${DEPLOY_ENV}
+      docker push ${CI_REGISTRY_IMAGE}:$DEPLOY_ENV
+  tags:
+    - docker-privileged-xl
+
+deploy-dev:
+  <<: *deploy_template
+  variables:
+    DEPLOY_ENV: "dev"
+
+deploy-qa:
+  <<: *deploy_template
+  variables:
+    DEPLOY_ENV: "qa"
+
+deploy-prod:
+  <<: *deploy_template
+  variables:
+    DEPLOY_ENV: "prod"
