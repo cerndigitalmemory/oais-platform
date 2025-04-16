@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import Permission, User
 from django.db import IntegrityError
 from django.urls import reverse
@@ -141,10 +143,20 @@ class ArchiveTests(APITestCase):
                 {"access": "all", "filters": {"source": "test2", "query": "1"}},
                 {"status": status.HTTP_200_OK, "size": 0},
             ),
+            (
+                lambda self: {
+                    "access": "all",
+                    "filters": {"exclude_tag": str(self.private_tag.id)},
+                },
+                {"status": status.HTTP_200_OK, "size": 3},
+            ),
             ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
         ]
     )
     def test_archives_filtered(self, data, output):
+        if callable(data):
+            data = data(self)  # Resolve the lambda function
+
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
 
@@ -314,7 +326,8 @@ class ArchiveTests(APITestCase):
         response = self.client.post(url, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_archive_unstage_with_perms(self):
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_archive_unstage_with_perms(self, process_delay):
         self.requester.user_permissions.add(self.approve_permission)
         self.requester.save()
 
@@ -324,14 +337,23 @@ class ArchiveTests(APITestCase):
         response = self.client.post(url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["approver"]["id"], self.requester.id)
+        self.private_archive.refresh_from_db()
+        process_delay.assert_called_once_with(
+            self.private_archive.id, self.private_archive.last_step.id, None, None
+        )
 
-    def test_archive_unstage_superuser(self):
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_archive_unstage_superuser(self, process_delay):
         self.client.force_authenticate(user=self.superuser)
 
         url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
         response = self.client.post(url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["approver"]["id"], self.superuser.id)
+        self.private_archive.refresh_from_db()
+        process_delay.assert_called_once_with(
+            self.private_archive.id, self.private_archive.last_step.id, None, None
+        )
 
     def test_archive_mlt_unstage_forbidden(self):
         self.client.force_authenticate(user=self.requester)
@@ -342,7 +364,8 @@ class ArchiveTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_archive_mlt_unstage_with_perms(self):
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_archive_mlt_unstage_with_perms(self, process_delay):
         self.requester.user_permissions.add(self.approve_permission)
         self.requester.save()
         self.client.force_authenticate(user=self.requester)
@@ -368,8 +391,13 @@ class ArchiveTests(APITestCase):
             url, {"archives": [{"id": self.private_archive.id}]}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.private_archive.refresh_from_db()
+        process_delay.assert_called_once_with(
+            self.private_archive.id, self.private_archive.last_step.id, None, None
+        )
 
-    def test_archive_mlt_unstage_superuser(self):
+    @patch("oais_platform.oais.tasks.process.delay")
+    def test_archive_mlt_unstage_superuser(self, process_delay):
         self.client.force_authenticate(user=self.superuser)
 
         other_archive = Archive.objects.create(
@@ -388,6 +416,7 @@ class ArchiveTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(process_delay.mock_calls), 2)
 
     def test_archive_delete_staged_other_user(self):
         self.client.force_authenticate(user=self.other_user)

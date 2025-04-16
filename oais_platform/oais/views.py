@@ -49,7 +49,6 @@ from oais_platform.oais.permissions import (
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
     ArchiveWithDuplicatesSerializer,
-    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
     LoginSerializer,
@@ -161,7 +160,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         user = request.user
 
         tags = filter_collections(Collection.objects.all(), user, internal=False)
-        serializer = CollectionMinimalSerializer(tags, many=True)
+        serializer = CollectionSerializer(tags, many=True)
         return Response(serializer.data)
 
     @action(
@@ -293,6 +292,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "state": ["state"],
         "source": ["source"],
         "tag": ["archive_collections__id"],
+        "exclude_tag": ["archive_collections__id"],
         "step_name": ["last_step__name"],
         "step_status": ["last_step__status"],
         "query": ["title__icontains", "recid__icontains"],
@@ -329,20 +329,25 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns an Archive list based on the filters set
         """
         result = self.get_queryset()
-
         if "filters" not in request.data:
             raise BadRequest("No filters")
-
         filters = request.data["filters"]
 
         try:
             query = Q()
+            exclude_query = Q()
             for key, value in filters.items():
                 subquery = Q()
+                exclude_subquery = Q()
                 for query_arg in self.filters_map[key]:
-                    subquery |= Q(**{query_arg: value})
-
+                    filter_query = Q(**{query_arg: value})
+                    if "exclude" in key:
+                        exclude_subquery |= filter_query
+                    else:
+                        subquery |= filter_query
+                exclude_query &= exclude_subquery
                 query &= subquery
+
         except Exception as error:
             match error:
                 case KeyError():
@@ -350,7 +355,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 case _:
                     raise BadRequest("Invalid request")
 
-        result = result.filter(query).order_by("-last_modification_timestamp")
+        result = (
+            result.filter(query)
+            .exclude(exclude_query)
+            .order_by("-last_modification_timestamp")
+        )
 
         return self.make_paginated_response(result, ArchiveSerializer)
 
@@ -428,7 +437,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         collections = filter_collections(archive.get_collections(), request.user)
-        return self.make_paginated_response(collections, CollectionMinimalSerializer)
+        return self.make_paginated_response(collections, CollectionSerializer)
 
     @action(
         detail=True,
@@ -754,12 +763,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionMinimalSerializer
+    serializer_class = CollectionSerializer
     permission_classes = [TagPermission]
 
     def get_queryset(self):
+        page_size = self.request.GET.get("size", None)
+        if page_size is not None:
+            self.pagination_class.page_size = page_size
         internal = self.request.GET.get("internal")
-
         if internal == "only":
             return filter_collections(
                 super().get_queryset(), self.request.user, internal=True
@@ -834,13 +845,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             tag.delete()
         return Response()
 
-    @action(detail=True, url_path="archives")
+    @action(detail=True, url_path="archives", url_name="archives")
     def get_tagged_archives(self, request, pk=None):
         """
         Returns all Archives with a specific Tag
         """
         tag = self.get_object()
-        return self.make_paginated_response(tag, CollectionSerializer)
+        archives = tag.archives.all()
+        return self.make_paginated_response(archives, ArchiveSerializer)
 
     def add_or_remove_arch(self, request, add):
         if request.data["archives"] is None:
@@ -1039,12 +1051,24 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def statistics(request):
+    harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
+    preserved_count = Archive.objects.filter(state=ArchiveState.AIP).count()
     data = {
-        "archives": Archive.objects.count(),
-        "harvest": Step.objects.filter(name=2).count(),
-        "announce": Step.objects.filter(name=8).count(),
+        "harvested_count": harvested_count + preserved_count,
+        "preserved_count": preserved_count,
+        "pushed_to_tape_count": Step.objects.filter(
+            name=Steps.PUSH_TO_CTA, status=Status.COMPLETED
+        )
+        .values("archive")
+        .distinct()
+        .count(),
+        "pushed_to_registry_count": Step.objects.filter(
+            name=Steps.INVENIO_RDM_PUSH, status=Status.COMPLETED
+        )
+        .values("archive")
+        .distinct()
+        .count(),
     }
     return Response(data)
 

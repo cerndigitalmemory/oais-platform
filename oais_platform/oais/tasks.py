@@ -4,6 +4,7 @@ import ntpath
 import os
 import shutil
 import xml.etree.ElementTree as ET
+from datetime import timedelta
 from urllib.parse import urljoin
 
 import bagit_create
@@ -44,6 +45,7 @@ from oais_platform.settings import (
     AM_WAITING_TIME_LIMIT,
     AUTOMATIC_HARVEST_BATCH_DELAY,
     AUTOMATIC_HARVEST_BATCH_SIZE,
+    AUTOMATIC_HARVEST_MAX_FILE_SIZE,
     BASE_URL,
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
@@ -1382,7 +1384,7 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
         }
 
 
-@shared_task(ame="periodic_harvest", bind=True, ignore_result=True)
+@shared_task(name="periodic_harvest", bind=True, ignore_result=True)
 def periodic_harvest(self, source_name, username, pipeline):
     logging.info(f"Starting the periodic harvest for {source_name}.")
 
@@ -1448,19 +1450,30 @@ def periodic_harvest(self, source_name, username, pipeline):
     new_harvest.save()
 
     batch_size = AUTOMATIC_HARVEST_BATCH_SIZE
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=1, period=IntervalSchedule.HOURS
+    )
     for iteration, i in enumerate(
         range(0, len(records_to_harvest), batch_size), start=0
     ):
-        batch_harvest.apply_async(
-            args=[
-                records_to_harvest[i : i + batch_size],
-                user.id,
-                source_name,
-                pipeline,
-                new_harvest.id,
-                api_key,
-            ],
-            countdown=60 * AUTOMATIC_HARVEST_BATCH_DELAY * iteration,
+        batch = records_to_harvest[i : i + batch_size]
+        batch_upper_limit = (
+            i + batch_size
+            if i + batch_size < len(records_to_harvest)
+            else len(records_to_harvest)
+        )
+
+        PeriodicTask.objects.create(
+            interval=schedule,  # need to set but one off is true
+            name=f"{new_harvest.title}, batch {i + 1} to {batch_upper_limit}",
+            task="batch_harvest",
+            args=json.dumps(
+                [batch, user.id, source_name, pipeline, new_harvest.id, api_key]
+            ),
+            start_time=timezone.now()
+            + timedelta(minutes=iteration * AUTOMATIC_HARVEST_BATCH_DELAY),
+            enabled=True,
+            one_off=True,
         )
 
     new_harvest.set_description(
@@ -1469,7 +1482,7 @@ def periodic_harvest(self, source_name, username, pipeline):
     logging.info(f"All harvests were scheduled for source {source_name}.")
 
 
-@shared_task(ame="batch_harvest", bind=True, ignore_result=True)
+@shared_task(name="batch_harvest", bind=True, ignore_result=True)
 def batch_harvest(
     self, records_to_harvest, user_id, source_name, pipeline, collection_id, api_key
 ):
@@ -1485,10 +1498,32 @@ def batch_harvest(
                 approver_id=user_id,
             )
             harvest_tag.add_archive(archive.id)
-            for step in pipeline:
-                archive.add_step_to_pipeline(step)
 
-            execute_pipeline(archive.id, api_key)
+            if (
+                "file_size" in record
+                and record["file_size"]
+                and record["file_size"] > AUTOMATIC_HARVEST_MAX_FILE_SIZE
+            ):
+                logging.warning(
+                    f"Record {record['recid']} from {source_name} is too large to be harvested."
+                )
+                failed_harvest = Step.objects.create(
+                    name=Steps.HARVEST,
+                    status=Status.FAILED,
+                    archive=archive,
+                )
+                failed_harvest.set_output_data(
+                    {
+                        "status": 1,
+                        "errormsg": "Record is too large to be harvested.",
+                    }
+                )
+                archive.set_last_step(failed_harvest)
+            else:
+                for step in pipeline:
+                    archive.add_step_to_pipeline(step)
+
+                execute_pipeline(archive.id, api_key)
         except Exception as e:
             logging.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"

@@ -135,7 +135,8 @@ class PipelineTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_execute_pipeline_with_perms(self):
+    @patch("oais_platform.oais.tasks.validate.delay")
+    def test_execute_pipeline_with_perms(self, validate_delay):
         self.other_user.user_permissions.add(self.permission)
         self.other_user.user_permissions.add(self.execute_permission)
         self.other_user.save()
@@ -150,6 +151,10 @@ class PipelineTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.archive.refresh_from_db()
+        validate_delay.assert_called_once_with(
+            self.archive.id, self.archive.last_step.id, None, None
+        )
 
     @parameterized.expand(
         [

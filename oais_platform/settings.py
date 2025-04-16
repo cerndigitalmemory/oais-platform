@@ -65,7 +65,7 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 172800}  # 48 hours
 
 CELERY_BEAT_SCHEDULE = {
     "cds-rdm-weekly": {
-        "task": "oais_platform.oais.tasks.periodic_harvest",
+        "task": "periodic_harvest",
         "schedule": crontab(hour=2, minute=00, day_of_week=0),
         "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
     },
@@ -354,6 +354,8 @@ PIPELINE_SIZE_LIMIT = 10
 AUTOMATIC_HARVEST_BATCH_SIZE = 100
 # Automatic harvest delay time between batches in minutes
 AUTOMATIC_HARVEST_BATCH_DELAY = 10
+# Automatic harvest max file size in bytes
+AUTOMATIC_HARVEST_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
