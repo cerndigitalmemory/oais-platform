@@ -11,13 +11,13 @@ import requests
 from amclient import AMClient
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
+from django.apps import apps
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.apps import fts
 from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import (
     ApiKey,
@@ -285,6 +285,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     cta_folder_name = f"aip-{archive.id}"
 
     try:
+        fts = apps.get_app_config("oais").fts
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
@@ -333,6 +334,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     task_name = f"FTS job status for step: {step.id}"
 
     try:
+        fts = apps.get_app_config("oais").fts
         status = fts.job_status(job_id)
     except Exception as e:
         logger.warning(str(e))
@@ -408,6 +410,7 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
 def fts_delegate(self):
     try:
+        fts = apps.get_app_config("oais").fts
         fts.delegate()
     except Exception as e:
         logger.warning(e)
