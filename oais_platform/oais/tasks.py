@@ -50,6 +50,7 @@ from oais_platform.settings import (
     CTA_BASE_PATH,
     FILES_URL,
     FTS_MAX_RETRY_COUNT,
+    FTS_MAX_TRANSFERS,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
@@ -274,6 +275,13 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     artifact. Once done, set up another periodic task to check on
     the status of the transfer.
     """
+    # Wait an hour if already maximum number of transfers ongoing
+    if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
+        logger.info(
+            f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA (attempt {self.request.retries + 1})"
+        )
+        self.retry(countdown=3600)
+
     logger.info(f"Pushing Archive {archive_id} to CTA")
 
     # Get the Archive and Step we're running for
