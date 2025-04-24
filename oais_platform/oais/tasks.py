@@ -1,5 +1,4 @@
 import json
-import logging
 import ntpath
 import os
 import shutil
@@ -113,9 +112,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                         # Save the audit log from the sip.json
                         json_audit = sip_json["audit"]
                         archive.set_archive_manifest(json_audit)
-                        logging.info("Sip.json audit saved at manifest field")
+                        logger.info("Sip.json audit saved at manifest field")
                 except Exception:
-                    logging.info(f"Sip.json was not found inside {sip_location}")
+                    logger.info(f"Sip.json was not found inside {sip_location}")
 
             # Set last_completed_step to the successful step
             with transaction.atomic():
@@ -1342,7 +1341,7 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    logging.info(
+    logger.info(
         f"Starting to notify the upstream source({archive.source}) for Archive {archive.id}"
     )
 
@@ -1386,25 +1385,25 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
 
 @shared_task(name="periodic_harvest", bind=True, ignore_result=True)
 def periodic_harvest(self, source_name, username, pipeline):
-    logging.info(f"Starting the periodic harvest for {source_name}.")
+    logger.info(f"Starting the periodic harvest for {source_name}.")
 
     try:
         source = Source.objects.get(name=source_name)
     except Source.DoesNotExist:
-        logging.error(f"Source with name {source_name} does not exist.")
+        logger.error(f"Source with name {source_name} does not exist.")
         return
 
     try:
         user = User.objects.get(username=username)
     except User.DoesNotExist:
-        logging.error(f"User with name {username} does not exist.")
+        logger.error(f"User with name {username} does not exist.")
         return
 
     api_key = None
     try:
         api_key = ApiKey.objects.get(source=source, user=user).key
     except ApiKey.DoesNotExist:
-        logging.warning(
+        logger.warning(
             f"User with name {username} does not have API key set for the given source, only public records will be available."
         )
 
@@ -1416,10 +1415,10 @@ def periodic_harvest(self, source_name, username, pipeline):
     )
     last_harvest_time = None
     if not last_harvest:
-        logging.info(f"First harvest for source {source_name}.")
+        logger.info(f"First harvest for source {source_name}.")
     else:
         last_harvest_time = last_harvest.timestamp
-        logging.info(
+        logger.info(
             f"Last harvest for source {source_name} was at {last_harvest_time}."
         )
 
@@ -1429,15 +1428,15 @@ def periodic_harvest(self, source_name, username, pipeline):
             last_harvest_time
         )
     except Exception as e:
-        logging.error(f"Error while querying {source_name}: {str(e)}")
+        logger.error(f"Error while querying {source_name}: {str(e)}")
         return
 
-    logging.info(
+    logger.info(
         f"Total number of IDs to harvest for source {source_name}: {len(records_to_harvest)}."
     )
 
     if len(records_to_harvest) < 1:
-        logging.info(f"There are no new records to harvest for {source_name}.")
+        logger.info(f"There are no new records to harvest for {source_name}.")
         return
 
     new_harvest = Collection.objects.create(
@@ -1479,7 +1478,7 @@ def periodic_harvest(self, source_name, username, pipeline):
     new_harvest.set_description(
         f"All automatic harvests were scheduled for source {source_name}."
     )
-    logging.info(f"All harvests were scheduled for source {source_name}.")
+    logger.info(f"All harvests were scheduled for source {source_name}.")
 
 
 @shared_task(name="batch_harvest", bind=True, ignore_result=True)
@@ -1504,7 +1503,7 @@ def batch_harvest(
                 and record["file_size"]
                 and record["file_size"] > AUTOMATIC_HARVEST_MAX_FILE_SIZE
             ):
-                logging.warning(
+                logger.warning(
                     f"Record {record['recid']} from {source_name} is too large to be harvested."
                 )
                 failed_harvest = Step.objects.create(
@@ -1525,7 +1524,7 @@ def batch_harvest(
 
                 execute_pipeline(archive.id, api_key)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"
             )
-    logging.info(f"A batch of automatic harvests has been started for {source_name}.")
+    logger.info(f"A batch of automatic harvests has been started for {source_name}.")
