@@ -18,7 +18,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.exceptions import RetryableException
+from oais_platform.oais.exceptions import BadRequest, RetryableException
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -349,32 +349,51 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
+        input_data = json.loads(step.input_data)
         output_data = json.loads(step.output_data)
         if output_data["artifact"]:
             result["artifact"] = output_data["artifact"]
+        if "retry_count" in input_data:
+            result["retry_count"] = input_data["retry_count"] + 1
+        else:
+            result["retry_count"] = 0
         _remove_periodic_task_on_failure(task_name, step, result)
-        _retry_push_to_cta_once(archive_id, step, api_key)
+
+        if result["retry_count"] < 1:  # possibly add a configurable number here?
+            logger.info(
+                f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
+            )
+            create_retry_step.delay(archive_id, True, api_key)
+        else:
+            logger.info(f"Quitting retrying pushing archive {archive_id} to CTA")
 
 
-def _retry_push_to_cta_once(archive_id, last_step, api_key=None):
-    archive = Archive.objects.get(id=archive_id)
-    previous_tries_count = Step.objects.filter(
-        archive=archive, name=Steps.PUSH_TO_CTA
-    ).count()
-    if previous_tries_count > 1:
-        return
+@shared_task(name="create_retry_step", bind=True, ignore_result=True)
+def create_retry_step(self, archive_id, execute=False, api_key=None):
+    archive = Archive.objects.get(pk=archive_id)
+    last_step = Step.objects.get(pk=archive.last_step.id)
+    if last_step and last_step.status != Status.FAILED:
+        raise BadRequest("Retry operation not permitted, last step is not failed.")
     step = create_step(
         step_name=last_step.name,
         archive=archive,
         input_step_id=last_step.id,
         input_data=last_step.output_data,
     )
+
+    # get steps that are preceded by the failed step
     next_steps = Step.objects.filter(input_step__id=last_step.id).exclude(id=step.id)
+
+    # update successors of the failed steps
     for next_step in next_steps:
         next_step.set_input_step(step)
     archive.pipeline_steps.insert(0, step.id)
     archive.save()
-    execute_pipeline(archive_id, api_key=api_key, force_continue=True)
+
+    if execute:
+        execute_pipeline(archive.id, api_key=api_key, force_continue=True)
+
+    return step
 
 
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):

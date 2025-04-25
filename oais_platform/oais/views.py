@@ -63,7 +63,7 @@ from . import pipeline
 from .tasks import (
     announce_sip,
     batch_announce_task,
-    create_step,
+    create_retry_step,
     execute_pipeline,
     run_step,
 )
@@ -591,30 +591,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest(e)
                 case "retry":
                     force_continue = True
-                    last_step = Step.objects.select_for_update().get(
-                        pk=archive.last_step.id
-                    )
-                    if last_step and last_step.status != Status.FAILED:
-                        raise BadRequest(
-                            "Retry operation not permitted, last step is not failed."
-                        )
-                    step = create_step(
-                        step_name=last_step.name,
-                        archive=archive,
-                        input_step_id=last_step.id,
-                        input_data=last_step.output_data,
-                    )
-
-                    # get steps that are preceded by the failed step
-                    next_steps = Step.objects.filter(
-                        input_step__id=last_step.id
-                    ).exclude(id=step.id)
-
-                    # update successors of the failed steps
-                    for next_step in next_steps:
-                        next_step.set_input_step(step)
-                    archive.pipeline_steps.insert(0, step.id)
-                    archive.save()
+                    step = create_retry_step.apply(args=[archive_id])
                 case "continue":
                     force_continue = True
                     last_step = Step.objects.select_for_update().get(
