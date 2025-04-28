@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+import json
+from unittest.mock import MagicMock, patch
 
 from django.apps import apps
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -15,7 +16,11 @@ class CheckFTSJobStatusTests(APITestCase):
         self.app_config.fts = self.fts
 
         self.archive = Archive.objects.create()
-        self.step = Step.objects.create(archive=self.archive, name=Steps.PUSH_TO_CTA)
+        self.step = Step.objects.create(
+            archive=self.archive,
+            name=Steps.PUSH_TO_CTA,
+            input_data=json.dumps({"test": True}),
+        )
         self.step.set_output_data({"artifact": {"artifact_name": "FTS Job"}})
         schedule, _ = IntervalSchedule.objects.get_or_create(
             every=1, period=IntervalSchedule.HOURS
@@ -36,19 +41,19 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         self.assertFalse(Step.objects.exclude(status=Status.COMPLETED).exists())
 
-    def test_fts_job_status_failed(self):
+    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    def test_fts_job_status_failed(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
         self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertTrue(Step.objects.exclude(status=Status.FAILED).exists(), True)
+        create_retry_step.assert_called_once_with(self.archive.id, True, None)
 
-    def test_fts_job_statusfailed_multiple_times(self):
-        Step.objects.create(
-            archive=self.archive, name=Steps.PUSH_TO_CTA, status=Status.FAILED
-        )
+    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    def test_fts_job_status_failed_multiple_times(self, create_retry_step):
+        self.step.input_data = json.dumps({"retry_count": 1})
+        self.step.save()
         self.fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertFalse(Step.objects.exclude(status=Status.FAILED).exists())
+        create_retry_step.assert_not_called()
