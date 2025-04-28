@@ -31,15 +31,16 @@ class CheckFTSJobStatusTests(APITestCase):
             task="check_fts_job_status",
         )
 
-    def test_fts_job_status_success(self):
+    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    def test_fts_job_status_success(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FINISHED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
-        self.assertIsNone(
-            PeriodicTask.objects.filter(name=self.periodic_task.name).first()
+        self.assertFalse(
+            PeriodicTask.objects.filter(name=self.periodic_task.name).exists()
         )
-        self.assertFalse(Step.objects.exclude(status=Status.COMPLETED).exists())
+        create_retry_step.assert_not_called()
 
     @patch("oais_platform.oais.tasks.create_retry_step.delay")
     def test_fts_job_status_failed(self, create_retry_step):
