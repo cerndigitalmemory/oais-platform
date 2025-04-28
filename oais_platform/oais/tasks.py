@@ -259,7 +259,14 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(name="push_to_cta", bind=True, ignore_result=True)
+@shared_task(
+    name="push_to_cta",
+    bind=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    max_retries=1,
+    retry_kwargs={"countdown": 3600},
+)
 def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
@@ -292,10 +299,14 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
-        logger.warning(str(e))
-        step.set_status(Status.FAILED)
-        step.set_output_data({"status": 1, "errormsg": str(e)})
-        return 1
+        if self.request.retries >= self.max_retries:
+            logger.warning(str(e))
+            step.set_status(Status.FAILED)
+            step.set_output_data({"status": 1, "errormsg": str(e)})
+            return 1
+
+        logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
+        raise e
 
     logger.info(submitted_job)
 
