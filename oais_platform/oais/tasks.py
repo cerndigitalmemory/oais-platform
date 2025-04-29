@@ -369,18 +369,23 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
             result["retry_count"] = input_data["retry_count"] + 1
         else:
             result["retry_count"] = 0
-        _remove_periodic_task_on_failure(task_name, step, result)
 
         if result["retry_count"] < FTS_MAX_RETRY_COUNT:
             logger.info(
                 f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
             )
+            result["retrying"] = True
             create_retry_step.apply_async(
                 args=(archive_id, True, Steps.PUSH_TO_CTA, api_key),
-                eta=timezone.now() + timedelta(hour=1),
+                eta=timezone.now() + timedelta(hours=1),
             )
         else:
-            logger.info(f"Quitting retrying pushing archive {archive_id} to CTA")
+            logger.info(
+                f"Quitting retrying pushing archive {archive_id} to CTA after {result['retry_count']} attempts"
+            )
+            result["retrying"] = False
+
+        _remove_periodic_task_on_failure(task_name, step, result)
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
