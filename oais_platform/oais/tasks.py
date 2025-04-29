@@ -376,7 +376,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
                 f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
             )
             create_retry_step.apply_async(
-                args=(archive_id, True, api_key),
+                args=(archive_id, True, Steps.PUSH_TO_CTA, api_key),
                 eta=timezone.now() + timedelta(hour=1),
             )
         else:
@@ -384,11 +384,15 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
-def create_retry_step(self, archive_id, execute=False, api_key=None):
+def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=None):
     archive = Archive.objects.get(pk=archive_id)
     last_step = Step.objects.get(pk=archive.last_step.id)
     if last_step and last_step.status != Status.FAILED:
-        raise BadRequest("Retry operation not permitted, last step is not failed.")
+        logger.error("Retry operation not permitted, last step is not failed.")
+        return
+    if step_name and last_step.name != step_name:
+        logger.error(f"Retry operation not permitted, last step is not {step_name}.")
+        return
     step = create_step(
         step_name=last_step.name,
         archive=archive,
