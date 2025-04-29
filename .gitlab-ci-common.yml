@@ -70,11 +70,8 @@ deploy-prod:
   script:
     - oc login $SERVER --token=$DEPLOY_TOKEN
     - oc project dm-luteus # TODO: preserve-$ENV
-    - echo "Triggering build $BUILD_NAME for $ENV"
+    - echo "Triggering ImageStream update for $IMAGE_STREAM_NAME on $ENV"
     - sleep 10 && oc import-image $IMAGE_STREAM_NAME --all
-    - echo "Triggering deployments for $ENV"
-    - sleep 10 && oc rollout restart deployment/celery
-    - oc rollout restart deployment/oais-platform
 
 trigger-dev:
   extends: .trigger_template
