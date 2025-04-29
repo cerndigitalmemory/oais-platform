@@ -49,6 +49,7 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
+    FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
@@ -370,7 +371,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
             result["retry_count"] = 0
         _remove_periodic_task_on_failure(task_name, step, result)
 
-        if result["retry_count"] < 1:  # possibly add a configurable number here?
+        if result["retry_count"] < FTS_MAX_RETRY_COUNT:
             logger.info(
                 f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
             )
