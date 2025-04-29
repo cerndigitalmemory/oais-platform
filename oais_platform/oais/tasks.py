@@ -374,7 +374,10 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
             logger.info(
                 f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
             )
-            create_retry_step.delay(archive_id, True, api_key)
+            create_retry_step.apply_async(
+                args=(archive_id, True, api_key),
+                eta=timezone.now() + timedelta(hour=1),
+            )
         else:
             logger.info(f"Quitting retrying pushing archive {archive_id} to CTA")
 

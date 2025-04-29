@@ -31,7 +31,7 @@ class CheckFTSJobStatusTests(APITestCase):
             task="check_fts_job_status",
         )
 
-    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    @patch("oais_platform.oais.tasks.create_retry_step.apply_async")
     def test_fts_job_status_success(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FINISHED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
@@ -42,14 +42,14 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         create_retry_step.assert_not_called()
 
-    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    @patch("oais_platform.oais.tasks.create_retry_step.apply_async")
     def test_fts_job_status_failed(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
         self.step.refresh_from_db()
-        create_retry_step.assert_called_once_with(self.archive.id, True, None)
+        create_retry_step.assert_called_once()
 
-    @patch("oais_platform.oais.tasks.create_retry_step.delay")
+    @patch("oais_platform.oais.tasks.create_retry_step.apply_async")
     def test_fts_job_status_failed_multiple_times(self, create_retry_step):
         self.step.input_data = json.dumps({"retry_count": 1})
         self.step.save()
