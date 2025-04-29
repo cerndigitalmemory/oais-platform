@@ -47,7 +47,6 @@ class CheckFTSJobStatusTests(APITestCase):
     def test_fts_job_status_failed(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
-        self.step.refresh_from_db()
         create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.create_retry_step.apply_async")

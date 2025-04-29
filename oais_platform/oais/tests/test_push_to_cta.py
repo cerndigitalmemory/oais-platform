@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock
 
 from django.apps import apps
@@ -16,11 +15,7 @@ class PushToCTATests(APITestCase):
         self.app_config.fts = self.fts
 
         self.archive = Archive.objects.create(path_to_aip="test/path")
-        self.step = Step.objects.create(
-            archive=self.archive,
-            name=Steps.PUSH_TO_CTA,
-            input_data=json.dumps({"test": True}),
-        )
+        self.step = Step.objects.create(archive=self.archive, name=Steps.PUSH_TO_CTA)
 
     def test_push_to_cta_success(self):
         self.fts.push_to_cta.return_value = "test_job_id"
