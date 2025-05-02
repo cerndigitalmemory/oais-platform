@@ -19,14 +19,10 @@ class CreateRetryStepTests(APITestCase):
 
     def test_create_retry_step_success(self):
         create_retry_step.apply(args=[self.archive.id])
-        self.assertTrue(
-            Step.objects.filter(
-                name=self.step.name, archive=self.archive, input_step_id=self.step.id
-            ).exists()
-        )
-        retry_step = Step.objects.get(
+        retry_step = Step.objects.filter(
             name=self.step.name, archive=self.archive, input_step_id=self.step.id
-        )
+        ).first()
+        self.assertIsNotNone(retry_step)
         self.archive.refresh_from_db()
         self.assertEqual(self.archive.pipeline_steps, [retry_step.id])
 
