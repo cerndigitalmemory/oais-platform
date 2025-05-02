@@ -18,7 +18,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.exceptions import BadRequest, RetryableException
+from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -365,10 +365,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         output_data = json.loads(step.output_data)
         if output_data["artifact"]:
             result["artifact"] = output_data["artifact"]
-        if "retry_count" in input_data:
-            result["retry_count"] = input_data["retry_count"] + 1
-        else:
-            result["retry_count"] = 0
+        result["retry_count"] = input_data.get("retry_count", -1) + 1
 
         if result["retry_count"] < FTS_MAX_RETRY_COUNT:
             logger.info(
@@ -393,11 +390,11 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
     archive = Archive.objects.get(pk=archive_id)
     last_step = Step.objects.get(pk=archive.last_step.id)
     if last_step and last_step.status != Status.FAILED:
-        logger.error("Retry operation not permitted, last step is not failed.")
-        return
+        return {"errormsg": "Retry operation not permitted, last step is not failed."}
     if step_name and last_step.name != step_name:
-        logger.error(f"Retry operation not permitted, last step is not {step_name}.")
-        return
+        return {
+            "errormsg": f"Retry operation not permitted, last step is not {step_name}."
+        }
     step = create_step(
         step_name=last_step.name,
         archive=archive,
@@ -417,7 +414,7 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
     if execute:
         execute_pipeline(archive.id, api_key=api_key, force_continue=True)
 
-    return step
+    return {"errormsg": None}
 
 
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):

@@ -591,9 +591,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest(e)
                 case "retry":
                     force_continue = True
-                    step = create_retry_step.apply(args=[archive_id])
-                    if not step:
-                        raise BadRequest("Retry operation not permitted.")
+                    result = create_retry_step.apply(args=[archive_id])
+                    result = result.get()
+                    if result["errormsg"]:
+                        raise BadRequest(result["errormsg"])
                 case "continue":
                     force_continue = True
                     last_step = Step.objects.select_for_update().get(
