@@ -69,6 +69,13 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=2, minute=00, day_of_week=0),
         "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
     },
+    "fts-delegate": {
+        "task": "fts_delegate",
+        "schedule": crontab(hour="*/6", minute=00),
+        "options": {
+            "expires": 21600.0,
+        },
+    },
 }
 
 ## Authentication
@@ -313,13 +320,14 @@ AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
 SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
 
 # FTS Settings
-FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-pilot.cern.ch:8446")
+FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-public.cern.ch:8446")
 FTS_STATUS_INSTANCE = environ.get(
-    "FTS_STATUS_INSTANCE", "https://fts3-pilot.cern.ch:8449"
+    "FTS_STATUS_INSTANCE", "https://fts3-public.cern.ch:8449"
 )
 FTS_SOURCE_BASE_PATH = environ.get(
     "FTS_SOURCE_BASE_PATH", "https://eosproject-p.cern.ch:8444"
 )
+FTS_MAX_RETRY_COUNT = 1
 
 # GRID Certificate used to authenticate
 # Public part

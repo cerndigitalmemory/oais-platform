@@ -1,5 +1,4 @@
 import json
-import logging
 import ntpath
 import os
 import shutil
@@ -12,6 +11,7 @@ import requests
 from amclient import AMClient
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
+from django.apps import apps
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
@@ -49,9 +49,7 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
-    FTS_GRID_CERT,
-    FTS_GRID_CERT_KEY,
-    FTS_INSTANCE,
+    FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     INVENIO_API_TOKEN,
@@ -59,35 +57,12 @@ from oais_platform.settings import (
     SIP_UPSTREAM_BASEPATH,
 )
 
-from .fts import FTS
-
 # Get the version of BagIt Create in use
 bic_version = bagit_create.version.get_version()
 
-# Set up logging
-## Logger to be used inside Celery tasks
+# Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
 logger.setLevel("DEBUG")
-## Standard logger
-logging.basicConfig(level=logging.INFO)
-
-try:
-    # Get the FTS client ready
-    fts = FTS(FTS_INSTANCE, FTS_GRID_CERT, FTS_GRID_CERT_KEY)
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=6, period=IntervalSchedule.HOURS
-    )
-    task_name = f"Delegating FTS certificate for {FTS_INSTANCE}"
-    periodic_task = PeriodicTask.objects.filter(name=task_name).count()
-    if periodic_task == 0:
-        PeriodicTask.objects.create(
-            interval=schedule,
-            name=task_name,
-            task="fts_delegate",
-            expire_seconds=21600.0,
-        )
-except Exception as e:
-    logging.warning(f"Couldn't initialize the FTS client: {e}")
 
 
 def finalize(self, status, retval, task_id, args, kwargs, einfo):
@@ -138,9 +113,9 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
                         # Save the audit log from the sip.json
                         json_audit = sip_json["audit"]
                         archive.set_archive_manifest(json_audit)
-                        logging.info("Sip.json audit saved at manifest field")
+                        logger.info("Sip.json audit saved at manifest field")
                 except Exception:
-                    logging.info(f"Sip.json was not found inside {sip_location}")
+                    logger.info(f"Sip.json was not found inside {sip_location}")
 
             # Set last_completed_step to the successful step
             with transaction.atomic():
@@ -285,7 +260,14 @@ def create_path_artifact(name, path, localpath):
 # Steps implementations
 
 
-@shared_task(name="push_to_cta", bind=True, ignore_result=True)
+@shared_task(
+    name="push_to_cta",
+    bind=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    max_retries=1,
+    retry_kwargs={"countdown": 3600},
+)
 def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
@@ -312,15 +294,20 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     cta_folder_name = f"aip-{archive.id}"
 
     try:
+        fts = apps.get_app_config("oais").fts
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
         )
     except Exception as e:
-        logger.warning(str(e))
-        step.set_status(Status.FAILED)
-        step.set_output_data({"status": 1, "errormsg": str(e)})
-        return 1
+        if self.request.retries >= self.max_retries:
+            logger.warning(str(e))
+            step.set_status(Status.FAILED)
+            step.set_output_data({"status": 1, "errormsg": str(e)})
+            return 1
+
+        logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
+        raise e
 
     logger.info(submitted_job)
 
@@ -360,6 +347,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     task_name = f"FTS job status for step: {step.id}"
 
     try:
+        fts = apps.get_app_config("oais").fts
         status = fts.job_status(job_id)
     except Exception as e:
         logger.warning(str(e))
@@ -373,9 +361,60 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
-        if step.output_data["artifact"]:
-            result["artifact"] = step.output_data["artifact"]
+        input_data = json.loads(step.input_data)
+        output_data = json.loads(step.output_data)
+        if output_data["artifact"]:
+            result["artifact"] = output_data["artifact"]
+        result["retry_count"] = input_data.get("retry_count", -1) + 1
+
+        if result["retry_count"] < FTS_MAX_RETRY_COUNT:
+            logger.info(
+                f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
+            )
+            result["retrying"] = True
+            create_retry_step.apply_async(
+                args=(archive_id, True, Steps.PUSH_TO_CTA, api_key),
+                eta=timezone.now() + timedelta(hours=1),
+            )
+        else:
+            logger.info(
+                f"Quitting retrying pushing archive {archive_id} to CTA after {result['retry_count']} attempts"
+            )
+            result["retrying"] = False
+
         _remove_periodic_task_on_failure(task_name, step, result)
+
+
+@shared_task(name="create_retry_step", bind=True, ignore_result=True)
+def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=None):
+    archive = Archive.objects.get(pk=archive_id)
+    last_step = Step.objects.get(pk=archive.last_step.id)
+    if last_step and last_step.status != Status.FAILED:
+        return {"errormsg": "Retry operation not permitted, last step is not failed."}
+    if step_name and last_step.name != step_name:
+        return {
+            "errormsg": f"Retry operation not permitted, last step is not {step_name}."
+        }
+    step = create_step(
+        step_name=last_step.name,
+        archive=archive,
+        input_step_id=last_step.id,
+        input_data=last_step.output_data,
+    )
+
+    # get steps that are preceded by the failed step
+    next_steps = Step.objects.filter(input_step__id=last_step.id).exclude(id=step.id)
+
+    # update successors of the failed steps
+    for next_step in next_steps:
+        next_step.set_input_step(step)
+    archive.pipeline_steps.insert(0, step.id)
+    archive.save()
+
+    if execute:
+        execute_pipeline(archive.id, api_key=api_key, force_continue=True)
+
+    return {"errormsg": None}
 
 
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
@@ -412,6 +451,7 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
 def fts_delegate(self):
     try:
+        fts = apps.get_app_config("oais").fts
         fts.delegate()
     except Exception as e:
         logger.warning(e)
@@ -1341,7 +1381,7 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    logging.info(
+    logger.info(
         f"Starting to notify the upstream source({archive.source}) for Archive {archive.id}"
     )
 
@@ -1385,25 +1425,25 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
 
 @shared_task(name="periodic_harvest", bind=True, ignore_result=True)
 def periodic_harvest(self, source_name, username, pipeline):
-    logging.info(f"Starting the periodic harvest for {source_name}.")
+    logger.info(f"Starting the periodic harvest for {source_name}.")
 
     try:
         source = Source.objects.get(name=source_name)
     except Source.DoesNotExist:
-        logging.error(f"Source with name {source_name} does not exist.")
+        logger.error(f"Source with name {source_name} does not exist.")
         return
 
     try:
         user = User.objects.get(username=username)
     except User.DoesNotExist:
-        logging.error(f"User with name {username} does not exist.")
+        logger.error(f"User with name {username} does not exist.")
         return
 
     api_key = None
     try:
         api_key = ApiKey.objects.get(source=source, user=user).key
     except ApiKey.DoesNotExist:
-        logging.warning(
+        logger.warning(
             f"User with name {username} does not have API key set for the given source, only public records will be available."
         )
 
@@ -1415,10 +1455,10 @@ def periodic_harvest(self, source_name, username, pipeline):
     )
     last_harvest_time = None
     if not last_harvest:
-        logging.info(f"First harvest for source {source_name}.")
+        logger.info(f"First harvest for source {source_name}.")
     else:
         last_harvest_time = last_harvest.timestamp
-        logging.info(
+        logger.info(
             f"Last harvest for source {source_name} was at {last_harvest_time}."
         )
 
@@ -1428,15 +1468,15 @@ def periodic_harvest(self, source_name, username, pipeline):
             last_harvest_time
         )
     except Exception as e:
-        logging.error(f"Error while querying {source_name}: {str(e)}")
+        logger.error(f"Error while querying {source_name}: {str(e)}")
         return
 
-    logging.info(
+    logger.info(
         f"Total number of IDs to harvest for source {source_name}: {len(records_to_harvest)}."
     )
 
     if len(records_to_harvest) < 1:
-        logging.info(f"There are no new records to harvest for {source_name}.")
+        logger.info(f"There are no new records to harvest for {source_name}.")
         return
 
     new_harvest = Collection.objects.create(
@@ -1478,7 +1518,7 @@ def periodic_harvest(self, source_name, username, pipeline):
     new_harvest.set_description(
         f"All automatic harvests were scheduled for source {source_name}."
     )
-    logging.info(f"All harvests were scheduled for source {source_name}.")
+    logger.info(f"All harvests were scheduled for source {source_name}.")
 
 
 @shared_task(name="batch_harvest", bind=True, ignore_result=True)
@@ -1503,7 +1543,7 @@ def batch_harvest(
                 and record["file_size"]
                 and record["file_size"] > AUTOMATIC_HARVEST_MAX_FILE_SIZE
             ):
-                logging.warning(
+                logger.warning(
                     f"Record {record['recid']} from {source_name} is too large to be harvested."
                 )
                 failed_harvest = Step.objects.create(
@@ -1524,7 +1564,7 @@ def batch_harvest(
 
                 execute_pipeline(archive.id, api_key)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"
             )
-    logging.info(f"A batch of automatic harvests has been started for {source_name}.")
+    logger.info(f"A batch of automatic harvests has been started for {source_name}.")
