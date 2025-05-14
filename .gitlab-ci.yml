@@ -51,4 +51,3 @@ django-tests:
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
-
