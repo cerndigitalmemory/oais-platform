@@ -1,11 +1,16 @@
 stages:
-  - isort
-  - black
+  - format
   - test
-  - deploy
+  - build
+  - deploy-dev
+  - trigger-dev
+  - deploy-qa
+  - trigger-qa
+  - deploy-prod
+  - trigger-prod
 
 check-isort:
-  stage: isort
+  stage: format
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
@@ -15,7 +20,7 @@ check-isort:
     - isort --profile black -c --skip "migrations" .
 
 check-black:
-  stage: black
+  stage: format
   image: registry.cern.ch/docker.io/library/python:3.11
   before_script:
     - pip install --upgrade pip
@@ -43,10 +48,6 @@ django-tests:
   tags:
     - docker-privileged-xl
     
-trigger-deploy:
-  stage: deploy
-  only:
-    - develop
-    - qa
-    - main
-  trigger: digitalmemory/openshift-deploy
+# Add deploy and trigger jobs for all envs
+include:
+  - local: .gitlab-ci-common.yml

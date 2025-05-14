@@ -1,0 +1,98 @@
+# Pipeline stages that are common for oais-platform and oais-web
+build-image:
+  stage: build
+  image:
+    name: registry.cern.ch/gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    # Configure Kaniko to authenticate with GitLab Container Registry
+    - mkdir -p /kaniko/.docker
+    - >
+      echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" 
+      > /kaniko/.docker/config.json
+
+    # Build and push the Docker image
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}:$CI_COMMIT_TAG"
+      --cache=true
+
+.deploy_template:
+  when: manual
+  image: registry.cern.ch/docker.io/library/docker:20.10.16
+  services:
+    - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  allow_failure: false
+  script:
+    - |
+      docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+      docker pull ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+      docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} \
+        ${CI_REGISTRY_IMAGE}:${DEPLOY_ENV}
+      docker push ${CI_REGISTRY_IMAGE}:$DEPLOY_ENV
+  tags:
+    - docker-privileged-xl
+
+deploy-dev:
+  extends: .deploy_template
+  stage: deploy-dev
+  variables:
+    DEPLOY_ENV: "dev"
+
+deploy-qa:
+  extends: .deploy_template
+  stage: deploy-qa
+  variables:
+    DEPLOY_ENV: "qa"
+
+deploy-prod:
+  extends: .deploy_template
+  stage: deploy-prod
+  variables:
+    DEPLOY_ENV: "prod"
+
+.trigger_template:
+  image: gitlab-registry.cern.ch/paas-tools/openshift-client:latest
+  variables:
+    SERVER: https://api.paas.okd.cern.ch
+    BUILD_NAME: oais
+    IMAGE_STREAM_NAME: $CI_PROJECT_NAME
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - oc login $SERVER --token=$DEPLOY_TOKEN
+    - oc project preserve-$ENV
+    - echo "Triggering ImageStream update for $IMAGE_STREAM_NAME on preserve-$ENV"
+    - sleep 10 && oc import-image $IMAGE_STREAM_NAME --all
+
+trigger-dev:
+  extends: .trigger_template
+  stage: trigger-dev
+  variables:
+    ENV: "dev"
+  needs:
+    job: deploy-dev
+
+trigger-qa:
+  extends: .trigger_template
+  stage: trigger-qa
+  variables:
+    ENV: "qa"
+  needs:
+    job: deploy-qa
+
+trigger-prod:
+  extends: .trigger_template
+  stage: trigger-prod
+  variables:
+    ENV: "prod"
+  needs:
+    job: deploy-prod
