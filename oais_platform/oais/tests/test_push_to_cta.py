@@ -18,6 +18,7 @@ class PushToCTATests(APITestCase):
         self.step = Step.objects.create(archive=self.archive, name=Steps.PUSH_TO_CTA)
 
     def test_push_to_cta_success(self):
+        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
@@ -28,6 +29,7 @@ class PushToCTATests(APITestCase):
         )
 
     def test_push_to_cta_exception(self):
+        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.side_effect = Exception()
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
