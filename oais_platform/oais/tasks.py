@@ -275,33 +275,44 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     artifact. Once done, set up another periodic task to check on
     the status of the transfer.
     """
-    # Wait an hour if already maximum number of transfers ongoing
-    if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
-        logger.info(
-            f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA (attempt {self.request.retries + 1})"
-        )
-        self.retry(countdown=3600)
-
-    logger.info(f"Pushing Archive {archive_id} to CTA")
-
-    # Get the Archive and Step we're running for
-    archive = Archive.objects.get(pk=archive_id)
-    step = Step.objects.get(pk=step_id)
-    if not archive.path_to_aip:
-        logger.warning("AIP path not found for the given archive.")
-        step.set_status(Status.FAILED)
-        step.set_output_data(
-            {"status": 1, "errormsg": "AIP path not found for the given archive."}
-        )
-        return 1
-
-    # And set the step as in progress
-    step.set_status(Status.IN_PROGRESS)
-
-    cta_folder_name = f"aip-{archive.id}"
-
     try:
         fts = apps.get_app_config("oais").fts
+
+        # Wait an hour if already maximum number of transfers ongoing
+        if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
+            logger.info(
+                f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
+            )
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=1, period=IntervalSchedule.HOURS
+            )
+            PeriodicTask.objects.get_or_create(
+                interval=schedule,
+                name=f"Retry push to CTA: {step_id}",
+                task="retry_push_to_cta",
+                args=json.dumps([archive_id, step_id, input_data, api_key]),
+                expire_seconds=3600.0,
+            )
+            return
+            # self.retry(countdown=3600)
+
+        logger.info(f"Pushing Archive {archive_id} to CTA")
+
+        # Get the Archive and Step we're running for
+        archive = Archive.objects.get(pk=archive_id)
+        step = Step.objects.get(pk=step_id)
+        if not archive.path_to_aip:
+            logger.warning("AIP path not found for the given archive.")
+            step.set_status(Status.FAILED)
+            step.set_output_data(
+                {"status": 1, "errormsg": "AIP path not found for the given archive."}
+            )
+            return 1
+
+        # And set the step as in progress
+        step.set_status(Status.IN_PROGRESS)
+
+        cta_folder_name = f"aip-{archive.id}"
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
@@ -340,6 +351,28 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     step.set_output_data(
         {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
     )
+
+
+@shared_task(name="retry_push_to_cta", bind=True, ignore_result=True)
+def retry_push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
+    """
+    Check the number of current FTS transfers.
+    If less than FTS_MAX_TRANSFERS, then retry corresponding push_to_cta task and remove the periodic task.
+    """
+    logger.info(
+        f"Checking number of current FTS transfers before retrying step {step_id}"
+    )
+    fts = apps.get_app_config("oais").fts
+    if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
+        logger.info(
+            f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
+        )
+        return
+
+    logger.info(f"Retrying pushing to CTA for step {step_id}")
+    push_to_cta.delay(archive_id, step_id, input_data, api_key)
+    periodic_task = PeriodicTask.objects.get(name=f"Retry push to CTA: {step_id}")
+    periodic_task.delete()
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
