@@ -1,5 +1,7 @@
 import configparser
+import datetime
 import json
+import logging
 import os
 import urllib.parse
 
@@ -27,6 +29,7 @@ class Invenio(AbstractSource):
     def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL
+        self.max_results = 10000
 
         self.config_file = configparser.ConfigParser()
         self.config_file.read(os.path.join(os.path.dirname(__file__), "invenio.ini"))
@@ -55,16 +58,18 @@ class Invenio(AbstractSource):
     def get_record_url(self, recid):
         return f"{self.baseURL}/records/{recid}"
 
-    def search(self, query, page=1, size=20):
+    def search(self, query, page=1, size=20, capped_total=True):
         try:
             req = requests.get(
                 f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}",
                 headers=self.headers,
             )
-        except Exception:
+        except Exception as e:
+            logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
+            logging.exception(f"Error while performing search: {str(req.text)}")
             raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
 
         # Parse JSON response
@@ -79,8 +84,8 @@ class Invenio(AbstractSource):
         # Get total number of hits
         total_num_hits = data["hits"]["total"]
 
-        if self.source == "zenodo" and total_num_hits > 10000:
-            total_num_hits = 10000
+        if capped_total and total_num_hits > self.max_results:
+            total_num_hits = self.max_results
 
         return {"total_num_hits": total_num_hits, "results": results}
 
@@ -89,7 +94,8 @@ class Invenio(AbstractSource):
 
         try:
             req = requests.get(self.get_record_url(recid), headers=self.headers)
-        except Exception:
+        except Exception as e:
+            logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:
@@ -194,22 +200,57 @@ class Invenio(AbstractSource):
             )
 
     def get_records_to_harvest(self, last_harvest):
-        query = ""
-        if last_harvest:
-            query = urllib.parse.quote_plus(
-                f"updated:[{last_harvest.strftime('%Y-%m-%dT%H:%M:%S')} TO *]"
-            )
         page = 1
-        size = 100
+        size = 500
+
+        end_time = datetime.datetime.now(datetime.timezone.utc)
+        records_to_harvest = self._get_records_chunked(
+            last_harvest, end_time, page, size
+        )
+
+        return records_to_harvest, end_time
+
+    def get_records_in_range(self, start, end, page, size):
+        query = ""
+        if start:
+            query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO "
+            if end:
+                query += f"{end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+            else:
+                query += "*]"
+
+        logging.info(f"Fetching query: {query}, page: {page}, size: {size}")
+        query = urllib.parse.quote_plus(query)
+        result = self.search(query, page, size, capped_total=False)
+        logging.info(f"Total number of hits: {result['total_num_hits']}")
+
+        return result
+
+    def _get_records_chunked(self, start, end, page, size):
         records_to_harvest = []
 
-        result = self.search(query, page, size)
-        records_to_harvest += result["results"]
+        def split_range(start, end, page, size, records_to_harvest):
+            result = self.get_records_in_range(start, end, page, 1)
+            if result["total_num_hits"] == 0:
+                return
+            if result["total_num_hits"] < self.max_results:
+                records_to_harvest += self.get_records_in_range(start, end, page, size)[
+                    "results"
+                ]
+                if result["total_num_hits"] > size:
+                    while page * size < result["total_num_hits"]:
+                        page += 1
+                        records_to_harvest += self.get_records_in_range(
+                            start, end, page, size
+                        )["results"]
+            else:
+                mid = start + (end - start) / 2
+                if (end - start) < datetime.timedelta(minutes=1):  # sanity cutoff
+                    raise ValueError(
+                        f"Cannot reduce further: {start}–{end} still returns >=10k"
+                    )
+                split_range(start, mid, page, size, records_to_harvest)
+                split_range(mid, end, page, size, records_to_harvest)
 
-        if result["total_num_hits"] > size:
-            while page * size < result["total_num_hits"]:
-                page += 1
-                result = self.search(query, page, size)
-                records_to_harvest += result["results"]
-
+        split_range(start, end, page, size, records_to_harvest)
         return records_to_harvest
