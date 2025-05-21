@@ -91,15 +91,15 @@ class BatchAnnounceTests(APITestCase):
                 pass
 
             bic.process(
-                recid="2728246",
-                source="cds",
+                recid="njf9e-1q233",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
 
             bic.process(
-                recid="2857550",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -136,15 +136,15 @@ class BatchAnnounceTests(APITestCase):
             os.mkdir(batch_announce_folder)
 
             bic.process(
-                recid="2728246",
-                source="cds",
+                recid="1x3p3-e6505",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
 
             bic.process(
-                recid="2857550",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -196,15 +196,15 @@ class BatchAnnounceTests(APITestCase):
             os.mkdir(batch_announce_folder)
 
             bic.process(
-                recid="2728246",
-                source="cds",
+                recid="1x3p3-e6505",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
 
             bic.process(
-                recid="2857550",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -224,8 +224,8 @@ class BatchAnnounceTests(APITestCase):
             os.mkdir(batch_announce_folder)
 
             sip = bic.process(
-                recid="2728246",
-                source="cds",
+                recid="1x3p3-e6505",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -235,8 +235,8 @@ class BatchAnnounceTests(APITestCase):
             os.remove(os.path.join(path_to_sip, "data/meta/sip.json"))
 
             bic.process(
-                recid="2857550",
-                source="cds",
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -259,8 +259,8 @@ class BatchAnnounceTests(APITestCase):
             os.mkdir(batch_announce_folder)
 
             sip = bic.process(
-                recid="2728246",
-                source="cds",
+                recid="njf9e-1q233",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )
@@ -270,8 +270,8 @@ class BatchAnnounceTests(APITestCase):
             os.remove(os.path.join(path_to_sip, "data/meta/sip.json"))
 
             sip2 = bic.process(
-                recid="2857550",
-                source="cds",
+                recid="1x3p3-e6505",
+                source="cds-rdm-sandbox",
                 target=batch_announce_folder,
                 loglevel=0,
             )

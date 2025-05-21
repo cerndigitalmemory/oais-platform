@@ -20,8 +20,8 @@ class ExtractTitleTests(APITestCase):
     def test_extract_title_no_dc(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
-                recid="2857550",
-                source="cds",
+                recid="njf9e-1q233",
+                source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
             )
@@ -38,8 +38,8 @@ class ExtractTitleTests(APITestCase):
     def test_extract_title_success(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
-                recid="2857550",
-                source="cds",
+                recid="njf9e-1q233",
+                source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
             )
