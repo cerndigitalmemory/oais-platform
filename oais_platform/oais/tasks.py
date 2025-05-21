@@ -1463,11 +1463,10 @@ def periodic_harvest(self, source_name, username, pipeline):
             f"Last harvest for source {source_name} was at {last_harvest_time}."
         )
 
-    new_harvest_time = timezone.now()
     try:
-        records_to_harvest = get_source(source_name, api_key).get_records_to_harvest(
-            last_harvest_time
-        )
+        records_to_harvest, new_harvest_time = get_source(
+            source_name, api_key
+        ).get_records_to_harvest(last_harvest_time)
     except Exception as e:
         logger.error(f"Error while querying {source_name}: {str(e)}")
         return
