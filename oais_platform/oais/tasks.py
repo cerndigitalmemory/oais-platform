@@ -7,6 +7,7 @@ from datetime import timedelta
 from urllib.parse import urljoin
 
 import bagit_create
+import dateutil.parser
 import requests
 from amclient import AMClient
 from celery import shared_task, states
@@ -291,7 +292,15 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
                 interval=schedule,
                 name=f"Retry push to CTA: {step_id}",
                 task="retry_push_to_cta",
-                args=json.dumps([archive_id, step_id, input_data, api_key]),
+                args=json.dumps(
+                    [
+                        archive_id,
+                        step_id,
+                        input_data,
+                        timezone.now().isoformat(),
+                        api_key,
+                    ]
+                ),
                 expire_seconds=3600.0,
             )
             return
@@ -355,7 +364,9 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
 
 @shared_task(name="retry_push_to_cta", bind=True, ignore_result=True)
-def retry_push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
+def retry_push_to_cta(
+    self, archive_id, step_id, input_data=None, start_time=None, api_key=None
+):
     """
     Check the number of current FTS transfers.
     If less than FTS_MAX_TRANSFERS, then retry corresponding push_to_cta task and remove the periodic task.
@@ -363,6 +374,19 @@ def retry_push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     logger.info(
         f"Checking number of current FTS transfers before retrying step {step_id}"
     )
+
+    if start_time:
+        start_time = dateutil.parser.isoparse(start_time)
+        if timezone.now() - start_time > timedelta(weeks=1):
+            logger.info(f"Stopping retries for step {step_id}")
+            periodic_task = PeriodicTask.objects.get(
+                name=f"Retry push to CTA: {step_id}"
+            )
+            periodic_task.delete()
+            step = Step.objects.get(pk=step_id)
+            step.set_status(Status.FAILED)
+            return
+
     fts = apps.get_app_config("oais").fts
     if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
         logger.info(
