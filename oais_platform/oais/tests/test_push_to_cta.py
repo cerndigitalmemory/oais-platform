@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks import push_to_cta
+from oais_platform.settings import FTS_MAX_TRANSFERS
 
 
 class PushToCTATests(APITestCase):
@@ -22,6 +23,8 @@ class PushToCTATests(APITestCase):
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.assertEqual(self.step.status, Status.IN_PROGRESS)
         self.assertTrue(
             PeriodicTask.objects.filter(
                 name=f"FTS job status for step: {self.step.id}"
@@ -39,4 +42,12 @@ class PushToCTATests(APITestCase):
             PeriodicTask.objects.filter(
                 name=f"FTS job status for step: {self.step.id}"
             ).exists()
+        )
+
+    def test_push_to_cta_wait(self):
+        self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.assertEqual(self.fts.push_to_cta.call_count, 0)
+        self.assertTrue(
+            PeriodicTask.objects.filter(name=f"Retry push to CTA: {self.step.id}")
         )
