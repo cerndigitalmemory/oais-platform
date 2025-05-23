@@ -387,11 +387,15 @@ def retry_push_to_cta(
             step.set_status(Status.FAILED)
             return
 
-    fts = apps.get_app_config("oais").fts
-    if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
-        logger.info(
-            f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
-        )
+    try:
+        fts = apps.get_app_config("oais").fts
+        if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
+            logger.info(
+                f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
+            )
+            return
+    except Exception as e:
+        logger.warning(str(e))
         return
 
     logger.info(f"Retrying pushing to CTA for step {step_id}")
