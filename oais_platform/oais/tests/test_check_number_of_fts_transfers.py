@@ -11,7 +11,7 @@ from oais_platform.oais.tasks import check_number_of_transfers
 from oais_platform.settings import FTS_BACKOFF_IN_WEEKS, FTS_MAX_TRANSFERS
 
 
-class RetryPushToCTATests(APITestCase):
+class CheckNumberOfTransfersTests(APITestCase):
     def setUp(self):
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
