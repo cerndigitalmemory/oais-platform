@@ -367,6 +367,33 @@ class CollectionTests(APITestCase):
         self.assertEqual(response.data["title"], "new test")
         self.assertEqual(response.data["description"], "new test description")
 
+    def test_edit_tag_success(self):
+        """
+        Creates a tag and edits its description successfully.
+        """
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("tags-create")
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "test description", "archives": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        tag_id = response.data["id"]
+
+        url = reverse("tags-edit", args=[tag_id])
+        response = self.client.post(
+            url,
+            {"title": "test", "description": "edited description"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "test")
+        self.assertEqual(response.data["description"], "edited description")
+
     def test_return_only_archives_of_collection(self):
         """
         Creates a collection with one archive
