@@ -49,5 +49,7 @@ class PushToCTATests(APITestCase):
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertTrue(
-            PeriodicTask.objects.filter(name=f"Retry push to CTA: {self.step.id}")
+            PeriodicTask.objects.filter(
+                name=f"Check number of transfers: {self.step.id}"
+            )
         )

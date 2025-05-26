@@ -326,7 +326,8 @@ FTS_SOURCE_BASE_PATH = environ.get(
 )
 FTS_MAX_RETRY_COUNT = 1
 FTS_MAX_TRANSFERS = 2
-FTS_RETRY_WAIT_IN_HOURS = 1
+FTS_WAIT_IN_HOURS = 1
+FTS_BACKOFF_IN_WEEKS = 2
 
 # GRID Certificate used to authenticate
 # Public part
