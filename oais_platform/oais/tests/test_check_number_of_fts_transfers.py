@@ -7,8 +7,8 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.tasks import retry_push_to_cta
-from oais_platform.settings import FTS_MAX_TRANSFERS
+from oais_platform.oais.tasks import check_number_of_transfers
+from oais_platform.settings import FTS_BACKOFF_IN_WEEKS, FTS_MAX_TRANSFERS
 
 
 class RetryPushToCTATests(APITestCase):
@@ -24,34 +24,38 @@ class RetryPushToCTATests(APITestCase):
         )
         self.periodic_task = PeriodicTask.objects.create(
             interval=schedule,
-            name=f"Retry push to CTA: {self.step.id}",
-            task="retry_push_to_cta",
+            name=f"Check number of transfers: {self.step.id}",
+            task="check_number_of_transfers",
         )
 
     @patch("oais_platform.oais.tasks.push_to_cta.delay")
-    def test_retry_push_to_cta_retry(self, push_to_cta):
+    def test_check_number_of_transfers_retry(self, push_to_cta):
         self.fts.number_of_transfers.return_value = 0
-        retry_push_to_cta.apply(args=[self.archive.id, self.step.id])
+        check_number_of_transfers.apply(
+            args=[self.archive.id, self.step.id, timezone.now().isoformat()]
+        )
         push_to_cta.assert_called_once()
         self.assertFalse(
             PeriodicTask.objects.filter(name=self.periodic_task.name).exists()
         )
 
     @patch("oais_platform.oais.tasks.push_to_cta.delay")
-    def test_retry_push_to_cta_retry_wait(self, push_to_cta):
+    def test_check_number_of_transfers_retry_wait(self, push_to_cta):
         self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
-        retry_push_to_cta.apply(args=[self.archive.id, self.step.id])
+        check_number_of_transfers.apply(
+            args=[self.archive.id, self.step.id, timezone.now().isoformat()]
+        )
         push_to_cta.assert_not_called()
         self.assertTrue(
             PeriodicTask.objects.filter(name=self.periodic_task.name).exists()
         )
 
     @patch("oais_platform.oais.tasks.push_to_cta.delay")
-    def test_retry_push_to_cta_retry_backoff(self, push_to_cta):
+    def test_check_number_of_transfers_retry_backoff(self, push_to_cta):
         self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
-        week_ago = timezone.now() - timedelta(weeks=1)
-        retry_push_to_cta.apply(
-            args=[self.archive.id, self.step.id, None, week_ago.isoformat()]
+        start_time = timezone.now() - timedelta(weeks=FTS_BACKOFF_IN_WEEKS)
+        check_number_of_transfers.apply(
+            args=[self.archive.id, self.step.id, start_time.isoformat()]
         )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
