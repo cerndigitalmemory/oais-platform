@@ -375,7 +375,7 @@ def check_number_of_transfers(
     If less than FTS_MAX_TRANSFERS, then retry corresponding push_to_cta task and remove the periodic task.
     Stop checking after FTS_BACKOFF_IN_WEEKS.
     """
-    # Stop checking after two weeks and mark the step as failed
+    # Stop checking after FTS_BACKOFF_IN_WEEKS and mark the step as failed
     start_time = dateutil.parser.isoparse(start_time)
     if timezone.now() - start_time > timedelta(weeks=FTS_BACKOFF_IN_WEEKS):
         logger.info(f"Stopping checking numbers of FTS transfers for step {step_id}")
