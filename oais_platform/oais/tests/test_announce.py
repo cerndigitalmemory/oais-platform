@@ -104,6 +104,7 @@ class AnnounceTests(APITestCase):
                 "foldername": ntpath.basename(path_to_sip),
                 "announce_path": path_to_sip,
             },
+            None,
         )
 
     @patch("oais_platform.oais.tasks.copy_sip.delay")
