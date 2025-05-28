@@ -9,6 +9,7 @@ import requests
 
 from oais_platform.oais.exceptions import (
     ConfigFileUnavailable,
+    MaxRetriesExceeded,
     RetryableException,
     ServiceUnavailable,
 )
@@ -30,6 +31,7 @@ class Invenio(AbstractSource):
         self.source = source
         self.baseURL = baseURL
         self.max_results = 10000
+        self.max_retry = 5
 
         self.config_file = configparser.ConfigParser()
         self.config_file.read(os.path.join(os.path.dirname(__file__), "invenio.ini"))
@@ -199,58 +201,80 @@ class Invenio(AbstractSource):
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
 
-    def get_records_to_harvest(self, last_harvest):
-        page = 1
+    def get_records_to_harvest(
+        self,
+        last_harvest=datetime.datetime(
+            1970, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc
+        ),
+    ):
         size = 500
-
         end_time = datetime.datetime.now(datetime.timezone.utc)
-        records_to_harvest = self._get_records_chunked(
-            last_harvest, end_time, page, size
-        )
+        logging.info(f"Starting fetching records from {last_harvest} to {end_time}.")
+        records_to_harvest = self.fetch_records_in_chunks(last_harvest, end_time, size)
 
         return records_to_harvest, end_time
 
     def get_records_in_range(self, start, end, page, size):
-        query = ""
-        if start:
-            query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO "
-            if end:
-                query += f"{end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
-            else:
-                query += "*]"
-
-        logging.info(f"Fetching query: {query}, page: {page}, size: {size}")
+        query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         query = urllib.parse.quote_plus(query)
         result = self.search(query, page, size, capped_total=False)
-        logging.info(f"Total number of hits: {result['total_num_hits']}")
 
         return result
 
-    def _get_records_chunked(self, start, end, page, size):
+    def fetch_records_in_chunks(self, start, end, size):
         records_to_harvest = []
 
-        def split_range(start, end, page, size, records_to_harvest):
-            result = self.get_records_in_range(start, end, page, 1)
-            if result["total_num_hits"] == 0:
+        def split_range(start, end, size, records_to_harvest):
+            result = self.get_records_in_range(start, end, 1, 1)
+            total = result["total_num_hits"]
+            if total <= 0:
                 return
-            if result["total_num_hits"] < self.max_results:
-                records_to_harvest += self.get_records_in_range(start, end, page, size)[
-                    "results"
-                ]
-                if result["total_num_hits"] > size:
-                    while page * size < result["total_num_hits"]:
+            elif total <= self.max_results:
+                logging.info(
+                    f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S')}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
+                )
+                initial_total = total
+                current_total = 0
+                retry_count = 0
+                while initial_total != current_total and retry_count < self.max_retry:
+                    records_to_add = []
+                    page = 0
+                    while page * size < initial_total:
                         page += 1
-                        records_to_harvest += self.get_records_in_range(
-                            start, end, page, size
-                        )["results"]
+                        result = self.get_records_in_range(start, end, page, size)
+                        if page == 1:
+                            initial_total = result["total_num_hits"]
+                        current_total = result["total_num_hits"]
+                        if current_total != initial_total:
+                            logging.warning(
+                                f"Query result changed: {current_total} != {initial_total}, retrying ..."
+                            )
+                            break
+                        records_to_add += result["results"]
+                    if (
+                        initial_total == current_total
+                        and len(records_to_add) == current_total
+                    ):
+                        logging.info(
+                            f"Added {current_total} records for {start}–{end}."
+                        )
+                        records_to_harvest += records_to_add
+                    else:
+                        retry_count += 1
+                if retry_count == self.max_retry:
+                    logging.exception(f"Max retries reached for {start}–{end}...")
+                    raise MaxRetriesExceeded(
+                        f"Cannot get consistent ids for {start}–{end}..."
+                    )
+
             else:
                 mid = start + (end - start) / 2
                 if (end - start) < datetime.timedelta(minutes=1):  # sanity cutoff
                     raise ValueError(
-                        f"Cannot reduce further: {start}–{end} still returns >=10k"
+                        f"Cannot reduce further: {start}–{end} still returns >={self.max_results}"
                     )
-                split_range(start, mid, page, size, records_to_harvest)
-                split_range(mid, end, page, size, records_to_harvest)
+                split_range(start, mid, size, records_to_harvest)
+                split_range(mid, end, size, records_to_harvest)
 
-        split_range(start, end, page, size, records_to_harvest)
+        split_range(start, end, size, records_to_harvest)
         return records_to_harvest
