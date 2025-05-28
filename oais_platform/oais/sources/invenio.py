@@ -204,6 +204,10 @@ class Invenio(AbstractSource):
         size = 500
 
         end_time = datetime.datetime.now(datetime.timezone.utc)
+        if not last_harvest:
+            last_harvest = datetime.datetime(
+                1970, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc
+            )
         records_to_harvest = self._get_records_chunked(
             last_harvest, end_time, page, size
         )
@@ -234,15 +238,33 @@ class Invenio(AbstractSource):
             if result["total_num_hits"] == 0:
                 return
             if result["total_num_hits"] < self.max_results:
-                records_to_harvest += self.get_records_in_range(start, end, page, size)[
-                    "results"
-                ]
-                if result["total_num_hits"] > size:
-                    while page * size < result["total_num_hits"]:
+                initial_total = result["total_num_hits"]
+                current_total = 0
+                retry_count = 0
+                max_retry = 5
+                while initial_total != current_total and retry_count < max_retry:
+                    records_to_add = []
+                    page = 0
+                    while page * size < initial_total:
                         page += 1
-                        records_to_harvest += self.get_records_in_range(
-                            start, end, page, size
-                        )["results"]
+                        result = self.get_records_in_range(start, end, page, size)
+                        if page == 1:
+                            initial_total = result["total_num_hits"]
+                        current_total = result["total_num_hits"]
+                        if current_total != initial_total:
+                            logging.warning(
+                                f"Query result changed: {current_total} != {initial_total}, retrying ..."
+                            )
+                            break
+                        records_to_add += result["results"]
+                    if initial_total == current_total:
+                        records_to_harvest += records_to_add
+                    else:
+                        retry_count += 1
+                if retry_count == max_retry:
+                    logging.exception(f"Max retries reached for {start}–{end}...")
+                    raise Exception(f"Cannot get consistent ids for {start}–{end}...")
+
             else:
                 mid = start + (end - start) / 2
                 if (end - start) < datetime.timedelta(minutes=1):  # sanity cutoff
