@@ -47,9 +47,23 @@ class PushToCTATests(APITestCase):
     def test_push_to_cta_wait(self):
         self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
         push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.assertEqual(self.fts.number_of_transfers.call_count, 1)
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertTrue(
             PeriodicTask.objects.filter(
                 name=f"Check number of transfers: {self.step.id}"
             )
+        )
+
+    def test_push_to_cta_skip_check(self):
+        self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
+        self.fts.push_to_cta.return_value = "test_job_id"
+        push_to_cta.apply(
+            args=[self.archive.id, self.step.id],
+            kwargs={"skip_concurrency_check": True},
+        )
+        self.assertEqual(self.fts.number_of_transfers.call_count, 0)
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.assertTrue(
+            PeriodicTask.objects.filter(name=f"FTS job status for step: {self.step.id}")
         )

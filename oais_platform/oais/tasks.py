@@ -271,7 +271,14 @@ def create_path_artifact(name, path, localpath):
     max_retries=1,
     retry_kwargs={"countdown": 3600},
 )
-def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
+def push_to_cta(
+    self,
+    archive_id,
+    step_id,
+    input_data=None,
+    api_key=None,
+    skip_concurrency_check=False,
+):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
@@ -296,7 +303,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
         # If already maximum number of transfers ongoing, create a periodic task for checking again
         if (
-            step.status != Status.IN_PROGRESS
+            not skip_concurrency_check
             and fts.number_of_transfers() >= FTS_MAX_TRANSFERS
         ):
             logger.info(
@@ -402,7 +409,7 @@ def check_number_of_transfers(
         return
 
     logger.info(f"Retrying pushing to CTA for step {step_id}")
-    push_to_cta.delay(archive_id, step_id, input_data, api_key)
+    push_to_cta.delay(archive_id, step_id, input_data, api_key, True)
     periodic_task = PeriodicTask.objects.get(
         name=f"Check number of transfers: {step_id}"
     )
