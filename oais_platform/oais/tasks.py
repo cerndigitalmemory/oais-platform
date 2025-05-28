@@ -51,8 +51,8 @@ from oais_platform.settings import (
     CTA_BASE_PATH,
     FILES_URL,
     FTS_BACKOFF_IN_WEEKS,
+    FTS_CONCURRENCY_LIMIT,
     FTS_MAX_RETRY_COUNT,
-    FTS_MAX_TRANSFERS,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     FTS_WAIT_IN_HOURS,
@@ -304,7 +304,7 @@ def push_to_cta(
         # If already maximum number of transfers ongoing, create a periodic task for checking again
         if (
             not skip_concurrency_check
-            and fts.number_of_transfers() >= FTS_MAX_TRANSFERS
+            and fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT
         ):
             logger.info(
                 f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
@@ -379,7 +379,7 @@ def check_number_of_transfers(
 ):
     """
     Check the number of current FTS transfers.
-    If less than FTS_MAX_TRANSFERS, then retry corresponding push_to_cta task and remove the periodic task.
+    If less than FTS_CONCURRENCY_LIMIT, then retry corresponding push_to_cta task and remove the periodic task.
     Stop checking after FTS_BACKOFF_IN_WEEKS.
     """
     # Stop checking after FTS_BACKOFF_IN_WEEKS and mark the step as failed
@@ -399,7 +399,7 @@ def check_number_of_transfers(
     )
     try:
         fts = apps.get_app_config("oais").fts
-        if fts.number_of_transfers() >= FTS_MAX_TRANSFERS:
+        if fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT:
             logger.info(
                 f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
             )
