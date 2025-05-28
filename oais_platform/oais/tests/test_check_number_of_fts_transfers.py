@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks import check_number_of_transfers
-from oais_platform.settings import FTS_BACKOFF_IN_WEEKS, FTS_MAX_TRANSFERS
+from oais_platform.settings import FTS_BACKOFF_IN_WEEKS, FTS_CONCURRENCY_LIMIT
 
 
 class CheckNumberOfTransfersTests(APITestCase):
@@ -41,7 +41,7 @@ class CheckNumberOfTransfersTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.push_to_cta.delay")
     def test_check_number_of_transfers_retry_wait(self, push_to_cta):
-        self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
+        self.fts.number_of_transfers.return_value = FTS_CONCURRENCY_LIMIT
         check_number_of_transfers.apply(
             args=[self.archive.id, self.step.id, timezone.now().isoformat()]
         )
@@ -52,7 +52,7 @@ class CheckNumberOfTransfersTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.push_to_cta.delay")
     def test_check_number_of_transfers_retry_backoff(self, push_to_cta):
-        self.fts.number_of_transfers.return_value = FTS_MAX_TRANSFERS
+        self.fts.number_of_transfers.return_value = FTS_CONCURRENCY_LIMIT
         start_time = timezone.now() - timedelta(weeks=FTS_BACKOFF_IN_WEEKS)
         check_number_of_transfers.apply(
             args=[self.archive.id, self.step.id, start_time.isoformat()]
