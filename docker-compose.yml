@@ -58,7 +58,7 @@ services:
       >
       sh -c "python3 manage.py migrate &&
              python3 manage.py spectacular --file schema.yml &&
-             python3 manage.py runserver 0.0.0.0:8000"
+             uwsgi --socket 0.0.0.0:8000 --module oais_platform.wsgi:application --master"
     environment:
       # Point to the postgres service
       - DB_HOST=db
