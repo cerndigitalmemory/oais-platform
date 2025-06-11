@@ -1463,62 +1463,73 @@ def periodic_harvest(self, source_name, username, pipeline):
             f"Last harvest for source {source_name} was at {last_harvest_time}."
         )
 
+    new_harvest = None
+    schedule_time = None
+    records_count = 0
     try:
-        records_to_harvest, new_harvest_time = get_source(
+        for records_to_harvest, new_harvest_time in get_source(
             source_name, api_key
-        ).get_records_to_harvest(last_harvest_time)
+        ).get_records_to_harvest(last_harvest_time):
+            logger.info(
+                f"Number of IDs to harvest for source {source_name}: {len(records_to_harvest)} until {new_harvest_time.strftime('%Y-%m-%dT%H:%M:%S')}."
+            )
+            if len(records_to_harvest) < 1:
+                logger.info(f"There are no new records to harvest for {source_name}.")
+                continue
+            if not new_harvest:
+                new_harvest = Collection.objects.create(
+                    internal=True,
+                    creator=user,
+                    description=f"Starting automatic harvests for {source_name} is in progress.",
+                )
+                new_harvest.title = f"{collection_name} ({new_harvest.id})"
+            new_harvest.timestamp = new_harvest_time
+            new_harvest.save()
+
+            batch_size = AUTOMATIC_HARVEST_BATCH_SIZE
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=10, period=IntervalSchedule.DAYS
+            )
+            for i in range(0, len(records_to_harvest), batch_size):
+                batch = records_to_harvest[i : i + batch_size]
+                batch_upper_limit = (
+                    i + batch_size
+                    if i + batch_size < len(records_to_harvest)
+                    else len(records_to_harvest)
+                )
+
+                if not schedule_time:
+                    schedule_time = timezone.now()
+                else:
+                    schedule_time = schedule_time + timedelta(
+                        minutes=AUTOMATIC_HARVEST_BATCH_DELAY
+                    )
+                PeriodicTask.objects.create(
+                    interval=schedule,  # need to set but one off is true
+                    name=f"{new_harvest.title}, batch {i + 1 + records_count} to {batch_upper_limit + records_count}",
+                    task="batch_harvest",
+                    args=json.dumps(
+                        [batch, user.id, source_name, pipeline, new_harvest.id, api_key]
+                    ),
+                    start_time=schedule_time,
+                    enabled=True,
+                    one_off=True,
+                )
+
+            records_count += len(records_to_harvest)
     except Exception as e:
         logger.error(f"Error while querying {source_name}: {str(e)}")
         return
 
-    logger.info(
-        f"Total number of IDs to harvest for source {source_name}: {len(records_to_harvest)}."
-    )
-
-    if len(records_to_harvest) < 1:
-        logger.info(f"There are no new records to harvest for {source_name}.")
-        return
-
-    new_harvest = Collection.objects.create(
-        internal=True,
-        creator=user,
-        description=f"Starting automatic harvests for {source_name} is in progress.",
-    )
-    new_harvest.title = f"{collection_name} ({new_harvest.id})"
-    new_harvest.timestamp = new_harvest_time
-    new_harvest.save()
-
-    batch_size = AUTOMATIC_HARVEST_BATCH_SIZE
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=1, period=IntervalSchedule.HOURS
-    )
-    for iteration, i in enumerate(
-        range(0, len(records_to_harvest), batch_size), start=0
-    ):
-        batch = records_to_harvest[i : i + batch_size]
-        batch_upper_limit = (
-            i + batch_size
-            if i + batch_size < len(records_to_harvest)
-            else len(records_to_harvest)
+    if records_count > 0:
+        new_harvest.set_description(
+            f"All automatic harvests were scheduled for source {source_name}."
         )
-
-        PeriodicTask.objects.create(
-            interval=schedule,  # need to set but one off is true
-            name=f"{new_harvest.title}, batch {i + 1} to {batch_upper_limit}",
-            task="batch_harvest",
-            args=json.dumps(
-                [batch, user.id, source_name, pipeline, new_harvest.id, api_key]
-            ),
-            start_time=timezone.now()
-            + timedelta(minutes=iteration * AUTOMATIC_HARVEST_BATCH_DELAY),
-            enabled=True,
-            one_off=True,
+        logger.info(
+            f"All ({records_count}) harvests were scheduled for source {source_name}."
         )
-
-    new_harvest.set_description(
-        f"All automatic harvests were scheduled for source {source_name}."
-    )
-    logger.info(f"All harvests were scheduled for source {source_name}.")
+    else:
+        logger.info("No records were harvested during this run.")
 
 
 @shared_task(name="batch_harvest", bind=True, ignore_result=True)

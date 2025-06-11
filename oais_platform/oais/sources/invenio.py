@@ -60,12 +60,12 @@ class Invenio(AbstractSource):
     def get_record_url(self, recid):
         return f"{self.baseURL}/records/{recid}"
 
-    def search(self, query, page=1, size=20):
+    def search(self, query, page=1, size=20, sort=None):
+        url = f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
+        if sort:
+            url += f"&sort={sort}"
         try:
-            req = requests.get(
-                f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}",
-                headers=self.headers,
-            )
+            req = requests.get(url, headers=self.headers)
         except Exception as e:
             logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
@@ -120,13 +120,23 @@ class Invenio(AbstractSource):
         url_key_list = self.config["url"].split(",")
         title_key_list = self.config["title"].split(",")
 
-        status = None
-        if self.config.get("status", None):
-            status = get_dict_value(record, self.config["status"].split(","))
+        status = (
+            get_dict_value(record, self.config["status"].split(","))
+            if self.config.get("status")
+            else None
+        )
 
-        file_size = None
-        if self.config.get("file_size", None):
-            file_size = get_dict_value(record, self.config["file_size"].split(","))
+        file_size = (
+            get_dict_value(record, self.config["file_size"].split(","))
+            if self.config.get("file_size")
+            else None
+        )
+
+        updated = (
+            get_dict_value(record, self.config["updated"].split(","))
+            if self.config.get("updated")
+            else None
+        )
 
         return {
             "source_url": get_dict_value(record, url_key_list),
@@ -136,6 +146,7 @@ class Invenio(AbstractSource):
             "source": self.source,
             "status": status,
             "file_size": file_size,
+            "updated": updated,
         }
 
     def notify_source(self, archive, notification_endpoint, api_key=None):
@@ -198,79 +209,66 @@ class Invenio(AbstractSource):
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
 
-    def get_records_to_harvest(
-        self,
-        last_harvest=datetime.datetime(
-            1970, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc
-        ),
-    ):
+    def get_records_to_harvest(self, last_harvest):
         size = 500
         end_time = datetime.datetime.now(datetime.timezone.utc)
         logging.info(f"Starting fetching records from {last_harvest} to {end_time}.")
-        records_to_harvest = self.fetch_records_in_chunks(last_harvest, end_time, size)
-
-        return records_to_harvest, end_time
+        yield from self.fetch_records_in_chunks(last_harvest, end_time, size)
 
     def get_records_in_range(self, start, end, page, size):
-        query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+        if start:
+            query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+        else:
+            query = f"updated:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         query = urllib.parse.quote_plus(query)
-        result = self.search(query, page, size)
-
-        return result
+        return self.search(query, page, size, sort="updated-asc")
 
     def fetch_records_in_chunks(self, start, end, size):
-        records_to_harvest = []
-
-        def split_range(start, end, size, records_to_harvest):
-            result = self.get_records_in_range(start, end, 1, 1)
-            total = result["total_num_hits"]
-            if total <= 0:
-                return
-            elif total <= self.max_results:
-                logging.info(
-                    f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S')}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
-                )
-                initial_total = total
-                current_total = 0
-                retry_count = 0
-                while retry_count < self.max_retries:
-                    records_to_add = []
-                    page = 0
-                    while len(records_to_add) < initial_total:
-                        page += 1
-                        result = self.get_records_in_range(start, end, page, size)
-                        current_total = result["total_num_hits"]
-                        if current_total != initial_total:
-                            logging.warning(
-                                f"Query result changed: {current_total} != {initial_total}, retrying ..."
-                            )
-                            break
-                        records_to_add += result["results"]
-                    if (
-                        initial_total == current_total
-                        and len(records_to_add) == current_total
-                    ):
-                        logging.info(
-                            f"Added {current_total} records for {start}–{end}."
+        result = self.get_records_in_range(start, end, 1, 1)
+        total = result["total_num_hits"]
+        if total <= 0:
+            yield [], end
+        elif total <= self.max_results:
+            logging.info(
+                f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S')}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
+            )
+            initial_total = total
+            current_total = 0
+            retry_count = 0
+            while retry_count < self.max_retries:
+                records_to_add = []
+                page = 0
+                while len(records_to_add) < initial_total:
+                    page += 1
+                    result = self.get_records_in_range(start, end, page, size)
+                    current_total = result["total_num_hits"]
+                    if current_total != initial_total:
+                        logging.warning(
+                            f"Query result changed: {current_total} != {initial_total}, retrying ..."
                         )
-                        records_to_harvest += records_to_add
                         break
-                    initial_total = current_total
-                    retry_count += 1
-                if retry_count == self.max_retries:
-                    logging.exception(f"Max retries reached for {start}–{end}...")
-                    raise MaxRetriesExceeded(
-                        f"Cannot get consistent ids for {start}–{end}..."
-                    )
-
-            else:
-                mid = start + (end - start) / 2
-                if (end - start) < datetime.timedelta(minutes=1):  # sanity cutoff
-                    raise ValueError(
-                        f"Cannot reduce further: {start}–{end} still returns >={self.max_results}"
-                    )
-                split_range(start, mid, size, records_to_harvest)
-                split_range(mid, end, size, records_to_harvest)
-
-        split_range(start, end, size, records_to_harvest)
-        return records_to_harvest
+                    records_to_add += result["results"]
+                if (
+                    initial_total == current_total
+                    and len(records_to_add) == current_total
+                ):
+                    logging.info(f"Adding {current_total} records for {start}–{end}.")
+                    yield records_to_add, end
+                    break
+                initial_total = current_total
+                retry_count += 1
+            if retry_count == self.max_retries:
+                logging.exception(f"Max retries reached for {start}–{end}...")
+                raise MaxRetriesExceeded(
+                    f"Cannot get consistent ids for {start}–{end}..."
+                )
+        else:
+            result = self.get_records_in_range(start, end, self.max_results, 1)
+            last_record = result["results"][0]
+            last_record_update_time = datetime.datetime.fromisoformat(
+                last_record["updated"]
+            )
+            yield from self.fetch_records_in_chunks(
+                start, last_record_update_time, size
+            )
+            yield from self.fetch_records_in_chunks(last_record_update_time, end, size)
