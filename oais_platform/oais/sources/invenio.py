@@ -1,5 +1,7 @@
 import configparser
+import datetime
 import json
+import logging
 import os
 import urllib.parse
 
@@ -7,6 +9,7 @@ import requests
 
 from oais_platform.oais.exceptions import (
     ConfigFileUnavailable,
+    MaxRetriesExceeded,
     RetryableException,
     ServiceUnavailable,
 )
@@ -27,6 +30,8 @@ class Invenio(AbstractSource):
     def __init__(self, source, baseURL, token=None):
         self.source = source
         self.baseURL = baseURL
+        self.max_results = 10000
+        self.max_retries = 5
 
         self.config_file = configparser.ConfigParser()
         self.config_file.read(os.path.join(os.path.dirname(__file__), "invenio.ini"))
@@ -55,16 +60,18 @@ class Invenio(AbstractSource):
     def get_record_url(self, recid):
         return f"{self.baseURL}/records/{recid}"
 
-    def search(self, query, page=1, size=20):
+    def search(self, query, page=1, size=20, sort=None):
+        url = f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
+        if sort:
+            url += f"&sort={sort}"
         try:
-            req = requests.get(
-                f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}",
-                headers=self.headers,
-            )
-        except Exception:
+            req = requests.get(url, headers=self.headers)
+        except Exception as e:
+            logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
+            logging.exception(f"Error while performing search: {str(req.text)}")
             raise ServiceUnavailable(f"Search failed with error code {req.status_code}")
 
         # Parse JSON response
@@ -79,9 +86,6 @@ class Invenio(AbstractSource):
         # Get total number of hits
         total_num_hits = data["hits"]["total"]
 
-        if self.source == "zenodo" and total_num_hits > 10000:
-            total_num_hits = 10000
-
         return {"total_num_hits": total_num_hits, "results": results}
 
     def search_by_id(self, recid):
@@ -89,7 +93,8 @@ class Invenio(AbstractSource):
 
         try:
             req = requests.get(self.get_record_url(recid), headers=self.headers)
-        except Exception:
+        except Exception as e:
+            logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:
@@ -112,26 +117,22 @@ class Invenio(AbstractSource):
                 author_name_key_list = self.config["author_name"].split(",")
                 authors.append(get_dict_value(author, author_name_key_list))
 
-        url_key_list = self.config["url"].split(",")
-        title_key_list = self.config["title"].split(",")
-
-        status = None
-        if self.config.get("status", None):
-            status = get_dict_value(record, self.config["status"].split(","))
-
-        file_size = None
-        if self.config.get("file_size", None):
-            file_size = get_dict_value(record, self.config["file_size"].split(","))
-
         return {
-            "source_url": get_dict_value(record, url_key_list),
+            "source_url": self._get_config_value(record, "url", mandatory=True),
             "recid": recid,
-            "title": get_dict_value(record, title_key_list),
+            "title": self._get_config_value(record, "title", mandatory=True),
             "authors": authors,
             "source": self.source,
-            "status": status,
-            "file_size": file_size,
+            "status": self._get_config_value(record, "status"),
+            "file_size": self._get_config_value(record, "file_size"),
+            "updated": self._get_config_value(record, "updated"),
         }
+
+    def _get_config_value(self, record, config_key, mandatory=False):
+        path = self.config.get(config_key)
+        if mandatory and not path:
+            raise ValueError(f"Mandatory config key '{config_key}' is missing.")
+        return get_dict_value(record, path.split(",")) if path else None
 
     def notify_source(self, archive, notification_endpoint, api_key=None):
         headers = {
@@ -194,22 +195,65 @@ class Invenio(AbstractSource):
             )
 
     def get_records_to_harvest(self, last_harvest):
-        query = ""
-        if last_harvest:
-            query = urllib.parse.quote_plus(
-                f"updated:[{last_harvest.strftime('%Y-%m-%dT%H:%M:%S')} TO *]"
+        size = 500
+        end_time = datetime.datetime.now(datetime.timezone.utc)
+        logging.info(f"Starting fetching records from {last_harvest} to {end_time}.")
+        yield from self.fetch_records_in_chunks(last_harvest, end_time, size)
+
+    def get_records_in_range(self, start, end, page, size):
+        if start:
+            query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+        else:
+            query = f"updated:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+        query = urllib.parse.quote_plus(query)
+        return self.search(query, page, size, sort="updated-asc")
+
+    def fetch_records_in_chunks(self, start, end, size):
+        result = self.get_records_in_range(start, end, 1, 1)
+        total = result["total_num_hits"]
+        if total <= 0:
+            yield [], end
+        elif total <= self.max_results:
+            logging.info(
+                f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S')}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
             )
-        page = 1
-        size = 100
-        records_to_harvest = []
-
-        result = self.search(query, page, size)
-        records_to_harvest += result["results"]
-
-        if result["total_num_hits"] > size:
-            while page * size < result["total_num_hits"]:
-                page += 1
-                result = self.search(query, page, size)
-                records_to_harvest += result["results"]
-
-        return records_to_harvest
+            initial_total = total
+            current_total = 0
+            retry_count = 0
+            while retry_count < self.max_retries:
+                records_to_add = []
+                page = 0
+                while len(records_to_add) < initial_total:
+                    page += 1
+                    result = self.get_records_in_range(start, end, page, size)
+                    current_total = result["total_num_hits"]
+                    if current_total != initial_total:
+                        logging.warning(
+                            f"Query result changed: {current_total} != {initial_total}, retrying ..."
+                        )
+                        break
+                    records_to_add += result["results"]
+                if (
+                    initial_total == current_total
+                    and len(records_to_add) == current_total
+                ):
+                    logging.info(f"Adding {current_total} records for {start}–{end}.")
+                    yield records_to_add, end
+                    break
+                initial_total = current_total
+                retry_count += 1
+            if retry_count == self.max_retries:
+                logging.exception(f"Max retries reached for {start}–{end}...")
+                raise MaxRetriesExceeded(
+                    f"Cannot get consistent ids for {start}–{end}..."
+                )
+        else:
+            result = self.get_records_in_range(start, end, self.max_results, 1)
+            last_record = result["results"][0]
+            last_record_update_time = datetime.datetime.fromisoformat(
+                last_record["updated"]
+            )
+            yield from self.fetch_records_in_chunks(
+                start, last_record_update_time, size
+            )
+            yield from self.fetch_records_in_chunks(last_record_update_time, end, size)

@@ -29,3 +29,7 @@ class InvalidSource(Exception):
 
 class RetryableException(Exception):
     pass
+
+
+class MaxRetriesExceeded(Exception):
+    pass
