@@ -17,7 +17,9 @@ class AbstractSource(ABC):
     def notify_source(self, archive, notification_endpoint, api_key=None):
         raise NotImplementedError("Step Notify Source not implemented for this Source.")
 
-    def get_records_to_harvest(self, last_harvest):
+    def get_records_to_harvest(
+        self, last_harvest
+    ):  # Implementation should use yielding of records
         raise NotImplementedError(
             "Get latest records to harvest not implemented for this Source."
         )

@@ -117,37 +117,22 @@ class Invenio(AbstractSource):
                 author_name_key_list = self.config["author_name"].split(",")
                 authors.append(get_dict_value(author, author_name_key_list))
 
-        url_key_list = self.config["url"].split(",")
-        title_key_list = self.config["title"].split(",")
-
-        status = (
-            get_dict_value(record, self.config["status"].split(","))
-            if self.config.get("status")
-            else None
-        )
-
-        file_size = (
-            get_dict_value(record, self.config["file_size"].split(","))
-            if self.config.get("file_size")
-            else None
-        )
-
-        updated = (
-            get_dict_value(record, self.config["updated"].split(","))
-            if self.config.get("updated")
-            else None
-        )
-
         return {
-            "source_url": get_dict_value(record, url_key_list),
+            "source_url": self._get_config_value(record, "url", mandatory=True),
             "recid": recid,
-            "title": get_dict_value(record, title_key_list),
+            "title": self._get_config_value(record, "title", mandatory=True),
             "authors": authors,
             "source": self.source,
-            "status": status,
-            "file_size": file_size,
-            "updated": updated,
+            "status": self._get_config_value(record, "status"),
+            "file_size": self._get_config_value(record, "file_size"),
+            "updated": self._get_config_value(record, "updated"),
         }
+
+    def _get_config_value(self, record, config_key, mandatory=False):
+        path = self.config.get(config_key)
+        if mandatory and not path:
+            raise ValueError(f"Mandatory config key '{config_key}' is missing.")
+        return get_dict_value(record, path.split(",")) if path else None
 
     def notify_source(self, archive, notification_endpoint, api_key=None):
         headers = {
