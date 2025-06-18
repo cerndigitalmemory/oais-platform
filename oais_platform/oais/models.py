@@ -3,7 +3,6 @@ import logging
 
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
-from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.db.models.signals import post_save
@@ -109,7 +108,7 @@ class Archive(models.Model):
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
-    title = models.CharField(max_length=255, default="")
+    title = models.TextField(default="")
     restricted = models.BooleanField(default=True)
     # A number we'll increment every time we need to publish a new version on InvenioRDM
     invenio_version = models.IntegerField(default=0)
