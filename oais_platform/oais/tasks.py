@@ -272,12 +272,7 @@ def create_path_artifact(name, path, localpath):
     retry_kwargs={"countdown": 3600},
 )
 def push_to_cta(
-    self,
-    archive_id,
-    step_id,
-    input_data=None,
-    api_key=None,
-    skip_concurrency_check=False,
+    self, archive_id, step_id, input_data=None, api_key=None, start_time=None
 ):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
@@ -286,6 +281,9 @@ def push_to_cta(
     the status of the transfer.
     """
     logger.info(f"Pushing Archive {archive_id} to CTA")
+
+    task_name = f"Push to CTA: {step_id}"
+    has_periodic_task = PeriodicTask.objects.filter(name=task_name).exists()
 
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
@@ -298,36 +296,49 @@ def push_to_cta(
         )
         return 1
 
+    # Stop retrying after FTS_BACKOFF_IN_WEEKS
+    if start_time and timezone.now() - dateutil.parser.isoparse(start_time) > timedelta(
+        weeks=FTS_BACKOFF_IN_WEEKS
+    ):
+        logger.info(f"Stopping checking number of FTS transfers for step {step_id}")
+        _remove_periodic_task_on_failure(
+            task_name, Step.objects.get(pk=step_id), input_data
+        )
+        return
+
     try:
         fts = apps.get_app_config("oais").fts
 
-        # If already maximum number of transfers ongoing, create a periodic task for checking again
-        if (
-            not skip_concurrency_check
-            and fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT
-        ):
+        # If already maximum number of transfers ongoing, create a periodic task for trying again
+        if fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT:
             logger.info(
                 f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
             )
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
-            )
-            PeriodicTask.objects.get_or_create(
-                interval=schedule,
-                name=f"Check number of transfers: {step_id}",
-                task="check_number_of_transfers",
-                args=json.dumps(
-                    [
-                        archive_id,
-                        step_id,
-                        timezone.now().isoformat(),
-                        input_data,
-                        api_key,
-                    ]
-                ),
-                expire_seconds=3600.0,
-            )
+            if not has_periodic_task:
+                schedule, _ = IntervalSchedule.objects.get_or_create(
+                    every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
+                )
+                PeriodicTask.objects.get_or_create(
+                    interval=schedule,
+                    name=task_name,
+                    task="push_to_cta",
+                    args=json.dumps(
+                        [
+                            archive_id,
+                            step_id,
+                            input_data,
+                            api_key,
+                            start_time or timezone.now().isoformat(),
+                        ]
+                    ),
+                    expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
+                )
             return
+
+        # Remove periodic task if it exists
+        if has_periodic_task:
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
 
         # And set the step as in progress
         step.set_status(Status.IN_PROGRESS)
@@ -371,49 +382,6 @@ def push_to_cta(
     step.set_output_data(
         {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
     )
-
-
-@shared_task(name="check_number_of_transfers", bind=True, ignore_result=True)
-def check_number_of_transfers(
-    self, archive_id, step_id, start_time, input_data=None, api_key=None
-):
-    """
-    Check the number of current FTS transfers.
-    If less than FTS_CONCURRENCY_LIMIT, then retry corresponding push_to_cta task and remove the periodic task.
-    Stop checking after FTS_BACKOFF_IN_WEEKS.
-    """
-    # Stop checking after FTS_BACKOFF_IN_WEEKS and mark the step as failed
-    start_time = dateutil.parser.isoparse(start_time)
-    if timezone.now() - start_time > timedelta(weeks=FTS_BACKOFF_IN_WEEKS):
-        logger.info(f"Stopping checking number of FTS transfers for step {step_id}")
-        periodic_task = PeriodicTask.objects.get(
-            name=f"Check number of transfers: {step_id}"
-        )
-        periodic_task.delete()
-        step = Step.objects.get(pk=step_id)
-        step.set_status(Status.FAILED)
-        return
-
-    logger.info(
-        f"Checking number of current FTS transfers before submitting step {step_id}"
-    )
-    try:
-        fts = apps.get_app_config("oais").fts
-        if fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT:
-            logger.info(
-                f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
-            )
-            return
-    except Exception as e:
-        logger.warning(str(e))
-        return
-
-    logger.info(f"Retrying pushing to CTA for step {step_id}")
-    push_to_cta.delay(archive_id, step_id, input_data, api_key, True)
-    periodic_task = PeriodicTask.objects.get(
-        name=f"Check number of transfers: {step_id}"
-    )
-    periodic_task.delete()
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
