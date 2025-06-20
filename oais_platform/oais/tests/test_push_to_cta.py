@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks import push_to_cta
 from oais_platform.settings import (
-    FTS_BACKOFF_IN_WEEKS,
+    FTS_BACKOFF_LIMIT_IN_WEEKS,
     FTS_CONCURRENCY_LIMIT,
     FTS_WAIT_IN_HOURS,
 )
@@ -22,13 +22,28 @@ class PushToCTATests(APITestCase):
         self.app_config.fts = self.fts
 
         self.archive = Archive.objects.create(path_to_aip="test/path")
-        self.step = Step.objects.create(archive=self.archive, name=Steps.PUSH_TO_CTA)
+        self.step = Step.objects.create(
+            archive=self.archive, name=Steps.PUSH_TO_CTA, start_date=timezone.now()
+        )
+
+        self.backoff_archive = Archive.objects.create(path_to_aip="test/path")
+        self.backoff_step = Step.objects.create(
+            archive=self.backoff_archive,
+            name=Steps.PUSH_TO_CTA,
+            start_date=timezone.now() - timedelta(weeks=FTS_BACKOFF_LIMIT_IN_WEEKS),
+        )
+
         schedule, _ = IntervalSchedule.objects.get_or_create(
             every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
         )
         self.periodic_task = PeriodicTask.objects.create(
             interval=schedule,
             name=f"Push to CTA: {self.step.id}",
+            task="push_to_cta",
+        )
+        self.backoff_periodic_task = PeriodicTask.objects.create(
+            interval=schedule,
+            name=f"Push to CTA: {self.backoff_step.id}",
             task="push_to_cta",
         )
 
@@ -84,14 +99,14 @@ class PushToCTATests(APITestCase):
         )
 
     def test_push_to_cta_backoff(self):
-        start_time = timezone.now() - timedelta(weeks=FTS_BACKOFF_IN_WEEKS)
         push_to_cta.apply(
-            args=[self.archive.id, self.step.id],
-            kwargs={"start_time": start_time.isoformat()},
+            args=[self.backoff_archive.id, self.backoff_step.id],
         )
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
+        self.backoff_step.refresh_from_db()
+        self.assertEqual(self.backoff_step.status, Status.FAILED)
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertFalse(
-            PeriodicTask.objects.filter(name=f"Push to CTA: {self.step.id}").exists()
+            PeriodicTask.objects.filter(
+                name=f"Push to CTA: {self.backoff_step.id}"
+            ).exists()
         )

@@ -50,7 +50,7 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
-    FTS_BACKOFF_IN_WEEKS,
+    FTS_BACKOFF_LIMIT_IN_WEEKS,
     FTS_CONCURRENCY_LIMIT,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
@@ -269,11 +269,9 @@ def create_path_artifact(name, path, localpath):
     ignore_result=True,
     autoretry_for=(Exception,),
     max_retries=1,
-    retry_kwargs={"countdown": 3600},
+    retry_kwargs={"countdown": FTS_WAIT_IN_HOURS * 60 * 60},
 )
-def push_to_cta(
-    self, archive_id, step_id, input_data=None, api_key=None, start_time=None
-):
+def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
@@ -296,14 +294,10 @@ def push_to_cta(
         )
         return 1
 
-    # Stop retrying after FTS_BACKOFF_IN_WEEKS
-    if start_time and timezone.now() - dateutil.parser.isoparse(start_time) > timedelta(
-        weeks=FTS_BACKOFF_IN_WEEKS
-    ):
-        logger.info(f"Stopping checking number of FTS transfers for step {step_id}")
-        _remove_periodic_task_on_failure(
-            task_name, Step.objects.get(pk=step_id), input_data
-        )
+    # Stop retrying after FTS_BACKOFF_LIMIT_IN_WEEKS
+    if timezone.now() - step.start_date > timedelta(weeks=FTS_BACKOFF_LIMIT_IN_WEEKS):
+        logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
+        _remove_periodic_task_on_failure(task_name, step, input_data)
         return
 
     try:
@@ -322,15 +316,7 @@ def push_to_cta(
                     interval=schedule,
                     name=task_name,
                     task="push_to_cta",
-                    args=json.dumps(
-                        [
-                            archive_id,
-                            step_id,
-                            input_data,
-                            api_key,
-                            start_time or timezone.now().isoformat(),
-                        ]
-                    ),
+                    args=json.dumps([archive_id, step_id, input_data, api_key]),
                     expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
                 )
             return
