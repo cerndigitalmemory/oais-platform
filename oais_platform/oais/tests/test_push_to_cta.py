@@ -33,18 +33,8 @@ class PushToCTATests(APITestCase):
             start_date=timezone.now() - timedelta(weeks=FTS_BACKOFF_LIMIT_IN_WEEKS),
         )
 
-        schedule, _ = IntervalSchedule.objects.get_or_create(
+        self.schedule, _ = IntervalSchedule.objects.get_or_create(
             every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
-        )
-        self.periodic_task = PeriodicTask.objects.create(
-            interval=schedule,
-            name=f"Push to CTA: {self.step.id}",
-            task="push_to_cta",
-        )
-        self.backoff_periodic_task = PeriodicTask.objects.create(
-            interval=schedule,
-            name=f"Push to CTA: {self.backoff_step.id}",
-            task="push_to_cta",
         )
 
     def test_push_to_cta_success(self):
@@ -85,6 +75,11 @@ class PushToCTATests(APITestCase):
     def test_push_to_cta_retry_after_wait(self):
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
+        PeriodicTask.objects.create(
+            interval=self.schedule,
+            name=f"Push to CTA: {self.step.id}",
+            task="push_to_cta",
+        )
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 1)
@@ -99,6 +94,11 @@ class PushToCTATests(APITestCase):
         )
 
     def test_push_to_cta_backoff(self):
+        PeriodicTask.objects.create(
+            interval=self.schedule,
+            name=f"Push to CTA: {self.step.id}",
+            task="push_to_cta",
+        )
         push_to_cta.apply(
             args=[self.backoff_archive.id, self.backoff_step.id],
         )
