@@ -9,9 +9,9 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks import push_to_cta
 from oais_platform.settings import (
-    FTS_BACKOFF_LIMIT_IN_WEEKS,
     FTS_CONCURRENCY_LIMIT,
     FTS_WAIT_IN_HOURS,
+    FTS_WAIT_LIMIT_IN_WEEKS,
 )
 
 
@@ -26,11 +26,11 @@ class PushToCTATests(APITestCase):
             archive=self.archive, name=Steps.PUSH_TO_CTA, start_date=timezone.now()
         )
 
-        self.backoff_archive = Archive.objects.create(path_to_aip="test/path")
-        self.backoff_step = Step.objects.create(
-            archive=self.backoff_archive,
+        self.wait_limit_archive = Archive.objects.create(path_to_aip="test/path")
+        self.wait_limit_step = Step.objects.create(
+            archive=self.wait_limit_archive,
             name=Steps.PUSH_TO_CTA,
-            start_date=timezone.now() - timedelta(weeks=FTS_BACKOFF_LIMIT_IN_WEEKS),
+            start_date=timezone.now() - timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS),
         )
 
         self.schedule, _ = IntervalSchedule.objects.get_or_create(
@@ -93,20 +93,20 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    def test_push_to_cta_backoff(self):
+    def test_push_to_cta_wait_limit(self):
         PeriodicTask.objects.create(
             interval=self.schedule,
             name=f"Push to CTA: {self.step.id}",
             task="push_to_cta",
         )
         push_to_cta.apply(
-            args=[self.backoff_archive.id, self.backoff_step.id],
+            args=[self.wait_limit_archive.id, self.wait_limit_step.id],
         )
-        self.backoff_step.refresh_from_db()
-        self.assertEqual(self.backoff_step.status, Status.FAILED)
+        self.wait_limit_step.refresh_from_db()
+        self.assertEqual(self.wait_limit_step.status, Status.FAILED)
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertFalse(
             PeriodicTask.objects.filter(
-                name=f"Push to CTA: {self.backoff_step.id}"
+                name=f"Push to CTA: {self.wait_limit_step.id}"
             ).exists()
         )

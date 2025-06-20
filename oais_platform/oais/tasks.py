@@ -50,12 +50,12 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
-    FTS_BACKOFF_LIMIT_IN_WEEKS,
     FTS_CONCURRENCY_LIMIT,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
     FTS_WAIT_IN_HOURS,
+    FTS_WAIT_LIMIT_IN_WEEKS,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
@@ -294,8 +294,8 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
-    # Stop retrying after FTS_BACKOFF_LIMIT_IN_WEEKS
-    if timezone.now() - step.start_date > timedelta(weeks=FTS_BACKOFF_LIMIT_IN_WEEKS):
+    # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
+    if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
         logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
         _remove_periodic_task_on_failure(task_name, step, input_data)
         return
