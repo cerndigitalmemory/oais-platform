@@ -34,6 +34,7 @@ from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
     AM_CONCURRENCY_LIMT,
+    AM_POLLING_INTERVAL,
     AM_REL_DIRECTORY,
     AM_SS_API_KEY,
     AM_SS_URL,
@@ -761,14 +762,9 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     current_step = Step.objects.get(pk=step_id)
     if current_am_tasks >= AM_CONCURRENCY_LIMT:
         if self.request.retries >= self.max_retries:
-            current_step.set_status(Status.FAILED)
-            current_step.set_output_data(
-                {
-                    "status": 1,
-                    "errormsg": "Server cannot handle more requests and the max retries have been exceeded. Try again later.",
-                }
+            _set_and_return_error(
+                current_step, "Archivematica max retries exceeded. Try again later."
             )
-            return {"status": 1, "errormsg": "Max retries exceeded."}
         else:
             current_step.set_output_data(
                 {
@@ -780,24 +776,17 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 exc=Exception("Archivematica concurrency limit reached."),
             )
 
-    current_step.set_status(Status.IN_PROGRESS)
-
     archive = Archive.objects.get(pk=archive_id)
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
 
-    archive_id = current_step.archive
-
     # Set task id
     current_step.set_task(self.request.id)
 
-    # This is the directory Archivematica "sees" on the local system
-    a3m_rel_directory = AM_REL_DIRECTORY
-
     # Get the destination folder of archivematica
     archivematica_dst = os.path.join(
-        a3m_rel_directory,
+        AM_REL_DIRECTORY,  # This is the directory Archivematica "sees" on the local system
         ntpath.basename(path_to_sip),
     )
 
@@ -822,20 +811,17 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             We can't do much in these cases, a part from suggesting to take a look at the AM logs.
             Check 'amclient/errors' for more information.
             """
-            logger.error(
-                f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+            _set_and_return_error(
+                current_step,
+                f"Error while archiving {current_step.id}. This may be a configuration error. AM create returned {package}.",
             )
-            current_step.set_status(Status.FAILED)
-            errormsg = f"AM Create package returned {package}. This may be a configuration error. Check AM logs for more information."
-            current_step.set_output_data({"status": 1, "errormsg": errormsg})
-            return {"status": 1, "errormsg": errormsg}
         else:
             current_step.set_status(Status.WAITING)
             # overwrite the start date so the waiting limit is counted from here
             current_step.set_start_date()
             # Create the scheduler
             schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=60, period=IntervalSchedule.SECONDS
+                every=AM_POLLING_INTERVAL, period=IntervalSchedule.MINUTES
             )
             # Spawn a periodic task to check for the status of the package on AM
             PeriodicTask.objects.create(
@@ -843,47 +829,27 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 name=f"Archivematica status for step: {current_step.id}",
                 task="check_am_status",
                 args=json.dumps([package, current_step.id, archive_id.id, api_key]),
-                expire_seconds=55.0,
+                expire_seconds=AM_POLLING_INTERVAL * 60.0,
             )
     except requests.HTTPError as e:
         if e.request.status_code == 403:
             """
             In case of error 403: Authentication issues (wrong credentials)
             """
-            logger.error(
-                f"Error while archiving {current_step.id} (403). Check your archivematica credentials."
+            _set_and_return_error(
+                current_step,
+                f"Error while archiving {current_step.id}: HTTP 403 Forbidden.",
             )
-            current_step.set_status(Status.FAILED)
-            current_step.set_output_data(
-                {"status": 1, "errormsg": "Check your archivematica credentials (403)."}
-            )
-            return {
-                "status": 1,
-                "errormsg": "Check your archivematica credentials (403).",
-            }
         else:
-            logger.error(
-                f"Error while archiving {current_step.id} ({e.request.status_code}). Check your archivematica settings configuration."
+            _set_and_return_error(
+                current_step,
+                f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
+                extra_log=f"HTTPError: {e}",
             )
-            current_step.set_status(Status.FAILED)
-            current_step.set_output_data(
-                {
-                    "status": 1,
-                    "errormsg": f"Check your archivematica settings configuration. ({e.request.status_code})",
-                }
-            )
-            return {
-                "status": 1,
-                "errormsg": f"Check your archivematica settings configuration. ({e.request.status_code})",
-            }
-
     except Exception as e:
-        logger.error(
-            f"Error while archiving {current_step.id}. Check your archivematica settings configuration."
+        _set_and_return_error(
+            current_step, f"Error while archiving {current_step.id}: {str(e)}"
         )
-        current_step.set_status(Status.FAILED)
-        current_step.set_output_data({"status": 1, "errormsg": str(e)})
-        return {"status": 1, "errormsg": str(e)}
 
     return {"status": 0, "errormsg": "Uploaded to Archivematica"}
 
@@ -1060,11 +1026,23 @@ def _handle_completed_am_package(
         step.set_output_data(am_status)
 
 
+def _set_and_return_error(step, errormsg, extra_log=None):
+    """
+    Set the step as failed and return the error message
+    """
+    step.set_status(Status.FAILED)
+    step.set_output_data({"status": 1, "errormsg": errormsg})
+    logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
+    return {"status": 1, "errormsg": errormsg}
+
+
 def _remove_periodic_task_on_failure(task_name, step, output_data):
     """
     Set step as failed and remove the scheduled task
     """
     step.set_status(Status.FAILED)
+    step.set_output_data(output_data)
+    logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
@@ -1074,10 +1052,6 @@ def _remove_periodic_task_on_failure(task_name, step, output_data):
     except Exception as e:
         logger.error(e)
         return
-
-    step.set_output_data(output_data)
-
-    logger.warning(f"Step {step.id} failed. Step status: {step.status}")
 
 
 def prepare_invenio_payload(archive):
