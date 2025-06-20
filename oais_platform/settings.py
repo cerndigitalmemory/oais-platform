@@ -300,6 +300,8 @@ AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
 # Directory that Archivematica "sees" on the local system
 AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
 
+AM_POLLING_INTERVAL = 5  # minutes
+
 # INVENIORDM integration
 
 # Base URL of the InvenioRDM instance
