@@ -1022,9 +1022,10 @@ def _set_and_return_error(step, errormsg, extra_log=None):
     Set the step as failed and return the error message
     """
     step.set_status(Status.FAILED)
-    step.set_output_data({"status": 1, "errormsg": errormsg})
+    return_value = {"status": 1, "errormsg": errormsg}
+    step.set_output_data(return_value)
     logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-    return {"status": 1, "errormsg": errormsg}
+    return return_value
 
 
 def _remove_periodic_task_on_failure(task_name, step, output_data):
