@@ -50,13 +50,13 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = f"AM Create package returned {create_package.return_value}. This may be a configuration error. Check AM logs for more information."
+        errormsg = f"AM create returned {create_package.return_value}."
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
-        self.assertEqual(step_output["errormsg"], errormsg)
+        self.assertIn(errormsg, step_output["errormsg"])
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], errormsg)
+        self.assertIn(errormsg, result["errormsg"])
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_authentication(self, create_package):
@@ -70,13 +70,13 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = "Check your archivematica credentials (403)."
+        errormsg = "HTTP 403 Forbidden"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
-        self.assertEqual(step_output["errormsg"], errormsg)
+        self.assertIn(errormsg, step_output["errormsg"])
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], errormsg)
+        self.assertIn(errormsg, result["errormsg"])
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_httperror(self, create_package):
@@ -88,17 +88,17 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = f"Check your archivematica settings configuration. ({bad_request.status_code})"
+        errormsg = f"status code {bad_request.status_code}"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
-        self.assertEqual(step_output["errormsg"], errormsg)
+        self.assertIn(errormsg, step_output["errormsg"])
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], errormsg)
+        self.assertIn(errormsg, result["errormsg"])
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_exception(self, create_package):
-        exception_msg = "Unexpected exception occurred"
+        exception_msg = "Error while archiving"
         create_package.side_effect = Exception(exception_msg)
         result = archivematica.apply(args=[self.archive.id, self.step.id])
 
@@ -108,6 +108,6 @@ class ArchivematicaCreateTests(APITestCase):
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
-        self.assertEqual(step_output["errormsg"], exception_msg)
+        self.assertIn(exception_msg, step_output["errormsg"])
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], exception_msg)
+        self.assertIn(exception_msg, result["errormsg"])

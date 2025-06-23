@@ -762,7 +762,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     current_step = Step.objects.get(pk=step_id)
     if current_am_tasks >= AM_CONCURRENCY_LIMT:
         if self.request.retries >= self.max_retries:
-            _set_and_return_error(
+            return _set_and_return_error(
                 current_step, "Archivematica max retries exceeded. Try again later."
             )
         else:
@@ -791,7 +791,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     )
 
     # Adds an _ between Archive and the id because archivematica messes up with spaces
-    transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id.id)
+    transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id)
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
     am = _get_am_client()
@@ -811,7 +811,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             We can't do much in these cases, a part from suggesting to take a look at the AM logs.
             Check 'amclient/errors' for more information.
             """
-            _set_and_return_error(
+            return _set_and_return_error(
                 current_step,
                 f"Error while archiving {current_step.id}. This may be a configuration error. AM create returned {package}.",
             )
@@ -828,7 +828,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 interval=schedule,
                 name=f"Archivematica status for step: {current_step.id}",
                 task="check_am_status",
-                args=json.dumps([package, current_step.id, archive_id.id, api_key]),
+                args=json.dumps([package, current_step.id, archive_id, api_key]),
                 expire_seconds=AM_POLLING_INTERVAL * 60.0,
             )
     except requests.HTTPError as e:
@@ -836,18 +836,18 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             """
             In case of error 403: Authentication issues (wrong credentials)
             """
-            _set_and_return_error(
+            return _set_and_return_error(
                 current_step,
                 f"Error while archiving {current_step.id}: HTTP 403 Forbidden.",
             )
         else:
-            _set_and_return_error(
+            return _set_and_return_error(
                 current_step,
                 f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
                 extra_log=f"HTTPError: {e}",
             )
     except Exception as e:
-        _set_and_return_error(
+        return _set_and_return_error(
             current_step, f"Error while archiving {current_step.id}: {str(e)}"
         )
 
