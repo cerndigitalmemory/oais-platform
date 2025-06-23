@@ -70,7 +70,7 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = "HTTP 403 Forbidden"
+        errormsg = f"status code {unauthorized_request.status_code}"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)

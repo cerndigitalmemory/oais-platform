@@ -832,20 +832,11 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 expire_seconds=AM_POLLING_INTERVAL * 60.0,
             )
     except requests.HTTPError as e:
-        if e.request.status_code == 403:
-            """
-            In case of error 403: Authentication issues (wrong credentials)
-            """
-            return _set_and_return_error(
-                current_step,
-                f"Error while archiving {current_step.id}: HTTP 403 Forbidden.",
-            )
-        else:
-            return _set_and_return_error(
-                current_step,
-                f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
-                extra_log=f"HTTPError: {e}",
-            )
+        return _set_and_return_error(
+            current_step,
+            f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
+            extra_log=f"HTTPError: {e}",
+        )
     except Exception as e:
         return _set_and_return_error(
             current_step, f"Error while archiving {current_step.id}: {str(e)}"
