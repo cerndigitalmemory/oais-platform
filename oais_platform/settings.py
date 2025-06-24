@@ -294,12 +294,7 @@ AM_SS_API_KEY = "test"
 
 # add the UUID of the transfer source
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
-
-# Absolute directory of the source folder for archivematica
-AM_ABS_DIRECTORY = "/root/oais-platform/oais-data"
-# Directory that Archivematica "sees" on the local system
-AM_REL_DIRECTORY = "/home/archivematica/archivematica-sampledata/oais-data"
-
+# Interval in minutes to poll Archivematica for status updates
 AM_POLLING_INTERVAL = 3  # minutes
 
 # INVENIORDM integration
