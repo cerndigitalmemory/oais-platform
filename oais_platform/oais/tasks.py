@@ -35,7 +35,6 @@ from oais_platform.settings import (
     AM_API_KEY,
     AM_CONCURRENCY_LIMT,
     AM_POLLING_INTERVAL,
-    AM_REL_DIRECTORY,
     AM_SS_API_KEY,
     AM_SS_URL,
     AM_SS_USERNAME,
@@ -784,14 +783,15 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     # Set task id
     current_step.set_task(self.request.id)
 
-    # Get the destination folder of archivematica
+    sip_directory = os.path.dirname(path_to_sip)
+    # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(
-        AM_REL_DIRECTORY,  # This is the directory Archivematica "sees" on the local system
-        ntpath.basename(path_to_sip),
+        "/",
+        sip_directory,
     )
 
     # Adds an _ between Archive and the id because archivematica messes up with spaces
-    transfer_name = ntpath.basename(path_to_sip) + "::Archive_" + str(archive_id)
+    transfer_name = sip_directory + "::Archive_" + str(archive_id)
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
     am = _get_am_client()
@@ -1022,18 +1022,21 @@ def _set_and_return_error(step, errormsg, extra_log=None):
     Set the step as failed and return the error message
     """
     step.set_status(Status.FAILED)
-    return_value = {"status": 1, "errormsg": errormsg}
-    step.set_output_data(return_value)
-    logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-    return return_value
+    if type(errormsg) is dict:
+        step.set_output_data(errormsg)
+        return errormsg
+    else:
+        return_value = {"status": 1, "errormsg": errormsg}
+        step.set_output_data(return_value)
+        logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
+        return return_value
 
 
 def _remove_periodic_task_on_failure(task_name, step, output_data):
     """
     Set step as failed and remove the scheduled task
     """
-    step.set_status(Status.FAILED)
-    step.set_output_data(output_data)
+    _set_and_return_error(step, output_data)
     logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:
