@@ -7,6 +7,7 @@ from datetime import timedelta
 from urllib.parse import urljoin
 
 import bagit_create
+import dateutil.parser
 import requests
 from amclient import AMClient
 from celery import shared_task, states
@@ -49,9 +50,12 @@ from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     CTA_BASE_PATH,
     FILES_URL,
+    FTS_CONCURRENCY_LIMIT,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
+    FTS_WAIT_IN_HOURS,
+    FTS_WAIT_LIMIT_IN_WEEKS,
     INVENIO_API_TOKEN,
     INVENIO_SERVER_URL,
     SIP_UPSTREAM_BASEPATH,
@@ -265,7 +269,7 @@ def create_path_artifact(name, path, localpath):
     ignore_result=True,
     autoretry_for=(Exception,),
     max_retries=1,
-    retry_kwargs={"countdown": 3600},
+    retry_kwargs={"countdown": FTS_WAIT_IN_HOURS * 60 * 60},
 )
 def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     """
@@ -275,6 +279,9 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     the status of the transfer.
     """
     logger.info(f"Pushing Archive {archive_id} to CTA")
+
+    task_name = f"Push to CTA: {step_id}"
+    has_periodic_task = PeriodicTask.objects.filter(name=task_name).exists()
 
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
@@ -287,13 +294,42 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
-    # And set the step as in progress
-    step.set_status(Status.IN_PROGRESS)
-
-    cta_folder_name = f"aip-{archive.id}"
+    # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
+    if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
+        logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
+        _remove_periodic_task_on_failure(task_name, step, input_data)
+        return
 
     try:
         fts = apps.get_app_config("oais").fts
+
+        # If already maximum number of transfers ongoing, create a periodic task for trying again
+        if fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT:
+            logger.info(
+                f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
+            )
+            if not has_periodic_task:
+                schedule, _ = IntervalSchedule.objects.get_or_create(
+                    every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
+                )
+                PeriodicTask.objects.get_or_create(
+                    interval=schedule,
+                    name=task_name,
+                    task="push_to_cta",
+                    args=json.dumps([archive_id, step_id, input_data, api_key]),
+                    expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
+                )
+            return
+
+        # Remove periodic task if it exists
+        if has_periodic_task:
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+
+        # And set the step as in progress
+        step.set_status(Status.IN_PROGRESS)
+
+        cta_folder_name = f"aip-{archive.id}"
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
