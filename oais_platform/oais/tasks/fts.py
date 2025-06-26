@@ -47,6 +47,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    step.set_task(self.request.id)
     if not archive.path_to_aip:
         logger.warning("AIP path not found for the given archive.")
         step.set_status(Status.FAILED)
@@ -58,7 +59,9 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
         logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
-        remove_periodic_task_on_failure(task_name, step, input_data)
+        remove_periodic_task_on_failure(
+            task_name, step, {"status": 1, "errormsg": "Retry limit reached"}
+        )
         return
 
     try:
