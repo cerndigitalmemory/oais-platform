@@ -135,8 +135,8 @@ class PipelineTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch("oais_platform.oais.tasks.validate.delay")
-    def test_execute_pipeline_with_perms(self, validate_delay):
+    @patch("oais_platform.oais.tasks.pipeline_action.dispatch_task")
+    def test_execute_pipeline_with_perms(self, mock_dispatch):
         self.other_user.user_permissions.add(self.permission)
         self.other_user.user_permissions.add(self.execute_permission)
         self.other_user.save()
@@ -152,15 +152,14 @@ class PipelineTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.archive.refresh_from_db()
-        validate_delay.assert_called_once_with(
-            self.archive.id, self.archive.last_step.id, None, None
+        mock_dispatch.assert_called_once_with(
+            Steps.VALIDATION, self.archive.id, self.archive.last_step.id, None, None
         )
 
     @parameterized.expand(
         [
             (
                 {
-                    "task": "process",
                     "pipeline": [Steps.HARVEST],
                     "prev_step": None,
                 },
@@ -168,7 +167,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "validate",
                     "pipeline": [Steps.VALIDATION],
                     "prev_step": Steps.HARVEST,
                 },
@@ -176,7 +174,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "checksum",
                     "pipeline": [Steps.CHECKSUM],
                     "prev_step": Steps.VALIDATION,
                 },
@@ -184,7 +181,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "archivematica",
                     "pipeline": [Steps.ARCHIVE],
                     "prev_step": Steps.CHECKSUM,
                 },
@@ -192,7 +188,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "push_to_cta",
                     "pipeline": [Steps.PUSH_TO_CTA],
                     "prev_step": Steps.ARCHIVE,
                 },
@@ -200,7 +195,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "invenio",
                     "pipeline": [Steps.INVENIO_RDM_PUSH],
                     "prev_step": Steps.CHECKSUM,
                 },
@@ -208,7 +202,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "extract_title",
                     "pipeline": [Steps.EXTRACT_TITLE],
                     "prev_step": Steps.CHECKSUM,
                 },
@@ -216,7 +209,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "task": "notify_source",
                     "pipeline": [Steps.NOTIFY_SOURCE],
                     "prev_step": Steps.ARCHIVE,
                 },
@@ -226,7 +218,9 @@ class PipelineTests(APITestCase):
     )
     def test_execute_pipeline_one_step(self, input, status_code):
 
-        with patch(f'oais_platform.oais.tasks.{input["task"]}.delay') as task:
+        with patch(
+            "oais_platform.oais.tasks.pipeline_action.dispatch_task"
+        ) as mock_dispatch:
             self.client.force_authenticate(user=self.testuser)
 
             step_count = 0
@@ -266,32 +260,13 @@ class PipelineTests(APITestCase):
             self.assertEqual(
                 Archive.objects.get(pk=self.archive.id).last_step.id, latest_step.id
             )
-            match latest_step.name:
-                case Steps.HARVEST:
-                    task.assert_called_once_with(
-                        self.archive.id,
-                        latest_step.id,
-                        latest_step.output_data,
-                        self.testuser_api_key.key,
-                    )
-                case Steps.EXTRACT_TITLE:
-                    task.assert_called_once_with(
-                        self.archive.id, latest_step.id, None, self.testuser_api_key.key
-                    )
-                case Steps.NOTIFY_SOURCE:
-                    task.assert_called_once_with(
-                        self.archive.id,
-                        latest_step.id,
-                        latest_step.output_data,
-                        self.testuser_api_key.key,
-                    )
-                case _:
-                    task.assert_called_once_with(
-                        self.archive.id,
-                        latest_step.id,
-                        latest_step.output_data,
-                        self.testuser_api_key.key,
-                    )
+            mock_dispatch.assert_called_once_with(
+                input["pipeline"][0],
+                self.archive.id,
+                latest_step.id,
+                latest_step.input_data,
+                self.testuser_api_key.key,
+            )
 
     def test_edit_manifests(self):
         self.client.force_authenticate(user=self.testuser)

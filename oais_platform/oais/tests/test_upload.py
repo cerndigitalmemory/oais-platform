@@ -11,7 +11,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step
+from oais_platform.oais.models import Archive, Step, Steps
 
 
 class UploadTests(APITestCase):
@@ -66,8 +66,8 @@ class UploadTests(APITestCase):
 
         f1.close()
 
-    @patch("oais_platform.oais.tasks.validate.delay")
-    def test_upload_sip(self, validate_delay):
+    @patch("oais_platform.oais.tasks.pipeline_action.dispatch_task")
+    def test_upload_sip(self, mock_dispatch):
         with override_settings(BIC_UPLOAD_PATH=None):
             # Prepare a temp folder to save the results
             with tempfile.TemporaryDirectory() as tmpdir2:
@@ -83,7 +83,6 @@ class UploadTests(APITestCase):
                 foldername = res["foldername"]
 
                 path_to_sip = os.path.join(tmpdir2, foldername)
-                path_to_zip = path_to_sip + ".zip"
 
                 # create a ZipFile object
                 with zipfile.ZipFile("test.zip", "w") as zipf:
@@ -108,7 +107,8 @@ class UploadTests(APITestCase):
                     response.data["msg"], "SIP uploaded, see Archives page"
                 )
                 latest_step = Step.objects.latest("id")
-                validate_delay.assert_called_once_with(
+                mock_dispatch.assert_called_once_with(
+                    Steps.VALIDATION,
                     Archive.objects.latest("id").id,
                     latest_step.id,
                     latest_step.output_data,
