@@ -10,7 +10,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step
+from oais_platform.oais.models import Archive, Step, Steps
 from oais_platform.oais.views import check_allowed_path
 
 
@@ -65,8 +65,8 @@ class AnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_announce(self, copy_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_announce(self, mock_dispatch):
         url = reverse("announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +97,8 @@ class AnnounceTests(APITestCase):
             status_code=302,
         )
         self.assertEqual(Archive.objects.count(), 1)
-        copy_delay.assert_called_once_with(
+        mock_dispatch.assert_called_once_with(
+            Steps.ANNOUNCE,
             latest_archive_id,
             Step.objects.latest("id").id,
             {
@@ -107,8 +108,8 @@ class AnnounceTests(APITestCase):
             None,
         )
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_announce_validation_failed(self, copy_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_announce_validation_failed(self, mock_dispatch):
         url = reverse("announce")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -135,4 +136,4 @@ class AnnounceTests(APITestCase):
             "The given path is not a valid SIP",
         )
         self.assertEqual(Archive.objects.count(), 0)
-        self.assertEqual(len(copy_delay.mock_calls), 0)
+        mock_dispatch.assert_not_called()

@@ -10,7 +10,7 @@ from oais_platform.oais.models import (
     Step,
     Steps,
 )
-from oais_platform.oais.tasks import notify_source
+from oais_platform.oais.tasks.notify_source import notify_source
 
 
 class NotifySourceTests(APITestCase):

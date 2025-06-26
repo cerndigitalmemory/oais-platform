@@ -57,16 +57,15 @@ from oais_platform.oais.serializers import (
     UserSerializer,
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
-
-from ..settings import ALLOW_LOCAL_LOGIN, PIPELINE_SIZE_LIMIT
-from . import pipeline
-from .tasks import (
-    announce_sip,
-    batch_announce_task,
+from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
+from oais_platform.oais.tasks.pipeline_actions import (
     create_retry_step,
     execute_pipeline,
     run_step,
 )
+
+from ..settings import ALLOW_LOCAL_LOGIN, PIPELINE_SIZE_LIMIT
+from . import pipeline
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
