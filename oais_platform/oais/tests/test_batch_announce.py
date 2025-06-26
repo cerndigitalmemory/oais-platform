@@ -11,8 +11,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Collection
-from oais_platform.oais.tasks import batch_announce_task
+from oais_platform.oais.models import Archive, Collection, Steps
+from oais_platform.oais.tasks.announce import batch_announce_task
 
 
 class BatchAnnounceTests(APITestCase):
@@ -79,7 +79,7 @@ class BatchAnnounceTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 1)
 
-    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    @patch("oais_platform.oais.tasks.announce.batch_announce_task.delay")
     def test_batch_announce(self, batch_announce_delay):
         url = reverse("batch-announce")
 
@@ -127,7 +127,7 @@ class BatchAnnounceTests(APITestCase):
             batch_announce_folder, tag.id, self.user.id
         )
 
-    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    @patch("oais_platform.oais.tasks.announce.batch_announce_task.delay")
     def test_batch_announce_limit_exceeded(self, batch_announce_delay):
         url = reverse("batch-announce")
 
@@ -163,9 +163,9 @@ class BatchAnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 1)
-        self.assertEqual(len(batch_announce_delay.mock_calls), 0)
+        batch_announce_delay.assert_not_called()
 
-    @patch("oais_platform.oais.tasks.batch_announce_task.delay")
+    @patch("oais_platform.oais.tasks.announce.batch_announce_task.delay")
     def test_batch_announce_no_subfolders(self, batch_announce_delay):
         url = reverse("batch-announce")
 
@@ -187,10 +187,10 @@ class BatchAnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 1)
-        self.assertEqual(len(batch_announce_delay.mock_calls), 0)
+        batch_announce_delay.assert_not_called()
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_task(self, copy_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_batch_announce_task(self, mock_dispatch):
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_announce_folder = os.path.join(tmpdir, "sips")
             os.mkdir(batch_announce_folder)
@@ -215,10 +215,12 @@ class BatchAnnounceTests(APITestCase):
         self.assertEqual(Archive.objects.count(), 2)
         self.assertEqual(Collection.objects.count(), 1)
         self.assertEqual(self.tag.description, "Batch Announce completed successfully")
-        self.assertEqual(len(copy_delay.mock_calls), 2)
+        self.assertEqual(mock_dispatch.call_count, 2)
+        self.assertEqual(mock_dispatch.mock_calls[0].args[0], Steps.ANNOUNCE)
+        self.assertEqual(mock_dispatch.mock_calls[1].args[0], Steps.ANNOUNCE)
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_task_one_validation_failed(self, copy_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_batch_announce_task_one_validation_failed(self, mock_dispatch):
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_announce_folder = os.path.join(tmpdir, "sips")
             os.mkdir(batch_announce_folder)
@@ -250,10 +252,11 @@ class BatchAnnounceTests(APITestCase):
             self.tag.description,
             " ERRORS: The given path is not a valid SIP:" + path_to_sip + ".",
         )
-        self.assertEqual(len(copy_delay.mock_calls), 1)
+        self.assertEqual(mock_dispatch.call_count, 1)
+        self.assertEqual(mock_dispatch.mock_calls[0].args[0], Steps.ANNOUNCE)
 
-    @patch("oais_platform.oais.tasks.copy_sip.delay")
-    def test_batch_announce_task_all_validation_failed(self, copy_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_batch_announce_task_all_validation_failed(self, mock_dispatch):
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_announce_folder = os.path.join(tmpdir, "sips")
             os.mkdir(batch_announce_folder)
@@ -303,4 +306,4 @@ class BatchAnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 1)
-        self.assertEqual(len(copy_delay.mock_calls), 0)
+        mock_dispatch.asssert_not_called()

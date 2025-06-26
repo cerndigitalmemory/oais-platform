@@ -3,7 +3,7 @@ import json
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.tasks import create_retry_step
+from oais_platform.oais.tasks.pipeline_actions import create_retry_step
 
 
 class CreateRetryStepTests(APITestCase):

@@ -6,7 +6,7 @@ from bagit_create import main as bic
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step
-from oais_platform.oais.tasks import extract_title
+from oais_platform.oais.tasks.extract_title import extract_title
 
 
 class ExtractTitleTests(APITestCase):

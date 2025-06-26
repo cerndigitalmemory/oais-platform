@@ -7,7 +7,7 @@ from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tasks import archivematica
+from oais_platform.oais.tasks.archivematica import archivematica
 from oais_platform.settings import AM_CONCURRENCY_LIMT
 
 
