@@ -30,7 +30,7 @@ class PushToCTATests(APITestCase):
         self.wait_limit_step = Step.objects.create(
             archive=self.wait_limit_archive,
             name=Steps.PUSH_TO_CTA,
-            start_date=timezone.now() - timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS),
+            start_date=timezone.now() - timedelta(hours=FTS_WAIT_LIMIT_IN_WEEKS),
         )
 
         self.schedule, _ = IntervalSchedule.objects.get_or_create(
