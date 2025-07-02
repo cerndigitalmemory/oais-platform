@@ -274,10 +274,13 @@ sentry_sdk.init(
     # release="myapp@1.0.0",
 )
 
+# Expire session after 12 hours - CERN Security requirement
+SESSION_COOKIE_AGE = 12 * 60 * 60
+
 # JWT
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=SESSION_COOKIE_AGE),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
 }
 
