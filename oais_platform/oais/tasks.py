@@ -286,6 +286,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     # Get the Archive and Step we're running for
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    step.set_task(self.request.id)
     if not archive.path_to_aip:
         logger.warning("AIP path not found for the given archive.")
         step.set_status(Status.FAILED)
