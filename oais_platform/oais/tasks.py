@@ -297,7 +297,9 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
         logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
-        _remove_periodic_task_on_failure(task_name, step, input_data)
+        _remove_periodic_task_on_failure(
+            task_name, step, {"status": 1, "errormsg": "Retry limit reached"}
+        )
         return
 
     try:
