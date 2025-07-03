@@ -7,7 +7,6 @@ from oais_platform.oais.models import Status, Step
 from oais_platform.settings import FILES_URL
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 def create_step(step_name, archive, input_step_id=None, input_data=None):
@@ -53,8 +52,6 @@ def set_and_return_error(step, errormsg, extra_log=None):
     Set the step as failed and return the error message
     """
     step.set_status(Status.FAILED)
-    print(errormsg)
-    print(type(errormsg))
     if type(errormsg) is dict:
         step.set_output_data(errormsg)
         return errormsg

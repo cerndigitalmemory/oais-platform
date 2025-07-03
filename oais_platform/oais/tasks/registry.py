@@ -9,7 +9,6 @@ from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.settings import BASE_URL, INVENIO_API_TOKEN, INVENIO_SERVER_URL
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 @shared_task(

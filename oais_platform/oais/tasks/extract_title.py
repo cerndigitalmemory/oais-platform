@@ -8,7 +8,6 @@ from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.pipeline_actions import finalize
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 @shared_task(name="extract_title", bind=True, ignore_result=True, after_return=finalize)

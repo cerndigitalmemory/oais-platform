@@ -6,7 +6,7 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.tasks.fts import check_fts_job_status
+from oais_platform.oais.tasks.cta import check_fts_job_status
 from oais_platform.settings import FTS_MAX_RETRY_COUNT
 
 

@@ -7,7 +7,7 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, Steps
-from oais_platform.oais.tasks.fts import push_to_cta
+from oais_platform.oais.tasks.cta import push_to_cta
 from oais_platform.settings import (
     FTS_CONCURRENCY_LIMIT,
     FTS_WAIT_IN_HOURS,

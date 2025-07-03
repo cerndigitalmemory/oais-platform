@@ -2,9 +2,10 @@
 from . import (
     announce,
     archivematica,
+    cta,
     extract_title,
-    fts,
     harvest,
+    integrity_checks,
     notify_source,
     pipeline_actions,
     registry,

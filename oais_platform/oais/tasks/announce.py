@@ -18,10 +18,9 @@ from oais_platform.oais.tasks.utils import (
 from oais_platform.settings import BIC_UPLOAD_PATH, SIP_UPSTREAM_BASEPATH
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
-def announce_sip(announce_path, user, return_archive=False):
+def announce_sip(announce_path, user):
     """
     Given a filesystem path and a user:
 
@@ -50,47 +49,43 @@ def announce_sip(announce_path, user, return_archive=False):
     except Exception as e:
         return {"status": 1, "errormsg": f"Couldn't validate the path as a SIP. {e}"}
 
-    if valid:
+    if not valid:
+        return {"status": 1, "errormsg": "The given path is not a valid SIP"}
+
+    try:
+        sip_json = get_manifest(announce_path)
+        source = sip_json["source"]
+        recid = sip_json["recid"]
         try:
-            sip_json = get_manifest(announce_path)
-            source = sip_json["source"]
-            recid = sip_json["recid"]
-            try:
-                if source != "local":
-                    url = get_source(source).get_record_url(recid)
-                else:
-                    url = "N/A"
-            except Exception:
+            if source != "local":
+                url = get_source(source).get_record_url(recid)
+            else:
                 url = "N/A"
         except Exception:
-            return {"status": 1, "errormsg": "Error while reading sip.json"}
+            url = "N/A"
+    except Exception:
+        return {"status": 1, "errormsg": "Error while reading sip.json"}
 
-        # Create a new Archive
-        archive = Archive.objects.create(
-            recid=recid,
-            source=source,
-            source_url=url,
-            approver=user,
-            requester=user,
-            title=f"{source} - {recid}",
-        )
+    # Create a new Archive
+    archive = Archive.objects.create(
+        recid=recid,
+        source=source,
+        source_url=url,
+        approver=user,
+        requester=user,
+        title=f"{source} - {recid}",
+    )
 
-        # Create the starting Announce step
-        input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
+    # Create the starting Announce step
+    input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
-        step = create_step(
-            Steps.ANNOUNCE, archive, input_step_id=None, input_data=input_data
-        )
+    step = create_step(
+        Steps.ANNOUNCE, archive, input_step_id=None, input_data=input_data
+    )
 
-        # Let's copy the SIP to our storage
-        run_step(step, archive.id, api_key=None)
-        if return_archive:
-            return {"status": 0, "archive": archive}
-        else:
-            return {"status": 0, "archive_id": archive.id}
-
-    else:
-        return {"status": 1, "errormsg": "The given path is not a valid SIP"}
+    # Let's copy the SIP to our storage
+    run_step(step, archive.id, api_key=None)
+    return {"status": 0, "archive_id": archive.id}
 
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
@@ -161,9 +156,9 @@ def batch_announce_task(self, announce_path, tag_id, user_id):
     for f in os.scandir(announce_path):
         try:
             if f.is_dir() and f.path != announce_path:
-                announce_response = announce_sip(f.path, user, True)
+                announce_response = announce_sip(f.path, user)
                 if announce_response["status"] == 0:
-                    tag.add_archive(announce_response["archive"])
+                    tag.add_archive(announce_response["archive_id"])
                 else:
                     add_error_to_tag_description(
                         tag, f.path, announce_response["errormsg"]

@@ -4,6 +4,7 @@ import os
 
 import requests
 from amclient import AMClient
+from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.utils import timezone
@@ -31,7 +32,6 @@ from oais_platform.settings import (
 )
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 @shared_task(
@@ -96,15 +96,16 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
 
     try:
         package = am.create_package()
-        if package in [-1, 1, 2, 3, 4]:
+        if package in error_codes:
             """
             The AMClient will return values in [-1, 1, 2, 3, 4] when there was an error in the request to the AM API.
             We can't do much in these cases, a part from suggesting to take a look at the AM logs.
             Check 'amclient/errors' for more information.
             """
+            errormsg = error_lookup(package)
             return set_and_return_error(
                 current_step,
-                f"Error while archiving {current_step.id}. This may be a configuration error. AM create returned {package}.",
+                f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
             )
         else:
             create_check_am_status(package, current_step, archive_id, api_key)

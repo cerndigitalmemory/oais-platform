@@ -21,7 +21,6 @@ from oais_platform.settings import (
 )
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 @shared_task(

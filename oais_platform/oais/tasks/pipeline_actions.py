@@ -10,10 +10,9 @@ from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks.utils import create_step
 
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 TASK_MAP = {
-    Steps.HARVEST: "process",
+    Steps.HARVEST: "harvest",
     Steps.VALIDATION: "validate",
     Steps.CHECKSUM: "checksum",
     Steps.ARCHIVE: "archivematica",
