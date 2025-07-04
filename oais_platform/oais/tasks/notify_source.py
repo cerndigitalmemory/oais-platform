@@ -8,7 +8,6 @@ from oais_platform.oais.tasks.pipeline_actions import finalize
 
 # Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
-logger.setLevel("DEBUG")
 
 
 @shared_task(
