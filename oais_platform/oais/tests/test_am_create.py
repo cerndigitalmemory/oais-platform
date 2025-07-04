@@ -52,7 +52,7 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = f"AM create returned {create_package.return_value}."
+        errormsg = f"AM create returned error {create_package.return_value}"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
