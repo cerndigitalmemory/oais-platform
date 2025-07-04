@@ -21,7 +21,7 @@ class ArchivematicaCreateTests(APITestCase):
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
-        create_package.return_value = 0
+        create_package.return_value = {"id": "test_package_id"}
         result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
