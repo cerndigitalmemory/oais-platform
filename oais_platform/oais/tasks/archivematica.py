@@ -94,7 +94,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
 
     try:
         package = am.create_package()
-        if package in error_codes:
+        if isinstance(package, (str, int)) and package in error_codes:
             """
             The AMClient will return values in [-1, 1, 2, 3, 4] when there was an error in the request to the AM API.
             We can't do much in these cases, a part from suggesting to take a look at the AM logs.
