@@ -46,9 +46,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
-    current_am_tasks = PeriodicTask.objects.filter(
-        task="check_am_status", enabled=True
-    ).count()
+    current_am_tasks = get_am_task_count()
     current_step = Step.objects.get(pk=step_id)
     if current_am_tasks >= AM_CONCURRENCY_LIMT:
         if self.request.retries >= self.max_retries:
