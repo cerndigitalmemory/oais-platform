@@ -1,7 +1,8 @@
 import json
 import os
 
-from celery import shared_task, states
+from celery import shared_task
+from celery import states as celery_states
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
@@ -16,7 +17,7 @@ TASK_MAP = {
     Steps.VALIDATION: "validate",
     Steps.CHECKSUM: "checksum",
     Steps.ARCHIVE: "archivematica",
-    Steps.INVENIO_RDM_PUSH: "processInvenio",
+    Steps.INVENIO_RDM_PUSH: "process_invenio",
     Steps.PUSH_TO_CTA: "push_to_cta",
     Steps.EXTRACT_TITLE: "extract_title",
     Steps.NOTIFY_SOURCE: "notify_source",
@@ -129,13 +130,13 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
     return {"errormsg": None}
 
 
-def finalize(self, status, retval, task_id, args, kwargs, einfo):
+def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
     """
     This "callback" function is called everytime a Celery task
     finished its execution to update the status of the
     relevant Archive and Step.
 
-    status: Celery task status
+    current_status: Celery task status
     retval: returned value from the execution of the celery task
     task_id: Celery task ID
     """
@@ -147,11 +148,10 @@ def finalize(self, status, retval, task_id, args, kwargs, einfo):
     step_id = args[1]
     step = Step.objects.get(pk=step_id)
 
-    # TODO: Check if this should be removed
     step.set_task(self.request.id)
 
     # If the Celery task succeded
-    if status == states.SUCCESS:
+    if current_status == celery_states.SUCCESS:
         # Even if the status is SUCCESS, the task may have failed
         # (e.g. without throwing an exception) so here we check
         # for returned errors

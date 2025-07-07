@@ -12,7 +12,7 @@ logger = get_task_logger(__name__)
 
 
 @shared_task(
-    name="processInvenio", bind=True, ignore_result=True, after_return=finalize
+    name="process_invenio", bind=True, ignore_result=True, after_return=finalize
 )
 def invenio(self, archive_id, step_id, input_data=None, api_key=None):
     """

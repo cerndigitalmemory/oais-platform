@@ -72,29 +72,23 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
     if bagit_result["status"] == 1:
         error_msg = str(bagit_result["errormsg"])
         retry = False
-        if "429" in error_msg:
-            logger.error("Rate limit exceeded.")
-            retry = True
-        elif "408" in error_msg:
-            logger.error("Request timeout.")
-            retry = True
-        elif "502" in error_msg:
-            logger.error("Bad gateway.")
-            retry = True
-        elif "503" in error_msg:
-            logger.error("Service unavailable.")
-            retry = True
-        elif "504" in error_msg:
-            logger.error("Gateway timeout.")
-            retry = True
+        retry_codes = {
+            "429": "Rate limit exceeded.",
+            "408": "Request timeout.",
+            "502": "Bad gateway",
+            "503": "Service unavailable",
+            "504": "Gateway timeout",
+        }
+        for key in retry_codes:
+            if key in error_msg:
+                logger.error(retry_codes[key])
+                retry = True
 
         if retry:
             if self.request.retries >= self.max_retries:
                 return {"status": 1, "errormsg": "Max retries exceeded."}
-            else:
-                raise self.retry(exc=Exception(error_msg), countdown=2 * 60)
-        else:
-            return {"status": 1, "errormsg": error_msg}
+            raise self.retry(exc=Exception(error_msg), countdown=2 * 60)
+        return {"status": 1, "errormsg": error_msg}
 
     sip_folder_name = bagit_result["foldername"]
 

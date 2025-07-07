@@ -214,7 +214,7 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
     status = {"status": 0, "errormsg": None, "artifact": cta_artifact}
     finalize(
         self=self,
-        status=states.SUCCESS,
+        current_status=states.SUCCESS,
         retval=status,
         task_id=None,
         args=[archive_id, step.id, None, api_key],

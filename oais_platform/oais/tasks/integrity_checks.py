@@ -25,9 +25,6 @@ def validate(self, archive_id, step_id, input_data=None, api_key=None):
     current_step = Step.objects.get(pk=step_id)
     current_step.set_status(Status.IN_PROGRESS)
 
-    # Set task id
-    current_step.set_task(self.request.id)
-
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(sip_folder_name)
 
@@ -58,9 +55,6 @@ def checksum(self, archive_id, step_id, input_data=None, api_key=None):
 
     current_step = Step.objects.get(pk=step_id)
     current_step.set_status(Status.IN_PROGRESS)
-
-    # Set task id
-    current_step.set_task(self.request.id)
 
     sip_exists = os.path.exists(path_to_sip)
     if not sip_exists:
