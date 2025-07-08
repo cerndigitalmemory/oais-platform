@@ -79,10 +79,11 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             "503": "Service unavailable",
             "504": "Gateway timeout",
         }
-        for key in retry_codes:
-            if key in error_msg:
-                logger.error(retry_codes[key])
-                retry = True
+        if any(key in error_msg for key in retry_codes):
+            logger.error(
+                next(retry_codes[key] for key in retry_codes if key in error_msg)
+            )
+            retry = True
 
         if retry:
             if self.request.retries >= self.max_retries:
