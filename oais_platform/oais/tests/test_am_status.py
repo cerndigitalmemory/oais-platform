@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tasks import check_am_status
+from oais_platform.oais.tasks.archivematica import check_am_status
 from oais_platform.settings import AM_WAITING_TIME_LIMIT
 
 

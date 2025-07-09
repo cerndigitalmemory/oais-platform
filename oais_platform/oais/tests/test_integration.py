@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.models import Steps
+
 
 class IntegrationAPITests(APITestCase):
     """Tests the integration of the API without using "reverse".
@@ -18,8 +20,8 @@ class IntegrationAPITests(APITestCase):
         self.superuser = User.objects.create_superuser("superuser", "", "pw")
         self.test_user = User.objects.create_user("testuser", "", "pw")
 
-    @patch("oais_platform.oais.tasks.process.delay")
-    def test_search_and_harvest(self, process_delay):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_search_and_harvest(self, mock_dispatch):
         """
         Test the search and harvest functionality by creating and unstaging a record.
         """
@@ -104,6 +106,6 @@ class IntegrationAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
 
-        process_delay.assert_called_once_with(
-            result["id"], response.data[0]["id"], None, None
+        mock_dispatch.assert_called_once_with(
+            Steps.HARVEST, result["id"], response.data[0]["id"], None, None
         )

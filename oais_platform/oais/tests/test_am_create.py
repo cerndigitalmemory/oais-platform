@@ -7,7 +7,7 @@ from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step
-from oais_platform.oais.tasks import archivematica
+from oais_platform.oais.tasks.archivematica import archivematica
 from oais_platform.settings import AM_CONCURRENCY_LIMT
 
 
@@ -21,7 +21,7 @@ class ArchivematicaCreateTests(APITestCase):
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
-        create_package.return_value = 0
+        create_package.return_value = {"id": "test_package_id"}
         result = archivematica.apply(args=[self.archive.id, self.step.id])
 
         result = result.get()
@@ -52,7 +52,7 @@ class ArchivematicaCreateTests(APITestCase):
         result = result.get()
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
-        errormsg = f"AM create returned {create_package.return_value}."
+        errormsg = f"AM create returned error {create_package.return_value}"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], 1)
