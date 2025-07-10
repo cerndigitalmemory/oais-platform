@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -24,7 +25,7 @@ class ExtractTitleTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -43,7 +44,7 @@ class ExtractTitleTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
