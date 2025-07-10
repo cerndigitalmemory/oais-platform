@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import timedelta
 
@@ -60,7 +61,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
             source=archive.source,
-            loglevel=2,
+            loglevel=logging.WARNING,
             target=BIC_UPLOAD_PATH,
             token=api_key,
             workdir=BIC_WORKDIR,

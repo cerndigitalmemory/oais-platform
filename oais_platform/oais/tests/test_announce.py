@@ -1,3 +1,4 @@
+import logging
 import ntpath
 import os
 import tempfile
@@ -75,7 +76,7 @@ class AnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -119,7 +120,7 @@ class AnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 

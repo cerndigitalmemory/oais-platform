@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from unittest import skip
@@ -95,7 +96,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -103,7 +104,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -142,7 +143,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -150,7 +151,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -204,7 +205,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -212,7 +213,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -236,7 +237,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -248,7 +249,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -274,7 +275,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
 
@@ -286,7 +287,7 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
             )
             foldername2 = sip2["foldername"]

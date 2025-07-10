@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import zipfile
@@ -78,7 +79,7 @@ class UploadTests(APITestCase):
                     recid="yz39b-yf220",
                     source="cds-rdm-sandbox",
                     target=tmpdir2,
-                    loglevel=0,
+                    loglevel=logging.DEBUG,
                     workdir=BIC_WORKDIR,
                 )
 

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -953,7 +954,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         result = bic.process(
             recid=None,
             source="local",
-            loglevel=0,
+            loglevel=logging.DEBUG,
             target=base_path,
             source_path=uj.tmp_dir,
             author=str(request.user.id),
