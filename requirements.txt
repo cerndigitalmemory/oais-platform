@@ -1,4 +1,4 @@
-bagit-create==0.2.2
+git+https://gitlab.cern.ch/digitalmemory/bagit-create@85-workdir-config
 Django==5.0.6
 djangorestframework==3.14.0
 pymarc==4.0.0

@@ -12,6 +12,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step, Steps
 from oais_platform.oais.views import check_allowed_path
+from oais_platform.settings import BIC_WORKDIR
 
 
 class AnnounceTests(APITestCase):
@@ -75,6 +76,7 @@ class AnnounceTests(APITestCase):
                 source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = res["foldername"]
@@ -118,6 +120,7 @@ class AnnounceTests(APITestCase):
                 source="cds-rdm-sandbox",
                 target=tmpdir,
                 loglevel=0,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = res["foldername"]

@@ -12,6 +12,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step, Steps
+from oais_platform.settings import BIC_WORKDIR
 
 
 class UploadTests(APITestCase):
@@ -78,6 +79,7 @@ class UploadTests(APITestCase):
                     source="cds-rdm-sandbox",
                     target=tmpdir2,
                     loglevel=0,
+                    workdir=BIC_WORKDIR,
                 )
 
                 foldername = res["foldername"]

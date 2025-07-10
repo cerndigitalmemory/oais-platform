@@ -63,7 +63,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
-from oais_platform.settings import ALLOW_LOCAL_LOGIN, PIPELINE_SIZE_LIMIT
+from oais_platform.settings import ALLOW_LOCAL_LOGIN, BIC_WORKDIR, PIPELINE_SIZE_LIMIT
 
 from . import pipeline
 
@@ -957,6 +957,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             target=base_path,
             source_path=uj.tmp_dir,
             author=str(request.user.id),
+            workdir=BIC_WORKDIR,
         )
 
         if result["status"] != 0:
