@@ -26,6 +26,7 @@ from oais_platform.settings import (
     AUTOMATIC_HARVEST_BATCH_SIZE,
     AUTOMATIC_HARVEST_MAX_FILE_SIZE,
     BIC_UPLOAD_PATH,
+    BIC_WORKDIR,
     SIP_UPSTREAM_BASEPATH,
 )
 
@@ -62,6 +63,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             loglevel=2,
             target=BIC_UPLOAD_PATH,
             token=api_key,
+            workdir=BIC_WORKDIR,
         )
     except Exception as e:
         return {"status": 1, "errormsg": str(e)}

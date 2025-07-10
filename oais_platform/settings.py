@@ -311,6 +311,8 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 
 # Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
 BIC_UPLOAD_PATH = "oais-data"
+# Path where the bags are processed, but not stored
+BIC_WORKDIR = "/tmp"
 
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
