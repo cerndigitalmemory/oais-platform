@@ -1052,6 +1052,61 @@ def statistics(request):
     return Response(data)
 
 
+@api_view(["GET"])
+def step_statistics(request):
+    data = {
+        "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
+        "harvested_preserved_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE],
+            exclude_steps=[Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+        ),
+        "harvested_preserved_tape_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE, Steps.PUSH_TO_CTA],
+            exclude_steps=[Steps.INVENIO_RDM_PUSH],
+        ),
+        "harvested_preserved_registry_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH],
+            exclude_steps=[Steps.PUSH_TO_CTA],
+        ),
+        "harvested_preserved_tape_registry_count": count_archives_by_steps(
+            include_steps=[
+                Steps.ARCHIVE,
+                Steps.PUSH_TO_CTA,
+                Steps.INVENIO_RDM_PUSH,
+            ]
+        ),
+    }
+
+    return Response(data)
+
+
+def count_archives_by_steps(include_steps=None, exclude_steps=None):
+    """
+    Returns count of Archives based on included and excluded completed steps.
+
+    :param include_steps: A list or tuple of Steps.name to include (must be completed).
+    :param exclude_steps: A list or tuple of Steps.name to exclude if completed.
+    """
+    if include_steps is None:
+        include_steps = []
+    if exclude_steps is None:
+        exclude_steps = []
+
+    archives = Archive.objects.all()
+
+    for step_name in include_steps:
+        archives = archives.filter(
+            steps__name=step_name, steps__status=Status.COMPLETED
+        )
+
+    for step_name in exclude_steps:
+        archives = archives.exclude(
+            steps__name=step_name, steps__status=Status.COMPLETED
+        )
+
+    return archives.distinct().count()
+
+
 @extend_schema_view(
     post=extend_schema(
         description="""Creates an Archive given an UploadedFile
