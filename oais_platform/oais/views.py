@@ -13,7 +13,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -1087,21 +1087,29 @@ def count_archives_by_steps(include_steps=None, exclude_steps=None):
     :param include_steps: A list or tuple of Steps.name to include (must be completed).
     :param exclude_steps: A list or tuple of Steps.name to exclude if completed.
     """
-    if include_steps is None:
-        include_steps = []
-    if exclude_steps is None:
-        exclude_steps = []
+    include_steps = include_steps or []
+    exclude_steps = exclude_steps or []
 
     archives = Archive.objects.all()
 
     for step_name in include_steps:
         archives = archives.filter(
-            steps__name=step_name, steps__status=Status.COMPLETED
+            Exists(
+                Step.objects.filter(
+                    archive=OuterRef("pk"),
+                    name=step_name,
+                    status=Status.COMPLETED,
+                )
+            )
         )
 
     for step_name in exclude_steps:
-        archives = archives.exclude(
-            steps__name=step_name, steps__status=Status.COMPLETED
+        archives = archives.filter(
+            ~Exists(
+                Step.objects.filter(
+                    archive=OuterRef("pk"), name=step_name, status=Status.COMPLETED
+                )
+            )
         )
 
     return archives.distinct().count()
