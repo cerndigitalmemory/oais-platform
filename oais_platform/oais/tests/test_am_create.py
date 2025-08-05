@@ -125,7 +125,7 @@ class ArchivematicaCreateTests(APITestCase):
 
             self.step.refresh_from_db()
             step_output = json.loads(self.step.output_data)
-            msg = "Archivematics is busy, retrying"
+            msg = "Archivematica is busy, retrying"
             self.assertEqual(self.step.status, Status.NOT_RUN)
             self.assertIn(msg, step_output["message"])
 

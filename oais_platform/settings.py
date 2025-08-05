@@ -360,11 +360,12 @@ PIPELINE_SIZE_LIMIT = 10
 AUTOMATIC_HARVEST_BATCH_SIZE = 100
 # Automatic harvest delay time between batches in minutes
 AUTOMATIC_HARVEST_BATCH_DELAY = 10
-# Automatic harvest max file size in bytes
-AUTOMATIC_HARVEST_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 
 # Encryption key for storing the API Keys in the DB
-ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
+ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "test")
+
+# Based on available disk space for harvest and Archivematica (smallest of the two)
+AGGREGATED_FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 50 * 1024 * 1024 * 1024  # 50 GB
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file

@@ -2,11 +2,14 @@ import json
 import logging
 import os
 from datetime import timedelta
+from pathlib import Path
 
 import bagit_create
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
+from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
@@ -21,11 +24,11 @@ from oais_platform.oais.models import (
 )
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import execute_pipeline, finalize
-from oais_platform.oais.tasks.utils import create_path_artifact
+from oais_platform.oais.tasks.utils import create_path_artifact, set_and_return_error
 from oais_platform.settings import (
+    AGGREGATED_FILE_SIZE_LIMIT,
     AUTOMATIC_HARVEST_BATCH_DELAY,
     AUTOMATIC_HARVEST_BATCH_SIZE,
-    AUTOMATIC_HARVEST_MAX_FILE_SIZE,
     BIC_UPLOAD_PATH,
     BIC_WORKDIR,
     SIP_UPSTREAM_BASEPATH,
@@ -48,9 +51,43 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
     )
 
     archive = Archive.objects.get(pk=archive_id)
-
     step = Step.objects.get(pk=step_id)
-    step.set_status(Status.IN_PROGRESS)
+
+    with transaction.atomic():
+        size = archive.original_file_size
+        if size:
+            if size > AGGREGATED_FILE_SIZE_LIMIT:
+                logger.warning(
+                    f"Archive {archive.id} exceeds file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
+                )
+                return set_and_return_error(
+                    step, "Record is too large to be harvested."
+                )
+
+            total_size = (
+                Step.objects.select_for_update()
+                .filter(name=Steps.HARVEST, status=Status.IN_PROGRESS)
+                .aggregate(total_original_size=Sum("archive__original_file_size"))[
+                    "total_original_size"
+                ]
+                or 0
+            )
+
+            if size + total_size > AGGREGATED_FILE_SIZE_LIMIT:
+                logger.warning(
+                    f"Archive {archive.id} exceeds aggregated file size limit "
+                    f"({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
+                )
+                return set_and_return_error(
+                    step,
+                    "Record is too large to be harvested at the moment. Try again later.",
+                )
+        else:
+            logger.warning(
+                f"Archive {archive.id} does not have file size set, skipping size checks."
+            )
+
+        step.set_status(Status.IN_PROGRESS)
 
     if not api_key:
         logger.info(
@@ -100,6 +137,8 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
 
     archive.set_path(sip_folder_name)
+    sip_size = sum(file.stat().st_size for file in Path(sip_folder_name).rglob("*"))
+    archive.set_sip_size(sip_size)
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
@@ -233,34 +272,14 @@ def batch_harvest(
                 source_url=record["source_url"],
                 requester_id=user_id,
                 approver_id=user_id,
+                original_file_size=record.get("file_size", 0),
             )
             harvest_tag.add_archive(archive.id)
 
-            if (
-                "file_size" in record
-                and record["file_size"]
-                and record["file_size"] > AUTOMATIC_HARVEST_MAX_FILE_SIZE
-            ):
-                logger.warning(
-                    f"Record {record['recid']} from {source_name} is too large to be harvested."
-                )
-                failed_harvest = Step.objects.create(
-                    name=Steps.HARVEST,
-                    status=Status.FAILED,
-                    archive=archive,
-                )
-                failed_harvest.set_output_data(
-                    {
-                        "status": 1,
-                        "errormsg": "Record is too large to be harvested.",
-                    }
-                )
-                archive.set_last_step(failed_harvest)
-            else:
-                for step in pipeline:
-                    archive.add_step_to_pipeline(step)
+            for step in pipeline:
+                archive.add_step_to_pipeline(step)
 
-                execute_pipeline(archive.id, api_key)
+            execute_pipeline(archive.id, api_key)
         except Exception as e:
             logger.error(
                 f"Error while processing {record['recid']} from {source_name}: {str(e)}"
