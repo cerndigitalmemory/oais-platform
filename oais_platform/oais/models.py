@@ -115,6 +115,8 @@ class Archive(models.Model):
     # Resource attached to the archive
     resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
+    sip_size = models.BigIntegerField(default=0)
+    original_file_size = models.BigIntegerField(default=0)
 
     class Meta:
         ordering = ["-id"]
@@ -163,6 +165,14 @@ class Archive(models.Model):
 
     def set_title(self, title):
         self.title = title
+        self.save()
+
+    def set_sip_size(self, size):
+        self.sip_size = size
+        self.save()
+
+    def set_original_file_size(self, size):
+        self.original_file_size = size
         self.save()
 
     def save(self, *args, **kwargs):

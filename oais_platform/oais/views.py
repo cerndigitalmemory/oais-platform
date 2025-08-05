@@ -210,10 +210,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     requester=request.user,
                     staged=True,
+                    original_file_size=record.get("file_size", 0),
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
-            return Response({"status": 1, "errormsg": e})
+            return Response({"status": 1, "errormsg": str(e)})
 
     @action(detail=False, url_path="me/stats", url_name="me-stats")
     def get_steps_status(self, request):
