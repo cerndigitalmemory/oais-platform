@@ -168,6 +168,10 @@ class Archive(models.Model):
         self.title = title
         self.save()
 
+    def set_sip_size(self, size):
+        self.sip_size = size
+        self.save()
+
     def update_sip_size(self):
         self.sip_size = sum(
             file.stat().st_size for file in Path(self.path_to_sip).rglob("*")
