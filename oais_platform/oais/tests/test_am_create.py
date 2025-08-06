@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import requests
 from celery.exceptions import Retry
@@ -8,13 +8,17 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.archivematica import archivematica
-from oais_platform.settings import AM_CONCURRENCY_LIMT
+from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, AM_CONCURRENCY_LIMT
 
 
 class ArchivematicaCreateTests(APITestCase):
     def setUp(self):
         self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", path_to_sip="test_path"
+            recid="1",
+            source="test",
+            source_url="",
+            path_to_sip="test_path",
+            sip_size=1000,
         )
 
         self.step = Step.objects.create(archive=self.archive, name=5)
@@ -143,3 +147,29 @@ class ArchivematicaCreateTests(APITestCase):
             msg = "Archivematica max retries exceeded"
             self.assertEqual(self.step.status, Status.FAILED)
             self.assertIn(msg, step_output["errormsg"])
+
+    def test_archivematica_file_size_exceeded(self):
+        self.archive.set_sip_size(AGGREGATED_FILE_SIZE_LIMIT + 1)
+        archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
+
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+        msg = "SIP exceeds the Archivematica file size limit"
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertIn(msg, step_output["errormsg"])
+
+    def test_archivematica_aggr_file_size_exceeded(self):
+        mock_qs = MagicMock()
+        mock_qs.aggregate.return_value = {"total": AGGREGATED_FILE_SIZE_LIMIT}
+
+        with patch(
+            "oais_platform.oais.models.Archive.objects.filter", return_value=mock_qs
+        ):
+            with self.assertRaises(Retry):
+                archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
+
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+        msg = "Archivematica is busy, retrying"
+        self.assertEqual(self.step.status, Status.NOT_RUN)
+        self.assertIn(msg, step_output["message"])

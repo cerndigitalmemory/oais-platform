@@ -78,10 +78,9 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                     f"Archive {archive.id} exceeds aggregated file size limit "
                     f"({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
                 )
-                return set_and_return_error(
-                    step,
-                    "Record is too large to be harvested at the moment. Try again later.",
-                )
+                if self.request.retries >= self.max_retries:
+                    return {"status": 1, "errormsg": "Max retries exceeded."}
+                raise self.retry(exc=Exception("Record is too large to be harvested at the moment"), countdown=2 * 60)
         else:
             logger.warning(
                 f"Archive {archive.id} does not have file size set, skipping size checks."

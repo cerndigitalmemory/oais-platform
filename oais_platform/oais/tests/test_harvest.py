@@ -15,7 +15,7 @@ class HarvestTest(APITestCase):
         self.archive = Archive.objects.create(
             recid="1",
             source="test_source",
-            original_file_size=AGGREGATED_FILE_SIZE_LIMIT - 100,
+            original_file_size=100,
         )
         self.step = Step.objects.create(
             archive=self.archive, name=Steps.HARVEST, status=Status.WAITING
@@ -32,26 +32,26 @@ class HarvestTest(APITestCase):
             result = harvest.apply(
                 args=[self.archive.id, self.step.id], throw=True
             ).get()
-            self.assertEqual(result["status"], 0)
-            self.assertEqual(result["foldername"], sip_folder)
-            self.assertEqual(result["artifact"]["artifact_name"], "SIP")
-            self.assertEqual(
-                result["artifact"]["artifact_localpath"],
-                os.path.join(BIC_UPLOAD_PATH, sip_folder),
-            )
-            self.step.refresh_from_db()
-            self.assertEqual(self.step.status, Status.COMPLETED)
+        self.assertEqual(result["status"], 0)
+        self.assertEqual(result["foldername"], sip_folder)
+        self.assertEqual(result["artifact"]["artifact_name"], "SIP")
+        self.assertEqual(
+            result["artifact"]["artifact_localpath"],
+            os.path.join(BIC_UPLOAD_PATH, sip_folder),
+        )
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.COMPLETED)
 
-    def test_harvest_file_too_big(self):
+    def test_harvest_file_size_exceeded(self):
         self.archive.set_original_file_size(AGGREGATED_FILE_SIZE_LIMIT + 100)
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], "Record is too large to be harvested.")
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.FAILED)
 
-    def test_harvest_too_many_concurrent_harvests(self):
+    def test_harvest_aggr_file_size_exceeded(self):
         for i in range(2):
             archive = Archive.objects.create(
                 recid=f"r{i}",
@@ -62,12 +62,30 @@ class HarvestTest(APITestCase):
                 archive=archive, name=Steps.HARVEST, status=Status.IN_PROGRESS
             )
 
-        self.archive.set_original_file_size(1)
+        with self.assertRaises(Retry):
+            harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.WAITING)
+
+    @patch("celery.app.task.Task.request")
+    def test_harvest_aggr_file_size_retries_exceeded(self, task_request):
+        for i in range(2):
+            archive = Archive.objects.create(
+                recid=f"r{i}",
+                source="test_source",
+                original_file_size=AGGREGATED_FILE_SIZE_LIMIT / 2,
+            )
+            Step.objects.create(
+                archive=archive, name=Steps.HARVEST, status=Status.IN_PROGRESS
+            )
+
+        task_request.id = "test_task_id"
+        task_request.retries = 10
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
+        self.assertEqual(result["status"], 1)
+        self.assertEqual(result["errormsg"], "Max retries exceeded.")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(result["status"], 1)
-        self.assertIn("Record is too large to be harvested", result["errormsg"])
 
     @patch("bagit_create.main.process")
     def test_harvest_bagit_exception(self, bagit_create):
