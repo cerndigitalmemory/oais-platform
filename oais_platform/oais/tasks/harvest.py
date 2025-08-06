@@ -2,7 +2,6 @@ import json
 import logging
 import os
 from datetime import timedelta
-from pathlib import Path
 
 import bagit_create
 from celery import shared_task
@@ -139,8 +138,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
 
     archive.set_path(sip_folder_name)
-    sip_size = sum(file.stat().st_size for file in Path(sip_folder_name).rglob("*"))
-    archive.set_sip_size(sip_size)
+    archive.update_sip_size()
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
