@@ -220,6 +220,8 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
 
 
 def resource_check(task, current_step, archive):
+    if archive.sip_size == 0:
+        archive.update_sip_size()
     if archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT:
         return set_and_return_error(
             current_step,
