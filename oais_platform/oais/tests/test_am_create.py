@@ -149,7 +149,8 @@ class ArchivematicaCreateTests(APITestCase):
             self.assertIn(msg, step_output["errormsg"])
 
     def test_archivematica_file_size_exceeded(self):
-        self.archive.set_sip_size(AGGREGATED_FILE_SIZE_LIMIT + 1)
+        self.archive.sip_size = AGGREGATED_FILE_SIZE_LIMIT + 1
+        self.archive.save()
         archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
 
         self.step.refresh_from_db()

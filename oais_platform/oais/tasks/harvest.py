@@ -51,6 +51,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    retry_interval_minutes = 2
 
     with transaction.atomic():
         size = archive.original_file_size
@@ -79,9 +80,16 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 )
                 if self.request.retries >= self.max_retries:
                     return {"status": 1, "errormsg": "Max retries exceeded."}
+                step.set_status(Status.WAITING)
+                step.set_output_data(
+                    {
+                        "status": 0,
+                        "errormsg": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
+                    }
+                )
                 raise self.retry(
                     exc=Exception("Record is too large to be harvested at the moment"),
-                    countdown=2 * 60,
+                    countdown=retry_interval_minutes * 60,
                 )
         else:
             logger.warning(
@@ -129,7 +137,16 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         if retry:
             if self.request.retries >= self.max_retries:
                 return {"status": 1, "errormsg": "Max retries exceeded."}
-            raise self.retry(exc=Exception(error_msg), countdown=2 * 60)
+            step.set_status(Status.WAITING)
+            step.set_output_data(
+                {
+                    "status": 0,
+                    "errormsg": f"Retrying in {retry_interval_minutes} minutes (bagit-create error)",
+                }
+            )
+            raise self.retry(
+                exc=Exception(error_msg), countdown=retry_interval_minutes * 60
+            )
         return {"status": 1, "errormsg": error_msg}
 
     sip_folder_name = bagit_result["foldername"]
