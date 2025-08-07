@@ -105,7 +105,7 @@ class HarvestTest(APITestCase):
         with self.assertRaises(Retry):
             harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertEqual(self.step.status, Status.WAITING)
 
     @patch("bagit_create.main.process")
     @patch("celery.app.task.Task.request")

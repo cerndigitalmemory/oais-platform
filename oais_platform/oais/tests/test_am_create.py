@@ -118,35 +118,41 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(result["status"], 1)
         self.assertIn(exception_msg, result["errormsg"])
 
-    def test_archivematica_retry(self):
-        with patch(
-            "django_celery_beat.models.PeriodicTask.objects.filter"
-        ) as mock_filter:
-            mock_filter.return_value.count.return_value = AM_CONCURRENCY_LIMT
+    @patch("django_celery_beat.models.PeriodicTask.objects.select_for_update")
+    def test_archivematica_retry(self, mock_filter):
+        mock_qs = MagicMock()
+        mock_filtered_qs = MagicMock()
+        mock_filtered_qs.count.return_value = AM_CONCURRENCY_LIMT
+        mock_qs.filter.return_value = mock_filtered_qs
+        mock_filter.return_value = mock_qs
 
-            with self.assertRaises(Retry):
-                archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
-
-            self.step.refresh_from_db()
-            step_output = json.loads(self.step.output_data)
-            msg = "Archivematica is busy, retrying"
-            self.assertEqual(self.step.status, Status.NOT_RUN)
-            self.assertIn(msg, step_output["message"])
-
-    @patch("celery.app.task.Task.request")
-    def test_archivematica_retries_exceeded(self, mock_task_request):
-        with patch(
-            "django_celery_beat.models.PeriodicTask.objects.filter"
-        ) as mock_filter:
-            mock_filter.return_value.count.return_value = AM_CONCURRENCY_LIMT
-            mock_task_request.retries = 10
+        with self.assertRaises(Retry):
             archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
 
-            self.step.refresh_from_db()
-            step_output = json.loads(self.step.output_data)
-            msg = "Archivematica max retries exceeded"
-            self.assertEqual(self.step.status, Status.FAILED)
-            self.assertIn(msg, step_output["errormsg"])
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+        msg = "Archivematica is busy, retrying"
+        self.assertEqual(self.step.status, Status.NOT_RUN)
+        self.assertIn(msg, step_output["message"])
+
+    @patch("django_celery_beat.models.PeriodicTask.objects.select_for_update")
+    @patch("celery.app.task.Task.request")
+    def test_archivematica_retries_exceeded(self, mock_task_request, mock_filter):
+        mock_qs = MagicMock()
+        mock_filtered_qs = MagicMock()
+        mock_filtered_qs.count.return_value = AM_CONCURRENCY_LIMT
+        mock_qs.filter.return_value = mock_filtered_qs
+        mock_filter.return_value = mock_qs
+        mock_task_request.id = "test_task_id"
+        mock_task_request.retries = 10
+
+        archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
+
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+        msg = "Archivematica max retries exceeded"
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertIn(msg, step_output["errormsg"])
 
     def test_archivematica_file_size_exceeded(self):
         self.archive.sip_size = AGGREGATED_FILE_SIZE_LIMIT + 1
@@ -159,15 +165,16 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertIn(msg, step_output["errormsg"])
 
-    def test_archivematica_aggr_file_size_exceeded(self):
+    @patch("oais_platform.oais.models.Archive.objects.select_for_update")
+    def test_archivematica_aggr_file_size_exceeded(self, mock_filter):
         mock_qs = MagicMock()
-        mock_qs.aggregate.return_value = {"total": AGGREGATED_FILE_SIZE_LIMIT}
+        mock_filtered_qs = MagicMock()
+        mock_filtered_qs.aggregate.return_value = {"total": AGGREGATED_FILE_SIZE_LIMIT}
+        mock_qs.filter.return_value = mock_filtered_qs
+        mock_filter.return_value = mock_qs
 
-        with patch(
-            "oais_platform.oais.models.Archive.objects.filter", return_value=mock_qs
-        ):
-            with self.assertRaises(Retry):
-                archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
+        with self.assertRaises(Retry):
+            archivematica.apply(args=[self.archive.id, self.step.id], throw=True)
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)

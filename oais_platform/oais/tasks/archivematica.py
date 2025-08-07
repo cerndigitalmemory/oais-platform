@@ -6,6 +6,7 @@ import requests
 from amclient import AMClient
 from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
+from celery.exceptions import Retry
 from celery.utils.log import get_task_logger
 from django.db import transaction
 from django.db.models import Sum
@@ -51,6 +52,15 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     """
     current_step = Step.objects.get(pk=step_id)
     archive = Archive.objects.get(pk=archive_id)
+    try:
+        if (res := resource_check(self, current_step, archive)) != 0:
+            return res
+    except Retry as e:
+        current_step.set_output_data(
+            {"message": "Archivematica is busy, retrying soon..."}
+        )
+        raise e
+
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
@@ -234,7 +244,6 @@ def resource_check(task, current_step, archive):
             task="check_am_status", enabled=True
         )
         current_am_tasks_count = current_am_tasks_qs.count()
-
         archive_ids = list(current_am_tasks_qs.values_list("args", flat=True))
         archive_ids = [json.loads(arg)[1] for arg in archive_ids]
 
@@ -255,11 +264,6 @@ def resource_check(task, current_step, archive):
                 )
 
             retry_interval = 10 * (task.request.retries + 1)
-            current_step.set_output_data(
-                {
-                    "message": f"Archivematica is busy, retrying in {retry_interval} minutes."
-                }
-            )
 
             exc_message = (
                 "Archivematica concurrency limit reached."
