@@ -13,7 +13,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -1050,6 +1050,69 @@ def statistics(request):
         .count(),
     }
     return Response(data)
+
+
+@api_view(["GET"])
+def step_statistics(request):
+    data = {
+        "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
+        "harvested_preserved_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE],
+            exclude_steps=[Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+        ),
+        "harvested_preserved_tape_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE, Steps.PUSH_TO_CTA],
+            exclude_steps=[Steps.INVENIO_RDM_PUSH],
+        ),
+        "harvested_preserved_registry_count": count_archives_by_steps(
+            include_steps=[Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH],
+            exclude_steps=[Steps.PUSH_TO_CTA],
+        ),
+        "harvested_preserved_tape_registry_count": count_archives_by_steps(
+            include_steps=[
+                Steps.ARCHIVE,
+                Steps.PUSH_TO_CTA,
+                Steps.INVENIO_RDM_PUSH,
+            ]
+        ),
+    }
+
+    return Response(data)
+
+
+def count_archives_by_steps(include_steps=None, exclude_steps=None):
+    """
+    Returns count of Archives based on included and excluded completed steps.
+
+    :param include_steps: A list or tuple of Steps.name to include (must be completed).
+    :param exclude_steps: A list or tuple of Steps.name to exclude if completed.
+    """
+    include_steps = include_steps or []
+    exclude_steps = exclude_steps or []
+
+    archives = Archive.objects.all()
+
+    for step_name in include_steps:
+        archives = archives.filter(
+            Exists(
+                Step.objects.filter(
+                    archive=OuterRef("pk"),
+                    name=step_name,
+                    status=Status.COMPLETED,
+                )
+            )
+        )
+
+    for step_name in exclude_steps:
+        archives = archives.filter(
+            ~Exists(
+                Step.objects.filter(
+                    archive=OuterRef("pk"), name=step_name, status=Status.COMPLETED
+                )
+            )
+        )
+
+    return archives.distinct().count()
 
 
 @extend_schema_view(
