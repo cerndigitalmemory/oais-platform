@@ -118,7 +118,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(result["status"], 1)
         self.assertIn(exception_msg, result["errormsg"])
 
-    @patch("oais_platform.oais.models.Steps.objects.select_for_update")
+    @patch("oais_platform.oais.models.Step.objects.select_for_update")
     def test_archivematica_retry(self, mock_filter):
         mock_qs = MagicMock()
         mock_filtered_qs = MagicMock()
@@ -132,10 +132,10 @@ class ArchivematicaCreateTests(APITestCase):
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
         msg = "Archivematica is busy, retrying"
-        self.assertEqual(self.step.status, Status.NOT_RUN)
+        self.assertEqual(self.step.status, Status.WAITING)
         self.assertIn(msg, step_output["message"])
 
-    @patch("oais_platform.oais.models.Steps.objects.select_for_update")
+    @patch("oais_platform.oais.models.Step.objects.select_for_update")
     @patch("celery.app.task.Task.request")
     def test_archivematica_retries_exceeded(self, mock_task_request, mock_filter):
         mock_qs = MagicMock()
