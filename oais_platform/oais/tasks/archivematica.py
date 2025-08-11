@@ -13,7 +13,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
@@ -56,20 +56,15 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
         if (res := resource_check(self, current_step, archive)) != 0:
             return res
     except Retry as e:
+        current_step.set_status(Status.WAITING)
         current_step.set_output_data(
             {"message": "Archivematica is busy, retrying soon..."}
         )
         raise e
 
-    if (res := resource_check(self, current_step, archive)) != 0:
-        return res
-
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
-
-    # Set task id
-    current_step.set_task(self.request.id)
 
     sip_directory = ntpath.basename(path_to_sip)
     # Path to SIP inside Archivematica transfer source directory
@@ -240,22 +235,22 @@ def resource_check(task, current_step, archive):
         )
 
     with transaction.atomic():
-        current_am_tasks_qs = PeriodicTask.objects.select_for_update().filter(
-            task="check_am_status", enabled=True
+        current_am_steps = Step.objects.select_for_update().filter(
+            name=Steps.ARCHIVE,
+            status__in=[Status.WAITING, Status.IN_PROGRESS],
+            celery_task_id__isnull=False,
         )
-        current_am_tasks_count = current_am_tasks_qs.count()
-        archive_ids = list(current_am_tasks_qs.values_list("args", flat=True))
-        archive_ids = [json.loads(arg)[1] for arg in archive_ids]
+        current_am_steps_count = current_am_steps.count()
 
         total_sip_size = (
             Archive.objects.select_for_update()
-            .filter(pk__in=archive_ids)
+            .filter(last_step__in=current_am_steps)
             .aggregate(total=Sum("sip_size"))["total"]
             or 0
         )
 
         if (
-            current_am_tasks_count >= AM_CONCURRENCY_LIMT
+            current_am_steps_count >= AM_CONCURRENCY_LIMT
             or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
         ):
             if task.request.retries >= task.max_retries:
@@ -267,13 +262,15 @@ def resource_check(task, current_step, archive):
 
             exc_message = (
                 "Archivematica concurrency limit reached."
-                if current_am_tasks_count >= AM_CONCURRENCY_LIMT
+                if current_am_steps_count >= AM_CONCURRENCY_LIMT
                 else "Archivematica aggregated file size limit reached."
             )
             raise task.retry(
                 countdown=60 * retry_interval,
                 exc=Exception(exc_message),
             )
+        current_step.set_status(Status.WAITING)
+        current_step.set_task(task.request.id)
         return 0
 
 
@@ -292,7 +289,6 @@ def get_am_client():
 
 
 def create_check_am_status(package, step, archive_id, api_key):
-    step.set_status(Status.WAITING)
     # overwrite the start date so the waiting limit is counted from here
     step.set_start_date()
     # Create the scheduler
