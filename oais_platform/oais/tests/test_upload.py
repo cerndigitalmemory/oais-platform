@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import zipfile
@@ -12,6 +13,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step, Steps
+from oais_platform.settings import BIC_WORKDIR
 
 
 class UploadTests(APITestCase):
@@ -77,7 +79,8 @@ class UploadTests(APITestCase):
                     recid="yz39b-yf220",
                     source="cds-rdm-sandbox",
                     target=tmpdir2,
-                    loglevel=0,
+                    loglevel=logging.DEBUG,
+                    workdir=BIC_WORKDIR,
                 )
 
                 foldername = res["foldername"]

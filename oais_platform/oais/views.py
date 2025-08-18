@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -63,7 +64,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
-from oais_platform.settings import ALLOW_LOCAL_LOGIN, PIPELINE_SIZE_LIMIT
+from oais_platform.settings import ALLOW_LOCAL_LOGIN, BIC_WORKDIR, PIPELINE_SIZE_LIMIT
 
 from . import pipeline
 
@@ -209,10 +210,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     requester=request.user,
                     staged=True,
+                    original_file_size=record.get("file_size", 0),
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
-            return Response({"status": 1, "errormsg": e})
+            return Response({"status": 1, "errormsg": str(e)})
 
     @action(detail=False, url_path="me/stats", url_name="me-stats")
     def get_steps_status(self, request):
@@ -953,10 +955,11 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
         result = bic.process(
             recid=None,
             source="local",
-            loglevel=0,
+            loglevel=logging.DEBUG,
             target=base_path,
             source_path=uj.tmp_dir,
             author=str(request.user.id),
+            workdir=BIC_WORKDIR,
         )
 
         if result["status"] != 0:

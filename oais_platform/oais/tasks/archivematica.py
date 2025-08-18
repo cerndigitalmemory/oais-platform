@@ -6,11 +6,14 @@ import requests
 from amclient import AMClient
 from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
+from celery.exceptions import Retry
 from celery.utils.log import get_task_logger
+from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, Steps
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
@@ -18,6 +21,7 @@ from oais_platform.oais.tasks.utils import (
     set_and_return_error,
 )
 from oais_platform.settings import (
+    AGGREGATED_FILE_SIZE_LIMIT,
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
     AM_CONCURRENCY_LIMT,
@@ -46,31 +50,21 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
-    current_am_tasks = get_am_task_count()
     current_step = Step.objects.get(pk=step_id)
-    if current_am_tasks >= AM_CONCURRENCY_LIMT:
-        if self.request.retries >= self.max_retries:
-            return set_and_return_error(
-                current_step, "Archivematica max retries exceeded. Try again later."
-            )
-        else:
-            current_step.set_output_data(
-                {
-                    "message": f"Archivematics is busy, retrying in {10 * (self.request.retries + 1)} minutes."
-                }
-            )
-            raise self.retry(
-                countdown=60 * 10 * (self.request.retries + 1),
-                exc=Exception("Archivematica concurrency limit reached."),
-            )
-
     archive = Archive.objects.get(pk=archive_id)
+    try:
+        if (res := resource_check(self, current_step, archive)) != 0:
+            return res
+    except Retry as e:
+        current_step.set_status(Status.WAITING)
+        current_step.set_output_data(
+            {"message": "Archivematica is busy, retrying soon..."}
+        )
+        raise e
+
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
-
-    # Set task id
-    current_step.set_task(self.request.id)
 
     sip_directory = ntpath.basename(path_to_sip)
     # Path to SIP inside Archivematica transfer source directory
@@ -231,8 +225,53 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
         step.set_output_data(am_status)
 
 
-def get_am_task_count():
-    return PeriodicTask.objects.filter(task="check_am_status", enabled=True).count()
+def resource_check(task, current_step, archive):
+    if archive.sip_size == 0:
+        archive.update_sip_size()
+    if archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT:
+        return set_and_return_error(
+            current_step,
+            f"SIP exceeds the Archivematica file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB).",
+        )
+
+    with transaction.atomic():
+        current_am_steps = Step.objects.select_for_update().filter(
+            name=Steps.ARCHIVE,
+            status__in=[Status.WAITING, Status.IN_PROGRESS],
+            celery_task_id__isnull=False,
+        )
+        current_am_steps_count = current_am_steps.count()
+
+        total_sip_size = (
+            Archive.objects.select_for_update()
+            .filter(last_step__in=current_am_steps)
+            .aggregate(total=Sum("sip_size"))["total"]
+            or 0
+        )
+
+        if (
+            current_am_steps_count >= AM_CONCURRENCY_LIMT
+            or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
+        ):
+            if task.request.retries >= task.max_retries:
+                return set_and_return_error(
+                    current_step, "Archivematica max retries exceeded. Try again later."
+                )
+
+            retry_interval = 10 * (task.request.retries + 1)
+
+            exc_message = (
+                "Archivematica concurrency limit reached."
+                if current_am_steps_count >= AM_CONCURRENCY_LIMT
+                else "Archivematica aggregated file size limit reached."
+            )
+            raise task.retry(
+                countdown=60 * retry_interval,
+                exc=Exception(exc_message),
+            )
+        current_step.set_status(Status.WAITING)
+        current_step.set_task(task.request.id)
+        return 0
 
 
 def get_am_client():
@@ -250,7 +289,6 @@ def get_am_client():
 
 
 def create_check_am_status(package, step, archive_id, api_key):
-    step.set_status(Status.WAITING)
     # overwrite the start date so the waiting limit is counted from here
     step.set_start_date()
     # Create the scheduler

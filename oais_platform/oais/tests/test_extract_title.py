@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -7,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step
 from oais_platform.oais.tasks.extract_title import extract_title
+from oais_platform.settings import BIC_WORKDIR
 
 
 class ExtractTitleTests(APITestCase):
@@ -23,7 +25,8 @@ class ExtractTitleTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = res["foldername"]
@@ -41,7 +44,8 @@ class ExtractTitleTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=tmpdir,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = res["foldername"]

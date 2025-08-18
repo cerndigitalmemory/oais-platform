@@ -311,6 +311,8 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 
 # Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
 BIC_UPLOAD_PATH = "oais-data"
+# Path where the bags are processed, but not stored
+BIC_WORKDIR = "/tmp"
 
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
@@ -358,11 +360,12 @@ PIPELINE_SIZE_LIMIT = 10
 AUTOMATIC_HARVEST_BATCH_SIZE = 100
 # Automatic harvest delay time between batches in minutes
 AUTOMATIC_HARVEST_BATCH_DELAY = 10
-# Automatic harvest max file size in bytes
-AUTOMATIC_HARVEST_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
+
+# Based on available disk space for harvest and Archivematica (smallest of the two)
+AGGREGATED_FILE_SIZE_LIMIT = 50 * 1024**3  # 50 GB
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file

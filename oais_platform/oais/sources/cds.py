@@ -92,10 +92,21 @@ class CDS(AbstractSource):
         if not title and meeting_name:
             title = meeting_name["a"]
 
+        # File size
+        total_size = 0
+        for field in record.get_fields("856"):
+            size_subfield = field.get_subfields("s")
+            if size_subfield:
+                try:
+                    total_size += int(size_subfield[0])  # size is in bytes
+                except ValueError:
+                    pass  # skip if it's not a clean integer
+
         return {
             "source_url": self.get_record_url(recid),
             "recid": recid,
             "title": title,
             "authors": authors,
             "source": self.source,
+            "file_size": total_size,
         }

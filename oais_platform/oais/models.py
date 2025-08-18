@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
@@ -115,6 +116,8 @@ class Archive(models.Model):
     # Resource attached to the archive
     resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
+    sip_size = models.BigIntegerField(default=0)
+    original_file_size = models.BigIntegerField(default=0)
 
     class Meta:
         ordering = ["-id"]
@@ -163,6 +166,16 @@ class Archive(models.Model):
 
     def set_title(self, title):
         self.title = title
+        self.save()
+
+    def update_sip_size(self):
+        self.sip_size = sum(
+            file.stat().st_size for file in Path(self.path_to_sip).rglob("*")
+        )
+        self.save()
+
+    def set_original_file_size(self, size):
+        self.original_file_size = size
         self.save()
 
     def save(self, *args, **kwargs):

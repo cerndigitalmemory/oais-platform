@@ -52,6 +52,7 @@ class Invenio(AbstractSource):
         self.headers = {
             "Content-Type": "application/json",
             "User-Agent": "cern-digital-memory-bot",
+            "Accept": "application/vnd.inveniordm.v1+json",  # Needed for Zenodo compatibility
         }
 
         if token:

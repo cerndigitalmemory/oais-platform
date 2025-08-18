@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from unittest import skip
@@ -13,6 +14,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Collection, Steps
 from oais_platform.oais.tasks.announce import batch_announce_task
+from oais_platform.settings import BIC_WORKDIR
 
 
 class BatchAnnounceTests(APITestCase):
@@ -94,14 +96,16 @@ class BatchAnnounceTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             bic.process(
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             post_data = {
@@ -139,14 +143,16 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             bic.process(
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             post_data = {
@@ -199,14 +205,16 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             bic.process(
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             batch_announce_task(batch_announce_folder, self.tag.id, self.user.id)
@@ -229,7 +237,8 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = sip["foldername"]
@@ -240,7 +249,8 @@ class BatchAnnounceTests(APITestCase):
                 recid="yz39b-yf220",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             batch_announce_task(batch_announce_folder, self.tag.id, self.user.id)
@@ -265,7 +275,8 @@ class BatchAnnounceTests(APITestCase):
                 recid="njf9e-1q233",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
 
             foldername = sip["foldername"]
@@ -276,7 +287,8 @@ class BatchAnnounceTests(APITestCase):
                 recid="1x3p3-e6505",
                 source="cds-rdm-sandbox",
                 target=batch_announce_folder,
-                loglevel=0,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
             )
             foldername2 = sip2["foldername"]
             path_to_sip2 = os.path.join(batch_announce_folder, foldername2)
