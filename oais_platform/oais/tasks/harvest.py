@@ -51,11 +51,16 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    retry = False
     retry_interval_minutes = 2
 
     with transaction.atomic():
         size = archive.original_file_size
-        if size:
+        if not size:
+            logger.warning(
+                f"Archive {archive.id} does not have file size set, skipping size checks."
+            )
+        else:
             if size > AGGREGATED_FILE_SIZE_LIMIT:
                 logger.warning(
                     f"Archive {archive.id} exceeds file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
@@ -83,20 +88,18 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 step.set_status(Status.WAITING)
                 step.set_output_data(
                     {
-                        "status": 0,
-                        "errormsg": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
+                        "message": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
                     }
                 )
-                raise self.retry(
-                    exc=Exception("Record is too large to be harvested at the moment"),
-                    countdown=retry_interval_minutes * 60,
-                )
-        else:
-            logger.warning(
-                f"Archive {archive.id} does not have file size set, skipping size checks."
-            )
+                retry = True
 
-        step.set_status(Status.IN_PROGRESS)
+    if retry:
+        raise self.retry(
+            exc=Exception("Record is too large to be harvested at the moment"),
+            countdown=retry_interval_minutes * 60,
+        )
+
+    step.set_status(Status.IN_PROGRESS)
 
     if not api_key:
         logger.info(

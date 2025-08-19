@@ -18,7 +18,7 @@ class HarvestTest(APITestCase):
             original_file_size=100,
         )
         self.step = Step.objects.create(
-            archive=self.archive, name=Steps.HARVEST, status=Status.WAITING
+            archive=self.archive, name=Steps.HARVEST, status=Status.NOT_RUN
         )
 
     @patch("bagit_create.main.process")
