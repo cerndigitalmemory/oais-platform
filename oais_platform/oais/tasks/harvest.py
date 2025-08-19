@@ -80,13 +80,14 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 )
                 if self.request.retries >= self.max_retries:
                     return {"status": 1, "errormsg": "Max retries exceeded."}
-                step.set_status(Status.WAITING)
-                step.set_output_data(
-                    {
-                        "status": 0,
-                        "errormsg": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
-                    }
-                )
+                with transaction.atomic():  # Ensure the step update before retry
+                    step.set_status(Status.WAITING)
+                    step.set_output_data(
+                        {
+                            "message": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
+                        }
+                    )
+                    step.save()
                 raise self.retry(
                     exc=Exception("Record is too large to be harvested at the moment"),
                     countdown=retry_interval_minutes * 60,
