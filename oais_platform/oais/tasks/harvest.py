@@ -88,7 +88,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 step.set_status(Status.WAITING)
                 step.set_output_data(
                     {
-                        "message": f"Retrying in {retry_interval_minutes} minuttes (aggregated file size limit exceeded)",
+                        "message": f"Retrying in {retry_interval_minutes} minutes (aggregated file size limit exceeded)",
                     }
                 )
                 retry = True
