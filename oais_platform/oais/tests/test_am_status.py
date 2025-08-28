@@ -95,8 +95,32 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertEqual(
             step_output["microservice"], get_unit_status.return_value["microservice"]
         )
+        self.assertEqual(step_output["package_retry"], 1)
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertFalse(periodic_tasks.delete.called)
+
+    @patch("amclient.AMClient.get_package_details")
+    @patch("amclient.AMClient.get_unit_status")
+    @patch("django_celery_beat.models.PeriodicTask.objects")
+    def test_am_status_completed_uuid_not_found_retry_limit(
+        self, periodic_tasks, get_unit_status, get_package_details
+    ):
+        self.step.set_output_data({"package_retry": 5})
+        get_unit_status.return_value = {
+            "status": "COMPLETE",
+            "microservice": "Remove the processing directory",
+            "uuid": 5678,
+        }
+        get_package_details.return_value = "Not found"
+        periodic_tasks.get.return_value = periodic_tasks
+        check_am_status.apply(args=[{"id": 1234}, self.archive.id, self.step.id, None])
+
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")

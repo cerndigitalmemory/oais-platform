@@ -346,7 +346,19 @@ def handle_completed_am_package(
         except Exception as e:
             logger.error(e)
     else:
-        logger.error(f"AIP package with UUID {uuid} not found on {AM_SS_URL}")
-        # If the path artifact is not complete try again
-        step.set_status(Status.IN_PROGRESS)
-        step.set_output_data(am_status)
+        retry_limit = 5
+        output_data = {}
+        if step.output_data:
+            output_data = json.loads(step.output_data)
+        retry_count = output_data.get("package_retry", 0)
+        if retry_count + 1 > retry_limit:
+            error_msg = f"AIP package with UUID {uuid} not found on {AM_SS_URL} after retrying {retry_limit} times."
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        else:
+            logger.warning(
+                f"AIP package with UUID {uuid} not found on {AM_SS_URL}, retrying..."
+            )
+            am_status["package_retry"] = retry_count + 1
+            step.set_status(Status.IN_PROGRESS)
+            step.set_output_data(am_status)
