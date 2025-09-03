@@ -1,7 +1,7 @@
 import gfal2
 from django.core.management.base import BaseCommand
 
-# from oais_platform.settings import CTA_BASE_PATH
+from oais_platform.settings import CTA_BASE_PATH
 
 
 class Command(BaseCommand):
@@ -12,7 +12,7 @@ class Command(BaseCommand):
             "path",
             nargs="?",
             type=str,
-            default="https://eosctapublic.cern.ch/eos/ctapublic/archivetest/digitalmemory/",
+            default=CTA_BASE_PATH,
             help="Path to the directory to be listed",
         )
 
@@ -36,9 +36,9 @@ class Command(BaseCommand):
             self.stdout.write(f"Contents of {path}:")
             for item in file_list:
                 self.stdout.write(f"- {item}")
-        # else:
-        #     self.stdout.write(
-        #         self.style.ERROR(("No files found or an error occurred."))
-        #     )
+        else:
+            self.stdout.write(
+                self.style.ERROR(("No files found or an error occurred."))
+            )
 
         self.stdout.write(self.style.SUCCESS("Script finished."))
