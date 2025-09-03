@@ -107,6 +107,8 @@ python manage.py migrate
 DJANGO_SUPERUSER_PASSWORD=root DJANGO_SUPERUSER_USERNAME=root DJANGO_SUPERUSER_EMAIL=root@root.com python3 manage.py createsuperuser --noinput
 # Run the application
 python manage.py runserver
+# List the contents of a tape directory of a given path (when not providing a path, CTA_BASE_PATH will be used as default)
+python manage.py browse_tape https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
 ```
 
 See [troubleshooting](docs/troubleshooting.md) for further instructions on how to maintain an instance and debug issues.
