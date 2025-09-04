@@ -107,8 +107,6 @@ python manage.py migrate
 DJANGO_SUPERUSER_PASSWORD=root DJANGO_SUPERUSER_USERNAME=root DJANGO_SUPERUSER_EMAIL=root@root.com python3 manage.py createsuperuser --noinput
 # Run the application
 python manage.py runserver
-# List the contents of a tape directory of a given path (when not providing a path, CTA_BASE_PATH will be used as default)
-python manage.py browse_tape https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
 ```
 
 See [troubleshooting](docs/troubleshooting.md) for further instructions on how to maintain an instance and debug issues.
@@ -207,6 +205,14 @@ Make sure that:
 
 1. The FTS link has correctly mapped the certificate you are planning to use to the service account. This is usually automatic for user Grid certificates but not for Robot ones.
 2. The service account has permissions to read and write from the specified CTA space.
+
+To browse the contents of a tape namespace, run the following command in the container shell with `docker exec -it oais_django sh`:
+
+```bash
+python manage.py browse_tape https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
+```
+
+The command will list the contents of a given path (when not providing a path, `CTA_BASE_PATH` will be used as default).
 
 ## CI/CD
 
