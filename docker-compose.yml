@@ -107,6 +107,17 @@ services:
       - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
       - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
 
+  scripts:
+    container_name: oais_scripts
+    build:
+      context: .
+      dockerfile: ./scripts/Dockerfile
+    volumes:
+      - ./scripts:/scripts
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
 volumes:
   postgres:
   pgadmin:
