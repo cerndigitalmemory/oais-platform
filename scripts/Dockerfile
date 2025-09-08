@@ -28,14 +28,19 @@ WORKDIR /boost_1_89_0
 RUN ./bootstrap.sh --with-python=/usr/bin/python3.11 && \
   ./b2 --with-python && \
   ./b2 install --with-python
-WORKDIR /
+
+WORKDIR /scripts
 
 # Install Python packages
-COPY ./scripts/requirements.txt /scripts/requirements.txt
-RUN pip3 install --no-cache-dir wheel && pip3 install --no-cache-dir -r /scripts/requirements.txt
+COPY ./scripts/requirements.txt ./requirements.txt
+RUN pip3 install wheel && pip3 install -r ./requirements.txt
 
 COPY docker/carepo.repo /etc/yum.repos.d/
 RUN dnf install -y ca_CERN-Root-2 ca_CERN-GridCA && dnf clean -y all
 
-COPY ./scripts/browse_tape.py /scripts/browse_tape.py
+COPY ./scripts/browse_tape.py ./browse_tape.py
+RUN mkdir /tests
+COPY ./scripts/tests /tests
+
+ENV PYTHONPATH=/scripts:$PYTHONPATH
 CMD ["bash"]
