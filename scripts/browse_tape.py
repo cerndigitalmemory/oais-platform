@@ -8,17 +8,51 @@ logging.basicConfig(
 )
 
 
-def list_gfal2_directory(uri):
+def list_gfal2_directory(ctx, uri, level=1):
     """
     Lists the contents of a directory using gfal2.
     """
+    result = {}
     try:
-        ctx = gfal2.creat_context()
         entries = ctx.listdir(uri)
-        return entries
+        stat = ctx.stat(uri)
+        for entry in entries:
+            stat = ctx.stat(f"{uri}{entry}")
+            size = stat.st_size
+            if size == 0 and level < 3:
+                try:
+                    result.update(
+                        {entry: list_gfal2_directory(ctx, f"{uri}{entry}/", level + 1)}
+                    )
+                except Exception:
+                    result.update({f"{entry} ({human_size(size)})": {}})
+            else:
+                result.update({f"{entry} ({human_size(size)})": {}})
+
+        return result
     except Exception as e:
-        logging.error(f"Error accessing directory: {e}")
-        return []
+        logging.warning(f"Error accessing directory: {e}")
+        raise e
+
+
+def human_size(bytes, units=["bytes", "KB", "MB", "GB", "TB", "PB", "EB"]):
+    """Returns a human readable string representation of bytes"""
+    return (
+        f"{str(bytes)} {units[0]}"
+        if bytes < 1024
+        else human_size(bytes >> 10, units[1:])
+    )
+
+
+def print_directory_contents(files, indent=0):
+    """
+    Recursively prints the contents of the directory.
+    """
+    indent_space = "    " * indent
+    if isinstance(files, dict):
+        for entry, subentry in files.items():
+            click.echo(f"{indent_space}- {entry}")
+            print_directory_contents(subentry, indent + 1)
 
 
 @click.command()
@@ -35,12 +69,16 @@ def main(path):
 
     click.echo(f"Listing contents of: {path}")
 
-    file_list = list_gfal2_directory(path)
+    try:
+        ctx = gfal2.creat_context()
+        files = list_gfal2_directory(ctx, path)
+    except Exception as e:
+        logging.error(f"Error occurred: {e}")
+        files = None
 
-    if file_list:
+    if files:
         click.echo(f"\nContents of {path}:")
-        for item in file_list:
-            click.echo(f"- {item}")
+        print_directory_contents(files)
     else:
         click.echo(click.style("No files found or an error occurred.", fg="red"))
 
