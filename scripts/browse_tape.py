@@ -8,33 +8,6 @@ logging.basicConfig(
 )
 
 
-def list_gfal2_directory(ctx, uri, level=1):
-    """
-    Lists the contents of a directory using gfal2.
-    """
-    result = {}
-    try:
-        entries = ctx.listdir(uri)
-        stat = ctx.stat(uri)
-        for entry in entries:
-            stat = ctx.stat(f"{uri}{entry}")
-            size = stat.st_size
-            if size == 0 and level < 3:
-                try:
-                    result.update(
-                        {entry: list_gfal2_directory(ctx, f"{uri}{entry}/", level + 1)}
-                    )
-                except Exception:
-                    result.update({f"{entry} ({human_size(size)})": {}})
-            else:
-                result.update({f"{entry} ({human_size(size)})": {}})
-
-        return result
-    except Exception as e:
-        logging.warning(f"Error accessing directory: {e}")
-        raise e
-
-
 def human_size(bytes, units=["bytes", "KB", "MB", "GB", "TB", "PB", "EB"]):
     """Returns a human readable string representation of bytes"""
     return (
@@ -61,13 +34,46 @@ def print_directory_contents(files, indent=0):
     type=str,
     required=True,
 )
-def main(path):
+@click.option("--summary", is_flag=True, default=False)
+def main(path, summary):
     """
     A command-line tool to list files in a directory using gfal2.
     """
-    logging.info("Script started successfully!")
 
+    def list_gfal2_directory(ctx, uri, level=1):
+        """
+        Lists the contents of a directory using gfal2.
+        """
+        result = {}
+        try:
+            entries = ctx.listdir(uri)
+            stat = ctx.stat(uri)
+            for entry in entries:
+                stat = ctx.stat(f"{uri}{entry}")
+                size = stat.st_size
+                if size == 0 and level < max_level:
+                    try:
+                        result.update(
+                            {
+                                entry: list_gfal2_directory(
+                                    ctx, f"{uri}{entry}/", level + 1
+                                )
+                            }
+                        )
+                    except Exception:
+                        result.update({f"{entry} ({human_size(size)})": {}})
+                else:
+                    result.update({f"{entry} ({human_size(size)})": {}})
+
+            return result
+        except Exception as e:
+            logging.warning(f"Error accessing directory: {e}")
+            raise e
+
+    logging.info("Script started successfully!")
     click.echo(f"Listing contents of: {path}")
+
+    max_level = 1 if summary else 3
 
     try:
         ctx = gfal2.creat_context()
