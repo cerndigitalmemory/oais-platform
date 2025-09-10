@@ -1,4 +1,5 @@
 import io
+import logging
 import re
 from xml.sax import SAXParseException
 
@@ -35,7 +36,8 @@ class CDS(AbstractSource):
                 },
                 cookies=self.cookies,
             )
-        except Exception:
+        except Exception as e:
+            logging.error(f"CDS search request failed: {e}")
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
@@ -66,7 +68,8 @@ class CDS(AbstractSource):
             req = requests.get(
                 self.get_record_url(recid), params={"of": "xm"}, cookies=self.cookies
             )
-        except Exception:
+        except Exception as e:
+            logging.error(f"CDS search request failed: {e}")
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:
