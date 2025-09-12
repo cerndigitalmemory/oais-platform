@@ -2,23 +2,32 @@
 build-image:
   stage: build
   image:
-    name: registry.cern.ch/gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
+    name: registry.cern.ch/quay.io/buildah/stable:latest
+  variables:
+    FQ_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:$CI_COMMIT_TAG"
+    CONTAINER_STORAGE: "/builds/container-storage"
   rules:
     - if: '$CI_COMMIT_TAG'
+  before_script:
+    - mkdir -p ${CONTAINER_STORAGE}
+    - mkdir -p ~/.config/containers/ 
+    - |
+      cat > ~/.config/containers/storage.conf << EOF
+      [storage]
+       driver = "overlay"
+       runroot = "${CONTAINER_STORAGE}/run/containers/storage"
+       graphroot = "${CONTAINER_STORAGE}/.local/share/containers/storage"
+       rootless_storage_path = "${CONTAINER_STORAGE}/.local/share/containers/storage"
+       [storage.options]
+       pull_options = {enable_partial_images = "true", use_hard_links = "false", ostree_repos=""}
+       [storage.options.overlay]
+      EOF
+    - cp ~/.config/containers/storage.conf /etc/containers/storage.conf || true
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    # Configure Kaniko to authenticate with GitLab Container Registry
-    - mkdir -p /kaniko/.docker
-    - >
-      echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" 
-      > /kaniko/.docker/config.json
+    - buildah build -t $FQ_IMAGE_NAME
+    - buildah push $FQ_IMAGE_NAME
 
-    # Build and push the Docker image
-    - /kaniko/executor
-      --context "$CI_PROJECT_DIR"
-      --dockerfile "$CI_PROJECT_DIR/Dockerfile"
-      --destination "${CI_REGISTRY_IMAGE}:$CI_COMMIT_TAG"
-      --cache=true
 
 .deploy_template:
   when: manual
