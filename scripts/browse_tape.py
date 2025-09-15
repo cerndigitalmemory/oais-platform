@@ -8,12 +8,12 @@ logging.basicConfig(
 )
 
 
-def human_size(bytes, units=["bytes", "KB", "MB", "GB", "TB", "PB", "EB"]):
+def human_readable_size(bytes, units=["bytes", "KB", "MB", "GB", "TB", "PB", "EB"]):
     """Returns a human readable string representation of bytes"""
     return (
         f"{str(bytes)} {units[0]}"
         if bytes < 1024
-        else human_size(bytes >> 10, units[1:])
+        else human_readable_size(bytes >> 10, units[1:])
     )
 
 
@@ -40,30 +40,27 @@ def main(path, summary):
     A command-line tool to list files in a directory using gfal2.
     """
 
-    def list_gfal2_directory(ctx, uri, level=1):
+    def list_gfal2_directory(ctx, uri):
         """
         Lists the contents of a directory using gfal2.
         """
         result = {}
         try:
             entries = ctx.listdir(uri)
-            stat = ctx.stat(uri)
             for entry in entries:
                 stat = ctx.stat(f"{uri}{entry}")
                 size = stat.st_size
-                if size == 0 and level < max_level:
+                if size == 0 and not summary:
                     try:
                         result.update(
-                            {
-                                entry: list_gfal2_directory(
-                                    ctx, f"{uri}{entry}/", level + 1
-                                )
-                            }
+                            {entry: list_gfal2_directory(ctx, f"{uri}{entry}/")}
                         )
                     except Exception:
-                        result.update({f"{entry} ({human_size(size)})": {}})
+                        result.update({f"{entry} ({human_readable_size(size)})": {}})
+                elif summary:
+                    result.update({f"{entry}": {}})
                 else:
-                    result.update({f"{entry} ({human_size(size)})": {}})
+                    result.update({f"{entry} ({human_readable_size(size)})": {}})
 
             return result
         except Exception as e:
@@ -72,8 +69,6 @@ def main(path, summary):
 
     logging.info("Script started successfully!")
     click.echo(f"Listing contents of: {path}")
-
-    max_level = 1 if summary else 3
 
     try:
         ctx = gfal2.creat_context()
