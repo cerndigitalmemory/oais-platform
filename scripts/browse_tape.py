@@ -17,17 +17,6 @@ def human_readable_size(bytes, units=["bytes", "KB", "MB", "GB", "TB", "PB", "EB
     )
 
 
-def print_directory_contents(files, indent=0):
-    """
-    Recursively prints the contents of the directory.
-    """
-    indent_space = "    " * indent
-    if isinstance(files, dict):
-        for entry, subentry in files.items():
-            click.echo(f"{indent_space}- {entry}")
-            print_directory_contents(subentry, indent + 1)
-
-
 @click.command()
 @click.argument(
     "path",
@@ -39,6 +28,19 @@ def main(path, summary):
     """
     A command-line tool to list files in a directory using gfal2.
     """
+
+    def print_directory_contents(files, indent=0):
+        """
+        Recursively prints the contents of the directory.
+        """
+        indent_space = "    " * indent
+        if isinstance(files, dict):
+            for (entry, size), subentry in files.items():
+                statement = f"{indent_space}- {entry}"
+                if not summary:
+                    statement += f" ({human_readable_size(size)})"
+                click.echo(statement)
+                print_directory_contents(subentry, indent + 1)
 
     def list_gfal2_directory(ctx, uri):
         """
@@ -52,15 +54,13 @@ def main(path, summary):
                 size = stat.st_size
                 if size == 0 and not summary:
                     try:
-                        result.update(
-                            {entry: list_gfal2_directory(ctx, f"{uri}{entry}/")}
-                        )
+                        directory = list_gfal2_directory(ctx, f"{uri}{entry}/")
+                        size = sum([file_size for (_, file_size) in directory.keys()])
+                        result.update({(entry, size): directory})
                     except Exception:
-                        result.update({f"{entry} ({human_readable_size(size)})": {}})
-                elif summary:
-                    result.update({f"{entry}": {}})
+                        result.update({(entry, size): {}})
                 else:
-                    result.update({f"{entry} ({human_readable_size(size)})": {}})
+                    result.update({(entry, size): {}})
 
             return result
         except Exception as e:
