@@ -1,4 +1,4 @@
-FROM registry.cern.ch/cern/alma9-base
+FROM docker.io/cern/alma9-base
 
 # Ensure that the python output is sent straight to terminal
 ENV PYTHONUNBUFFERED 1
