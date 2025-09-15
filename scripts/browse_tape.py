@@ -1,4 +1,5 @@
 import logging
+import stat
 
 import click
 import gfal2
@@ -48,11 +49,12 @@ def main(path, summary):
         """
         result = {}
         try:
+            logging.info(f"Listing directory {uri}")
             entries = ctx.listdir(uri)
             for entry in entries:
-                stat = ctx.stat(f"{uri}{entry}")
-                size = stat.st_size
-                if size == 0 and not summary:
+                entry_stat = ctx.stat(f"{uri}{entry}")
+                size = entry_stat.st_size
+                if stat.S_ISDIR(entry_stat.st_mode) and not summary:
                     try:
                         directory = list_gfal2_directory(ctx, f"{uri}{entry}/")
                         size = sum([file_size for (_, file_size) in directory.keys()])
@@ -68,9 +70,10 @@ def main(path, summary):
             raise e
 
     logging.info("Script started successfully!")
-    click.echo(f"Listing contents of: {path}")
+    click.echo(f"Listing contents of: {path}\n")
 
     try:
+        gfal2.set_verbose(gfal2.verbose_level.warning)
         ctx = gfal2.creat_context()
         files = list_gfal2_directory(ctx, path)
     except Exception as e:
