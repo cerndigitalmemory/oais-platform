@@ -74,7 +74,11 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     )
 
     # Adds an _ between Archive and the id because archivematica messes up with spaces
-    transfer_name = sip_directory + "::Archive_" + str(archive_id)
+    transfer_name = (
+        archive.source + "__" + archive.recid + "::Archive_" + str(archive_id)
+    )
+    if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
+        transfer_name = "Archive_" + str(archive_id)
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
     am = get_am_client()
