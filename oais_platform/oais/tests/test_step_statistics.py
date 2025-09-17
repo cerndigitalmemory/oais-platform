@@ -17,6 +17,7 @@ class StepStatisticsEndpointTest(APITestCase):
 
     def setUp(self):
         self.url = reverse("step_statistics")
+        self.create_archive_with_steps([])
         self.create_archive_with_steps([Steps.CHECKSUM])
         self.create_archive_with_steps([Steps.CHECKSUM, Steps.ARCHIVE])
         self.create_archive_with_steps(
@@ -44,6 +45,7 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
+                "staged_count": 1,
                 "only_harvested_count": 1,
                 "harvested_preserved_count": 1,
                 "harvested_preserved_tape_count": 1,
@@ -73,6 +75,7 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
+                "staged_count": 1,
                 "only_harvested_count": 1,
                 "harvested_preserved_count": 1,
                 "harvested_preserved_tape_count": 2,
@@ -90,6 +93,7 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
+                "staged_count": 0,
                 "only_harvested_count": 0,
                 "harvested_preserved_count": 0,
                 "harvested_preserved_tape_count": 0,
@@ -119,6 +123,7 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
+                "staged_count": 1,
                 "only_harvested_count": 1,
                 "harvested_preserved_count": 2,
                 "harvested_preserved_tape_count": 1,
