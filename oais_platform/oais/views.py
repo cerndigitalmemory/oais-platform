@@ -1058,6 +1058,7 @@ def statistics(request):
 @api_view(["GET"])
 def step_statistics(request):
     data = {
+        "staged_count": Archive.objects.filter(state=ArchiveState.NONE).count(),
         "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
         "harvested_preserved_count": count_archives_by_steps(
             include_steps=[Steps.ARCHIVE],
