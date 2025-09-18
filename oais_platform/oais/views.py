@@ -1071,32 +1071,36 @@ def step_statistics(request):
             ]
         },
         "harvested": {
-            "included": [Steps.CHECKSUM],
+            "state": ArchiveState.SIP,
             "excluded": [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
         },
         "harvested_preserved": {
-            "included": [Steps.ARCHIVE],
+            "state": ArchiveState.AIP,
             "excluded": [Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_tape": {
-            "included": [Steps.ARCHIVE, Steps.PUSH_TO_CTA],
+            "state": ArchiveState.AIP,
+            "included": [Steps.PUSH_TO_CTA],
             "excluded": [Steps.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_registry": {
-            "included": [Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH],
+            "state": ArchiveState.AIP,
+            "included": [Steps.INVENIO_RDM_PUSH],
             "excluded": [Steps.PUSH_TO_CTA],
         },
         "harvested_preserved_tape_registry": {
+            "state": ArchiveState.AIP,
             "included": [
-                Steps.ARCHIVE,
                 Steps.PUSH_TO_CTA,
                 Steps.INVENIO_RDM_PUSH,
-            ]
+            ],
         },
     }
     data = {
         f"{name}_count": count_archives_by_steps(
-            include_steps=steps.get("included"), exclude_steps=steps.get("excluded")
+            include_steps=steps.get("included"),
+            exclude_steps=steps.get("excluded"),
+            state=steps.get("state"),
         )
         for name, steps in categories.items()
     }
