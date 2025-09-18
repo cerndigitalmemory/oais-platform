@@ -12,7 +12,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step, Steps
+from oais_platform.oais.models import Archive, Step, StepName, StepType
 from oais_platform.settings import BIC_WORKDIR
 
 
@@ -111,9 +111,10 @@ class UploadTests(APITestCase):
                 )
                 latest_step = Step.objects.latest("id")
                 mock_dispatch.assert_called_once_with(
-                    Steps.VALIDATION,
+                    StepType.get_by_stepname(StepName.VALIDATION),
                     Archive.objects.latest("id").id,
                     latest_step.id,
                     latest_step.output_data,
                     None,
+                    False,
                 )

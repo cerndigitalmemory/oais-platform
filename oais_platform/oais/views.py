@@ -35,7 +35,8 @@ from oais_platform.oais.models import (
     Source,
     Status,
     Step,
-    Steps,
+    StepName,
+    StepType,
     UploadJob,
 )
 from oais_platform.oais.permissions import (
@@ -54,6 +55,7 @@ from oais_platform.oais.serializers import (
     CollectionSerializer,
     LoginSerializer,
     StepSerializer,
+    StepTypeMinimalSerializer,
     UploadJobSerializer,
     UserSerializer,
 )
@@ -69,8 +71,6 @@ from oais_platform.oais.tasks.pipeline_actions import (
     run_step,
 )
 from oais_platform.settings import ALLOW_LOCAL_LOGIN, BIC_WORKDIR, PIPELINE_SIZE_LIMIT
-
-from . import pipeline
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -464,7 +464,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             # If manifest operations are successful, create manifest step
             step = Step.objects.create(
                 archive=archive,
-                name=Steps.EDIT_MANIFEST,
+                step_name=StepName.EDIT_MANIFEST,
                 input_step=archive.last_completed_step,
                 status=Status.IN_PROGRESS,
                 input_data=archive.manifest,
@@ -490,7 +490,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.set_unstaged(approver=request.user)
 
         step = Step.objects.create(
-            archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+            archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
         )
 
         try:
@@ -529,7 +529,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             job_tag.add_archive(archive)
 
             step = Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+                archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
             )
             # Step is auto-approved and harvest step runs
             try:
@@ -591,7 +591,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest("Invalid pipeline size")
                     try:
                         for step_name in steps:
-                            archive.add_step_to_pipeline(step_name)
+                            archive.add_step_to_pipeline(step_name, user=request.user)
                     except Exception as e:
                         raise BadRequest(e)
                 case "retry":
@@ -625,7 +625,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
                     )
 
-        step = execute_pipeline(
+        step, _ = execute_pipeline(
             archive_id, api_key=api_key, force_continue=force_continue
         )
         serializer = StepSerializer(step, many=False)
@@ -739,7 +739,7 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Returns all Step order constraints
         """
-        return Response(pipeline.get_next_steps_constraints())
+        return Response(StepType.get_all_order_constraints())
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1008,7 +1008,9 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
             step = Step.objects.create(
-                archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+                archive=archive,
+                step_name=StepName.SIP_UPLOAD,
+                status=Status.IN_PROGRESS,
             )
             step.set_start_date()
 
@@ -1052,13 +1054,13 @@ def statistics(request):
         "harvested_count": harvested_count + preserved_count,
         "preserved_count": preserved_count,
         "pushed_to_tape_count": Step.objects.filter(
-            name=Steps.PUSH_TO_CTA, status=Status.COMPLETED
+            step_type__name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()
         .count(),
         "pushed_to_registry_count": Step.objects.filter(
-            name=Steps.INVENIO_RDM_PUSH, status=Status.COMPLETED
+            step_type__name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()
@@ -1163,7 +1165,7 @@ def upload_sip(request):
         )
 
         step = Step.objects.create(
-            archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+            archive=archive, step_name=StepName.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
         step.set_start_date()
 

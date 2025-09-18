@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from celery.exceptions import Retry
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.harvest import harvest
 from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, BIC_UPLOAD_PATH
 
@@ -18,7 +18,7 @@ class HarvestTest(APITestCase):
             original_file_size=100,
         )
         self.step = Step.objects.create(
-            archive=self.archive, name=Steps.HARVEST, status=Status.NOT_RUN
+            archive=self.archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
         )
 
     @patch("bagit_create.main.process")
@@ -59,7 +59,7 @@ class HarvestTest(APITestCase):
                 original_file_size=AGGREGATED_FILE_SIZE_LIMIT / 2,
             )
             Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.IN_PROGRESS
+                archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
             )
 
         with self.assertRaises(Retry):
@@ -76,7 +76,7 @@ class HarvestTest(APITestCase):
                 original_file_size=AGGREGATED_FILE_SIZE_LIMIT / 2,
             )
             Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.IN_PROGRESS
+                archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
             )
 
         task_request.id = "test_task_id"

@@ -9,4 +9,5 @@ from . import (
     notify_source,
     pipeline_actions,
     registry,
+    scheduled_harvest,
 )

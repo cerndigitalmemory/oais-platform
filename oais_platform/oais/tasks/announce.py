@@ -7,7 +7,7 @@ from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.models import Archive, Collection, Status, Step, Steps
+from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize, run_step
 from oais_platform.oais.tasks.utils import (
@@ -80,7 +80,7 @@ def announce_sip(announce_path, user):
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
     step = create_step(
-        Steps.ANNOUNCE, archive, input_step_id=None, input_data=input_data
+        StepName.ANNOUNCE, archive, input_step_id=None, input_data=input_data
     )
 
     # Let's copy the SIP to our storage

@@ -13,7 +13,7 @@ from oais_platform.oais.exceptions import (
     RetryableException,
     ServiceUnavailable,
 )
-from oais_platform.oais.models import Status, Steps
+from oais_platform.oais.models import Status, StepName
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -153,14 +153,14 @@ class Invenio(AbstractSource):
 
         harvest_time = (
             archive.steps.all()
-            .filter(name=Steps.HARVEST, status=Status.COMPLETED)
+            .filter(step_type__name=StepName.HARVEST, status=Status.COMPLETED)
             .first()
             .start_date
         )
 
         archive_time = (
             archive.steps.all()
-            .filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
+            .filter(step_type__name=StepName.ARCHIVE, status=Status.COMPLETED)
             .order_by("-start_date")
             .first()
             .start_date
@@ -195,11 +195,12 @@ class Invenio(AbstractSource):
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
 
-    def get_records_to_harvest(self, last_harvest):
+    def get_records_to_harvest(self, start=None, end=None):
         size = 500
-        end_time = datetime.datetime.now(datetime.timezone.utc)
-        logging.info(f"Starting fetching records from {last_harvest} to {end_time}.")
-        yield from self.fetch_records_in_chunks(last_harvest, end_time, size)
+        if not end:
+            end = datetime.datetime.now(datetime.timezone.utc)
+        logging.info(f"Starting fetching records from {start} to {end}.")
+        yield from self.fetch_records_in_chunks(start, end, size)
 
     def get_records_in_range(self, start, end, page, size):
         if start:
@@ -216,7 +217,7 @@ class Invenio(AbstractSource):
             yield [], end
         elif total <= self.max_results:
             logging.info(
-                f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S')}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
+                f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S') if start else '*'}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
             )
             initial_total = total
             current_total = 0

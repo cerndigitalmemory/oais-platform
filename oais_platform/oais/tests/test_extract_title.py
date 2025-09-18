@@ -6,7 +6,7 @@ import tempfile
 from bagit_create import main as bic
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step
+from oais_platform.oais.models import Archive, Step, StepName
 from oais_platform.oais.tasks.extract_title import extract_title
 from oais_platform.settings import BIC_WORKDIR
 
@@ -17,7 +17,9 @@ class ExtractTitleTests(APITestCase):
             recid="1", source="test", source_url="", title=""
         )
 
-        self.step = Step.objects.create(archive=self.archive, name=10)
+        self.step = Step.objects.create(
+            archive=self.archive, step_name=StepName.EXTRACT_TITLE
+        )
 
     def test_extract_title_no_dc(self):
         with tempfile.TemporaryDirectory() as tmpdir:

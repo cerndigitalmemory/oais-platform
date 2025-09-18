@@ -7,7 +7,7 @@ from django.apps import apps
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
 from oais_platform.settings import (
@@ -171,7 +171,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
             )
             result["retrying"] = True
             create_retry_step.apply_async(
-                args=(archive_id, True, Steps.PUSH_TO_CTA, api_key),
+                args=(archive_id, True, StepName.PUSH_TO_CTA, api_key),
                 eta=timezone.now() + timedelta(hours=1),
             )
         else:

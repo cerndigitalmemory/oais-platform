@@ -3,7 +3,7 @@
 from django.db import migrations, models
 import json
 
-from oais_platform.oais.models import Status, Steps
+from oais_platform.oais.models import Status
 
 
 def add_archive_path_to_aip(apps, schema_editor):
@@ -12,7 +12,7 @@ def add_archive_path_to_aip(apps, schema_editor):
     for obj in archives.objects.all():
         try:
             aip_step = (
-                obj.steps.filter(name=Steps.ARCHIVE, status=Status.COMPLETED)
+                obj.steps.filter(name=5, status=Status.COMPLETED)
                 .order_by("-start_date")
                 .first()
             )
