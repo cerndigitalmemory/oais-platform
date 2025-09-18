@@ -1058,6 +1058,18 @@ def statistics(request):
 @api_view(["GET"])
 def step_statistics(request):
     categories = {
+        "staged": {
+            "excluded": [
+                Steps.CHECKSUM,
+                Steps.ARCHIVE,
+                Steps.PUSH_TO_CTA,
+                Steps.INVENIO_RDM_PUSH,
+            ]
+        },
+        "harvested": {
+            "included": [Steps.CHECKSUM],
+            "excluded": [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+        },
         "harvested_preserved": {
             "included": [Steps.ARCHIVE],
             "excluded": [Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
@@ -1079,17 +1091,11 @@ def step_statistics(request):
         },
     }
     data = {
-        "staged_count": Archive.objects.filter(state=ArchiveState.NONE).count(),
-        "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
+        f"{name}_count": count_archives_by_steps(
+            include_steps=steps.get("included"), exclude_steps=steps.get("excluded")
+        )
+        for name, steps in categories.items()
     }
-    data.update(
-        {
-            f"{name}_count": count_archives_by_steps(
-                include_steps=steps.get("included"), exclude_steps=steps.get("excluded")
-            )
-            for name, steps in categories.items()
-        }
-    )
     data["others_count"] = count_excluded_archives(categories)
 
     return Response(data)
@@ -1167,7 +1173,7 @@ def count_excluded_archives(categories):
 
         query |= current_category
 
-    return Archive.objects.filter(state=ArchiveState.AIP).exclude(query).count()
+    return Archive.objects.exclude(query).count()
 
 
 @extend_schema_view(
