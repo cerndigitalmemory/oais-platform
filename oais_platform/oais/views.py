@@ -14,7 +14,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -58,6 +58,10 @@ from oais_platform.oais.serializers import (
     UserSerializer,
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
+from oais_platform.oais.statistics import (
+    count_archives_by_steps,
+    count_excluded_archives,
+)
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (
     create_retry_step,
@@ -1099,81 +1103,6 @@ def step_statistics(request):
     data["others_count"] = count_excluded_archives(categories)
 
     return Response(data)
-
-
-def count_archives_by_steps(include_steps=None, exclude_steps=None):
-    """
-    Returns count of Archives based on included and excluded completed steps.
-
-    :param include_steps: A list or tuple of Steps.name to include (must be completed).
-    :param exclude_steps: A list or tuple of Steps.name to exclude if completed.
-    """
-    include_steps = include_steps or []
-    exclude_steps = exclude_steps or []
-
-    archives = Archive.objects.all()
-
-    for step_name in include_steps:
-        archives = archives.filter(
-            Exists(
-                Step.objects.filter(
-                    archive=OuterRef("pk"),
-                    name=step_name,
-                    status=Status.COMPLETED,
-                )
-            )
-        )
-
-    for step_name in exclude_steps:
-        archives = archives.filter(
-            ~Exists(
-                Step.objects.filter(
-                    archive=OuterRef("pk"), name=step_name, status=Status.COMPLETED
-                )
-            )
-        )
-
-    return archives.distinct().count()
-
-
-def count_excluded_archives(categories):
-    """
-    Returns the count of Archives that do not belong to any of the predefined categories.
-
-    :param categories: A dictionary defining the included and excluded steps for each category.
-    """
-    query = Q()
-
-    for steps in categories.values():
-        included_steps = steps.get("included", [])
-        excluded_steps = steps.get("excluded", [])
-
-        current_category = Q()
-        for step_name in included_steps:
-            current_category &= Q(
-                Exists(
-                    Step.objects.filter(
-                        archive=OuterRef("pk"),
-                        name=step_name,
-                        status=Status.COMPLETED,
-                    )
-                )
-            )
-
-        for step_name in excluded_steps:
-            current_category &= Q(
-                ~Exists(
-                    Step.objects.filter(
-                        archive=OuterRef("pk"),
-                        name=step_name,
-                        status=Status.COMPLETED,
-                    )
-                )
-            )
-
-        query |= current_category
-
-    return Archive.objects.exclude(query).count()
 
 
 @extend_schema_view(
