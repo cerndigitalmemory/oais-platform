@@ -1057,29 +1057,40 @@ def statistics(request):
 
 @api_view(["GET"])
 def step_statistics(request):
-    data = {
-        "staged_count": Archive.objects.filter(state=ArchiveState.NONE).count(),
-        "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
-        "harvested_preserved_count": count_archives_by_steps(
-            include_steps=[Steps.ARCHIVE],
-            exclude_steps=[Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
-        ),
-        "harvested_preserved_tape_count": count_archives_by_steps(
-            include_steps=[Steps.ARCHIVE, Steps.PUSH_TO_CTA],
-            exclude_steps=[Steps.INVENIO_RDM_PUSH],
-        ),
-        "harvested_preserved_registry_count": count_archives_by_steps(
-            include_steps=[Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH],
-            exclude_steps=[Steps.PUSH_TO_CTA],
-        ),
-        "harvested_preserved_tape_registry_count": count_archives_by_steps(
-            include_steps=[
+    categories = {
+        "harvested_preserved": {
+            "included": [Steps.ARCHIVE],
+            "excluded": [Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+        },
+        "harvested_preserved_tape": {
+            "included": [Steps.ARCHIVE, Steps.PUSH_TO_CTA],
+            "excluded": [Steps.INVENIO_RDM_PUSH],
+        },
+        "harvested_preserved_registry": {
+            "included": [Steps.ARCHIVE, Steps.INVENIO_RDM_PUSH],
+            "excluded": [Steps.PUSH_TO_CTA],
+        },
+        "harvested_preserved_tape_registry": {
+            "included": [
                 Steps.ARCHIVE,
                 Steps.PUSH_TO_CTA,
                 Steps.INVENIO_RDM_PUSH,
             ]
-        ),
+        },
     }
+    data = {
+        "staged_count": Archive.objects.filter(state=ArchiveState.NONE).count(),
+        "only_harvested_count": Archive.objects.filter(state=ArchiveState.SIP).count(),
+    }
+    data.update(
+        {
+            f"{name}_count": count_archives_by_steps(
+                include_steps=steps.get("included"), exclude_steps=steps.get("excluded")
+            )
+            for name, steps in categories.items()
+        }
+    )
+    data["others_count"] = count_excluded_archives(categories)
 
     return Response(data)
 
@@ -1117,6 +1128,46 @@ def count_archives_by_steps(include_steps=None, exclude_steps=None):
         )
 
     return archives.distinct().count()
+
+
+def count_excluded_archives(categories):
+    """
+    Returns the count of Archives that do not belong to any of the predefined categories.
+
+    :param categories: A dictionary defining the included and excluded steps for each category.
+    """
+    query = Q()
+
+    for steps in categories.values():
+        included_steps = steps.get("included", [])
+        excluded_steps = steps.get("excluded", [])
+
+        current_category = Q()
+        for step_name in included_steps:
+            current_category &= Q(
+                Exists(
+                    Step.objects.filter(
+                        archive=OuterRef("pk"),
+                        name=step_name,
+                        status=Status.COMPLETED,
+                    )
+                )
+            )
+
+        for step_name in excluded_steps:
+            current_category &= Q(
+                ~Exists(
+                    Step.objects.filter(
+                        archive=OuterRef("pk"),
+                        name=step_name,
+                        status=Status.COMPLETED,
+                    )
+                )
+            )
+
+        query |= current_category
+
+    return Archive.objects.filter(state=ArchiveState.AIP).exclude(query).count()
 
 
 @extend_schema_view(

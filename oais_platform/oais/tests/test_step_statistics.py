@@ -51,6 +51,7 @@ class StepStatisticsEndpointTest(APITestCase):
                 "harvested_preserved_tape_count": 1,
                 "harvested_preserved_registry_count": 1,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
             },
         )
 
@@ -81,6 +82,7 @@ class StepStatisticsEndpointTest(APITestCase):
                 "harvested_preserved_tape_count": 2,
                 "harvested_preserved_registry_count": 2,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
             },
         )
 
@@ -99,6 +101,7 @@ class StepStatisticsEndpointTest(APITestCase):
                 "harvested_preserved_tape_count": 0,
                 "harvested_preserved_registry_count": 0,
                 "harvested_preserved_tape_registry_count": 0,
+                "others_count": 0,
             },
         )
 
@@ -129,5 +132,6 @@ class StepStatisticsEndpointTest(APITestCase):
                 "harvested_preserved_tape_count": 1,
                 "harvested_preserved_registry_count": 1,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
             },
         )
