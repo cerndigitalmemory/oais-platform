@@ -21,6 +21,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -238,7 +239,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if status:
             step_filter |= Q(status=status)
         if name:
-            step_filter |= Q(name=name)
+            step_filter |= Q(step_type__name=name)
         filtered_steps = Step.objects.filter(step_filter).order_by("-start_date")
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
@@ -298,7 +299,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "source": ["source"],
         "tag": ["archive_collections__id"],
         "exclude_tag": ["archive_collections__id"],
-        "step_name": ["last_step__name"],
+        "step_name": ["last_step__step_type__name"],
         "step_status": ["last_step__status"],
         "query": ["title__icontains", "recid__icontains"],
     }
@@ -675,7 +676,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         ):
                             break
                 result["state_intersection"] = state_intersection
-                result["next_steps_intersection"] = sorted(next_steps_intersection)
+                serializer = StepTypeMinimalSerializer(
+                    next_steps_intersection, many=True
+                )
+                result["next_steps_intersection"] = serializer.data
                 result["all_last_step_failed"] = all_last_step_failed
                 result["can_continue"] = all_last_step_failed and can_continue
 
@@ -731,15 +735,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     )
                     return response
         return HttpResponse(status=404)
-
-    @action(
-        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
-    )
-    def get_steps_order_constraints(self, request):
-        """
-        Returns all Step order constraints
-        """
-        return Response(StepType.get_all_order_constraints())
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1044,6 +1039,28 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             if step:
                 step.set_status(Status.FAILED)
             raise BadRequest({"status": 1, "msg": e})
+
+
+class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint that allows StepTypes to be viewed
+    """
+
+    queryset = StepType.objects.all().order_by("name")
+    serializer_class = StepTypeMinimalSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return super().get_queryset().order_by("name")
+
+    @action(
+        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
+    )
+    def get_steps_order_constraints(self, request):
+        """
+        Returns all StepType order constraints
+        """
+        return Response(StepType.get_all_order_constraints())
 
 
 @api_view(["GET"])

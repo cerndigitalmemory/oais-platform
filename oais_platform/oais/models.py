@@ -387,7 +387,7 @@ class StepType(models.Model):
         constraint_map = {}
         for step_type in cls.objects.all():
             constraint_map[step_type.name] = list(
-                step_type.get_allowed_next_steps().values_list("name", flat=True)
+                step_type.next_steps.all().values_list("name", flat=True)
             )
         return constraint_map
 
@@ -736,7 +736,7 @@ class BatchStatus(models.IntegerChoices):
     IN_PROGRESS = 2, "IN_PROGRESS"
     COMPLETED = 3, "COMPLETED"
     BLOCKED = 4, "BLOCKED"
-    PARTIALLY_COMPLETED = 5, "PARTIALLY_COMPLETED"
+    PARTIALLY_FAILED = 5, "PARTIALLY_FAILED"
 
 
 class HarvestBatch(models.Model):
@@ -754,6 +754,21 @@ class HarvestBatch(models.Model):
     @property
     def size(self):
         return len(self.records or [])
+
+    @property
+    def completed(self):
+        archives = self.harvest_run.collection.archives.values_list("id", flat=True)
+        return (
+            Step.objects.filter(
+                initiated_by_harvest_batch=self, archive_id__in=archives
+            )
+            .values("archive_id")
+            .annotate(
+                incomplete=models.Count("id", filter=~models.Q(status=Status.COMPLETED))
+            )
+            .filter(incomplete=0)
+            .count()
+        )
 
     class Meta:
         unique_together = ("harvest_run", "batch_number")

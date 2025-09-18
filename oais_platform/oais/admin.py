@@ -307,6 +307,7 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "status",
         "harvest_run_link",
         "size",
+        "completed",
     )
 
     def harvest_run_link(self, obj):

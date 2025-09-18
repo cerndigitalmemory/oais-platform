@@ -92,6 +92,7 @@ class StepTypeMinimalSerializer(serializers.ModelSerializer):
             "name",
             "label",
             "description",
+            "enabled",
         ]
 
 
