@@ -64,11 +64,6 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 172800}  # 48 hours
 
 CELERY_BEAT_SCHEDULE = {
-    "cds-rdm-weekly": {
-        "task": "periodic_harvest",
-        "schedule": crontab(hour=2, minute=00, day_of_week=0),
-        "args": ("dev-cds-rdm", "oais", [2, 3, 4, 5, 11]),
-    },
     "fts-delegate": {
         "task": "fts_delegate",
         "schedule": crontab(hour="*/6", minute=00),
@@ -357,9 +352,7 @@ AM_CONCURRENCY_LIMT = 100
 PIPELINE_SIZE_LIMIT = 10
 
 # Automatic harvest batch size
-AUTOMATIC_HARVEST_BATCH_SIZE = 100
-# Automatic harvest delay time between batches in minutes
-AUTOMATIC_HARVEST_BATCH_DELAY = 10
+AUTOMATIC_HARVEST_BATCH_SIZE = 10
 
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")

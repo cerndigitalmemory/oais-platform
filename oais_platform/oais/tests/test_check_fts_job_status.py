@@ -5,7 +5,7 @@ from django.apps import apps
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import check_fts_job_status
 from oais_platform.settings import FTS_MAX_RETRY_COUNT
 
@@ -19,7 +19,7 @@ class CheckFTSJobStatusTests(APITestCase):
         self.archive = Archive.objects.create()
         self.step = Step.objects.create(
             archive=self.archive,
-            name=Steps.PUSH_TO_CTA,
+            step_name=StepName.PUSH_TO_CTA,
             input_data=json.dumps({"test": True}),
         )
         self.step.set_output_data({"artifact": {"artifact_name": "FTS Job"}})

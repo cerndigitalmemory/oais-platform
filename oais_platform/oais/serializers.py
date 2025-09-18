@@ -10,6 +10,7 @@ from oais_platform.oais.models import (
     Resource,
     Source,
     Step,
+    StepType,
     UploadJob,
 )
 
@@ -83,15 +84,27 @@ class UserMinimalSerializer(serializers.ModelSerializer):
         ]
 
 
+class StepTypeMinimalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StepType
+        fields = [
+            "id",
+            "name",
+            "label",
+            "description",
+        ]
+
+
 class StepSerializer(serializers.ModelSerializer):
     archive = serializers.IntegerField(source="archive.id")
+    step_type = StepTypeMinimalSerializer()
 
     class Meta:
         model = Step
         fields = [
             "id",
             "archive",
-            "name",
+            "step_type",
             "create_date",
             "start_date",
             "finish_date",
@@ -104,11 +117,13 @@ class StepSerializer(serializers.ModelSerializer):
 
 
 class LastStepSerializer(serializers.ModelSerializer):
+    step_type = StepTypeMinimalSerializer()
+
     class Meta:
         model = Step
         fields = [
             "id",
-            "name",
+            "step_type",
             "start_date",
             "finish_date",
             "status",

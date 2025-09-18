@@ -11,7 +11,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step, Steps
+from oais_platform.oais.models import Archive, Step, StepName, StepType
 from oais_platform.oais.views import check_allowed_path
 from oais_platform.settings import BIC_WORKDIR
 
@@ -101,7 +101,7 @@ class AnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 1)
         mock_dispatch.assert_called_once_with(
-            Steps.ANNOUNCE,
+            StepType.get_by_stepname(StepName.ANNOUNCE),
             latest_archive_id,
             Step.objects.latest("id").id,
             {
@@ -109,6 +109,7 @@ class AnnounceTests(APITestCase):
                 "announce_path": path_to_sip,
             },
             None,
+            False,
         )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
