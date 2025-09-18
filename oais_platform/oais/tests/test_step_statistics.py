@@ -135,3 +135,22 @@ class StepStatisticsEndpointTest(APITestCase):
                 "others_count": 0,
             },
         )
+
+    def test_step_statistics_others_count(self):
+        self.create_archive_with_steps([Steps.CHECKSUM, Steps.PUSH_TO_CTA])
+        self.create_archive_with_steps([Steps.INVENIO_RDM_PUSH])
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "staged_count": 1,
+                "harvested_count": 1,
+                "harvested_preserved_count": 1,
+                "harvested_preserved_tape_count": 1,
+                "harvested_preserved_registry_count": 1,
+                "harvested_preserved_tape_registry_count": 1,
+                "others_count": 2,
+            },
+        )
