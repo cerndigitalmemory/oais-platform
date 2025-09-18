@@ -28,7 +28,7 @@ def add_step_types(apps, schema_editor):
     validate.next_steps.set([checksum])
     upload.next_steps.set([validate])
     announce.next_steps.set([validate])
-    checksum.next_steps.set([archive, registry, extract])
+    checksum.next_steps.set([archive, registry])
     archive.next_steps.set([cta, registry, archive, notify])
     cta.next_steps.set([cta, registry, archive])
     registry.next_steps.set([cta, registry, archive])

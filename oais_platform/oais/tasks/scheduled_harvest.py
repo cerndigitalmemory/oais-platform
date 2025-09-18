@@ -17,7 +17,10 @@ from oais_platform.oais.models import (
 )
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import execute_pipeline
-from oais_platform.settings import AUTOMATIC_HARVEST_BATCH_SIZE
+from oais_platform.settings import (
+    AUTOMATIC_HARVEST_BATCH_DELAY,
+    AUTOMATIC_HARVEST_BATCH_SIZE,
+)
 
 logger = get_task_logger(__name__)
 
@@ -27,7 +30,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
     try:
         scheduled_harvest = ScheduledHarvest.objects.get(id=scheduled_harvest_id)
     except ScheduledHarvest.DoesNotExist:
-        logger.error(f"PeriodicTask with id {scheduled_harvest_id} does not exist.")
+        logger.error(f"ScheduledHarvest with id {scheduled_harvest_id} does not exist.")
         return
 
     if scheduled_harvest.enabled is False:
@@ -108,8 +111,6 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 batch_number += 1
 
             records_count += len(records_to_harvest)
-            if records_count > 20:
-                break
     except Exception as e:
         logger.error(f"Error while querying {source.name}: {str(e)}")
         return
@@ -156,7 +157,7 @@ def batch_harvest(self, batch_id):
             batch.harvest_run.collection.add_archive(archive.id)
 
             for step in batch.harvest_run.pipeline:
-                archive.add_step_to_pipeline(step, batch=batch)
+                archive.add_step_to_pipeline(step, harvest_batch=batch)
 
             step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
             sigs.append(sig)
@@ -198,16 +199,20 @@ def finalize_batch(self, results, batch_id):
             or batch.size != batch.harvest_run.collection.archives.count()
         ):
             logger.warning(f"Batch {batch_id} had failed archives.")
-            batch.set_status(BatchStatus.PARTIALLY_COMPLETED)
+            batch.set_status(BatchStatus.PARTIALLY_FAILED)
         else:
             batch.set_status(BatchStatus.COMPLETED)
             logger.info(f"Batch {batch_id} completed successfully.")
 
         next_batch = batch.harvest_run.get_next_pending_batch()
-        (
-            batch_harvest.delay(next_batch.id)
-            if next_batch
-            else logger.info(
+        if next_batch:
+            logger.info(
+                f"Scheduling the next batch {next_batch.id} for {batch.harvest_run.source.name} in {AUTOMATIC_HARVEST_BATCH_DELAY} minutes."
+            )
+            batch_harvest.apply_async(
+                (next_batch.id,), countdown=AUTOMATIC_HARVEST_BATCH_DELAY * 60
+            )
+        else:
+            logger.info(
                 f"All batches of harvest run({batch.harvest_run.id}) have been completed for {batch.harvest_run.source.name}."
             )
-        )

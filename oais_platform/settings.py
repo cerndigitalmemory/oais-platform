@@ -352,7 +352,9 @@ AM_CONCURRENCY_LIMT = 100
 PIPELINE_SIZE_LIMIT = 10
 
 # Automatic harvest batch size
-AUTOMATIC_HARVEST_BATCH_SIZE = 10
+AUTOMATIC_HARVEST_BATCH_SIZE = 100
+# Automatic harvest delay time between batches in minutes
+AUTOMATIC_HARVEST_BATCH_DELAY = 10
 
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
