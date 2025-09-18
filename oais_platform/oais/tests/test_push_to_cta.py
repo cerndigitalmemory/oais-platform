@@ -6,7 +6,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
 from oais_platform.settings import (
     FTS_CONCURRENCY_LIMIT,
@@ -23,13 +23,15 @@ class PushToCTATests(APITestCase):
 
         self.archive = Archive.objects.create(path_to_aip="test/path")
         self.step = Step.objects.create(
-            archive=self.archive, name=Steps.PUSH_TO_CTA, start_date=timezone.now()
+            archive=self.archive,
+            step_name=StepName.PUSH_TO_CTA,
+            start_date=timezone.now(),
         )
 
         self.wait_limit_archive = Archive.objects.create(path_to_aip="test/path")
         self.wait_limit_step = Step.objects.create(
             archive=self.wait_limit_archive,
-            name=Steps.PUSH_TO_CTA,
+            step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now() - timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS),
         )
 

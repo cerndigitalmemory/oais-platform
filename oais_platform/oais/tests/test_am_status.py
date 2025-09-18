@@ -5,7 +5,7 @@ import requests
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import check_am_status
 from oais_platform.settings import AM_WAITING_TIME_LIMIT
 
@@ -16,7 +16,9 @@ class ArchivematicaStatusTests(APITestCase):
             recid="1", source="test", source_url="", path_to_sip="test_path"
         )
 
-        self.step = Step.objects.create(archive=self.archive, name=5)
+        self.step = Step.objects.create(
+            archive=self.archive, step_name=StepName.ARCHIVE
+        )
 
         # simulate archivematica step started
         self.step.set_start_date()

@@ -7,10 +7,14 @@ from oais_platform.oais.models import (
     ApiKey,
     Archive,
     Collection,
+    HarvestBatch,
+    HarvestRun,
     Profile,
     Resource,
+    ScheduledHarvest,
     Source,
     Step,
+    StepType,
     UploadJob,
 )
 
@@ -86,7 +90,7 @@ class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "archive_link",
-        "name",
+        "step_type_name",
         "status",
         "start_date",
         "finish_date",
@@ -100,6 +104,36 @@ class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     archive_link.short_description = "Archive"
+
+    def step_type_name(self, obj):
+        if obj.step_type:
+            return obj.step_type.name
+        return None
+
+    step_type_name.short_description = "Step Type"
+
+
+@admin.register(StepType)
+class StepTypeAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "label",
+        "description",
+        "enabled",
+        "task_name",
+        "failed_count",
+        "failed_blocking_limit",
+        "has_sip",
+        "has_aip",
+        "automatic_next_step",
+        "next_steps_list_str",
+    )
+
+    def next_steps_list_str(self, obj):
+        return ", ".join([step.name for step in obj.next_steps.all()])
+
+    next_steps_list_str.short_description = "Next possible Steps"
 
 
 @admin.register(Resource)
@@ -187,3 +221,99 @@ class APIKeyAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     source_name.short_description = "Source"
+
+
+@admin.register(ScheduledHarvest)
+class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "source_name",
+        "user_name",
+        "enabled",
+        "pipeline",
+        "condition_unmodified_for_days",
+        "scheduling_task",
+    )
+
+    def user_name(self, obj):
+        if obj.user:
+            return obj.user.username
+        return None
+
+    user_name.short_description = "Username"
+
+    def source_name(self, obj):
+        if obj.source:
+            return obj.source.name
+        return None
+
+    source_name.short_description = "Source"
+
+
+@admin.register(HarvestRun)
+class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "source_name",
+        "user_name",
+        "scheduled_harvest_link",
+        "collection_link",
+        "pipeline",
+        "query_start_time",
+        "query_end_time",
+        "condition_unmodified_for_days",
+        "created_at",
+    )
+
+    def user_name(self, obj):
+        if obj.user:
+            return obj.user.username
+        return None
+
+    user_name.short_description = "Username"
+
+    def source_name(self, obj):
+        if obj.source:
+            return obj.source.name
+        return None
+
+    source_name.short_description = "Source"
+
+    def collection_link(self, obj):
+        related_obj = obj.collection
+        if related_obj:
+            url = reverse("admin:oais_collection_change", args=[related_obj.id])
+            return format_html('<a href="{}">{}</a>', url, related_obj)
+        return None
+
+    collection_link.short_description = "Collection"
+
+    def scheduled_harvest_link(self, obj):
+        related_obj = obj.scheduled_harvest
+        if related_obj:
+            url = reverse("admin:oais_scheduledharvest_change", args=[related_obj.id])
+            return format_html('<a href="{}">{}</a>', url, related_obj)
+        return None
+
+    scheduled_harvest_link.short_description = "Scheduled Harvest"
+
+
+@admin.register(HarvestBatch)
+class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "batch_number",
+        "status",
+        "harvest_run_link",
+        "size",
+    )
+
+    def harvest_run_link(self, obj):
+        related_obj = obj.harvest_run
+        if related_obj:
+            url = reverse("admin:oais_harvestrun_change", args=[related_obj.id])
+            return format_html('<a href="{}">{}</a>', url, related_obj)
+        return None
+
+    harvest_run_link.short_description = "Harvest Run"

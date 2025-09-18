@@ -6,7 +6,7 @@ from celery.exceptions import Retry
 from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica
 from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, AM_CONCURRENCY_LIMT
 
@@ -21,7 +21,9 @@ class ArchivematicaCreateTests(APITestCase):
             sip_size=1000,
         )
 
-        self.step = Step.objects.create(archive=self.archive, name=5)
+        self.step = Step.objects.create(
+            archive=self.archive, step_name=StepName.ARCHIVE
+        )
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
