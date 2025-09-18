@@ -1100,7 +1100,7 @@ def step_statistics(request):
         )
         for name, steps in categories.items()
     }
-    data["others_count"] = count_excluded_archives(categories)
+    data["others_count"] = count_excluded_archives(data)
 
     return Response(data)
 

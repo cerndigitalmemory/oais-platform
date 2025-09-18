@@ -1,4 +1,4 @@
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef
 
 from oais_platform.oais.models import Archive, Status, Step
 
@@ -38,41 +38,10 @@ def count_archives_by_steps(include_steps=None, exclude_steps=None):
     return archives.distinct().count()
 
 
-def count_excluded_archives(categories):
+def count_excluded_archives(statistics):
     """
     Returns the count of Archives that do not belong to any of the predefined categories.
 
-    :param categories: A dictionary defining the included and excluded steps for each category.
+    :param statistics: A dictionary containing the counts for each category.
     """
-    query = Q()
-
-    for steps in categories.values():
-        included_steps = steps.get("included", [])
-        excluded_steps = steps.get("excluded", [])
-
-        current_category = Q()
-        for step_name in included_steps:
-            current_category &= Q(
-                Exists(
-                    Step.objects.filter(
-                        archive=OuterRef("pk"),
-                        name=step_name,
-                        status=Status.COMPLETED,
-                    )
-                )
-            )
-
-        for step_name in excluded_steps:
-            current_category &= Q(
-                ~Exists(
-                    Step.objects.filter(
-                        archive=OuterRef("pk"),
-                        name=step_name,
-                        status=Status.COMPLETED,
-                    )
-                )
-            )
-
-        query |= current_category
-
-    return Archive.objects.exclude(query).count()
+    return Archive.objects.all().count() - sum(statistics.values())
