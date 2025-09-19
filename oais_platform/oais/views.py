@@ -434,7 +434,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         next_steps = archive.get_next_steps()
 
-        return Response(next_steps)
+        serializer = StepTypeMinimalSerializer(next_steps, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
