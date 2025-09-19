@@ -3,27 +3,22 @@ from django.db.models import Exists, OuterRef
 from oais_platform.oais.models import Archive, Status, Step
 
 
-def count_archives_by_steps(
-    include_steps=None, exclude_steps=None, state=None, staged=False
-):
+def count_archives_by_steps(category):
     """
     Returns count of Archives based on included and excluded completed steps.
 
-    :param include_steps: A list or tuple of Steps.name to include (must be completed).
-    :param exclude_steps: A list or tuple of Steps.name to exclude if completed.
-    :param state: ArchiveState to filter by
-    :param staged: boolean whether to check if the archive is staged or not
+    :param category: A dictionary containing values to filter archives by
     """
-    include_steps = include_steps or []
-    exclude_steps = exclude_steps or []
+    include_steps = category.get("included", [])
+    exclude_steps = category.get("excluded", [])
 
     archives = Archive.objects.all()
 
-    if state:
-        archives = archives.filter(state=state)
+    if category.get("state"):
+        archives = archives.filter(state=category["state"])
 
-    if staged:
-        archives = archives.filter(staged=staged)
+    if category.get("staged"):
+        archives = archives.filter(staged=category["staged"])
 
     for step_name in include_steps:
         archives = archives.filter(

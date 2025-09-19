@@ -1098,13 +1098,8 @@ def step_statistics(request):
         },
     }
     data = {
-        f"{name}_count": count_archives_by_steps(
-            include_steps=steps.get("included"),
-            exclude_steps=steps.get("excluded"),
-            state=steps.get("state"),
-            staged=steps.get("staged"),
-        )
-        for name, steps in categories.items()
+        f"{name}_count": count_archives_by_steps(category)
+        for name, category in categories.items()
     }
     data["others_count"] = count_excluded_archives(data)
 
