@@ -213,13 +213,6 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "pipeline": [StepName.EXTRACT_TITLE],
-                    "prev_step": StepName.CHECKSUM,
-                },
-                status.HTTP_200_OK,
-            ),
-            (
-                {
                     "pipeline": [StepName.NOTIFY_SOURCE],
                     "prev_step": StepName.ARCHIVE,
                 },
@@ -350,3 +343,54 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.archive.manifest, {"test": "test"})
+
+    def test_extract_title_invalid_step_order(self):
+        # Not allowed if state is not SIP
+        self.client.force_authenticate(user=self.testuser)
+
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {
+                "archive": self.dict_archive.data,
+                "pipeline_steps": [StepName.EXTRACT_TITLE],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "Invalid Step order",
+        )
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_extract_title_success(self, mock_dispatch):
+        self.client.force_authenticate(user=self.testuser)
+        Step.objects.create(
+            archive=self.archive, step_name=StepName.HARVEST, status=Status.COMPLETED
+        )
+
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {
+                "archive": self.dict_archive.data,
+                "pipeline_steps": [StepName.EXTRACT_TITLE],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_step = Step.objects.latest("id")
+        self.assertEqual(latest_step.step_type.name, StepName.EXTRACT_TITLE)
+        self.assertEqual(latest_step.status, Status.WAITING)
+
+        mock_dispatch.assert_called_once_with(
+            StepType.get_by_stepname(StepName.EXTRACT_TITLE),
+            self.archive.id,
+            latest_step.id,
+            latest_step.input_data,
+            self.testuser_api_key.key,
+            False,
+        )
