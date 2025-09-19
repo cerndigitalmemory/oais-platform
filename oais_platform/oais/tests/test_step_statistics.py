@@ -17,7 +17,11 @@ class StepStatisticsEndpointTest(APITestCase):
 
     def setUp(self):
         self.url = reverse("step_statistics")
-        self.create_archive_with_steps([])
+
+        staged_archive = self.create_archive_with_steps([])
+        staged_archive.staged = True
+        staged_archive.save()
+
         self.create_archive_with_steps([Steps.CHECKSUM])
         self.create_archive_with_steps([Steps.CHECKSUM, Steps.ARCHIVE])
         self.create_archive_with_steps(

@@ -1063,12 +1063,13 @@ def statistics(request):
 def step_statistics(request):
     categories = {
         "staged": {
+            "staged": True,
             "excluded": [
                 Steps.CHECKSUM,
                 Steps.ARCHIVE,
                 Steps.PUSH_TO_CTA,
                 Steps.INVENIO_RDM_PUSH,
-            ]
+            ],
         },
         "harvested": {
             "state": ArchiveState.SIP,
@@ -1101,6 +1102,7 @@ def step_statistics(request):
             include_steps=steps.get("included"),
             exclude_steps=steps.get("excluded"),
             state=steps.get("state"),
+            staged=steps.get("staged"),
         )
         for name, steps in categories.items()
     }
