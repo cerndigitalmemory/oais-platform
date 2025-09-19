@@ -215,7 +215,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     requester=request.user,
                     staged=True,
-                    original_file_size=record.get("file_size", 0),
+                    original_file_size=record.get("file_size") or 0,
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:

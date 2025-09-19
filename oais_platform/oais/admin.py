@@ -260,6 +260,7 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "scheduled_harvest_link",
         "collection_link",
         "pipeline",
+        "archive_count",
         "query_start_time",
         "query_end_time",
         "condition_unmodified_for_days",
@@ -298,6 +299,11 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
     scheduled_harvest_link.short_description = "Scheduled Harvest"
 
+    def archive_count(self, obj):
+        return obj.size
+
+    archive_count.short_description = "Archives Count"
+
 
 @admin.register(HarvestBatch)
 class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
@@ -308,6 +314,7 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "harvest_run_link",
         "size",
         "completed",
+        "archive_count",
     )
 
     def harvest_run_link(self, obj):
@@ -318,3 +325,8 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     harvest_run_link.short_description = "Harvest Run"
+
+    def archive_count(self, obj):
+        return obj.archives.count()
+
+    archive_count.short_description = "Archives Count"
