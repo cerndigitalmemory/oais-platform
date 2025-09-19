@@ -731,20 +731,18 @@ class HarvestRun(models.Model):
         self.save()
 
 
-class BatchStatus(models.IntegerChoices):
-    PENDING = 1, "PENDING"
-    IN_PROGRESS = 2, "IN_PROGRESS"
-    COMPLETED = 3, "COMPLETED"
-    BLOCKED = 4, "BLOCKED"
-    PARTIALLY_FAILED = 5, "PARTIALLY_FAILED"
+class BatchStatus(models.TextChoices):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    BLOCKED = "BLOCKED"
+    PARTIALLY_FAILED = "PARTIALLY_FAILED"
 
 
 class HarvestBatch(models.Model):
     id = models.AutoField(primary_key=True)
     batch_number = models.PositiveIntegerField()
-    status = models.IntegerField(
-        choices=BatchStatus.choices, default=BatchStatus.PENDING
-    )
+    status = models.CharField(choices=BatchStatus.choices, default=BatchStatus.PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
     records = models.JSONField(default=list)
     harvest_run = models.ForeignKey(
