@@ -17,6 +17,11 @@ class StepStatisticsEndpointTest(APITestCase):
 
     def setUp(self):
         self.url = reverse("step_statistics")
+
+        staged_archive = self.create_archive_with_steps([])
+        staged_archive.staged = True
+        staged_archive.save()
+
         self.create_archive_with_steps([Steps.CHECKSUM])
         self.create_archive_with_steps([Steps.CHECKSUM, Steps.ARCHIVE])
         self.create_archive_with_steps(
@@ -44,11 +49,13 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
-                "only_harvested_count": 1,
+                "staged_count": 1,
+                "harvested_count": 1,
                 "harvested_preserved_count": 1,
                 "harvested_preserved_tape_count": 1,
                 "harvested_preserved_registry_count": 1,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
             },
         )
 
@@ -73,11 +80,13 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
-                "only_harvested_count": 1,
+                "staged_count": 1,
+                "harvested_count": 1,
                 "harvested_preserved_count": 1,
                 "harvested_preserved_tape_count": 2,
                 "harvested_preserved_registry_count": 2,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
             },
         )
 
@@ -90,11 +99,13 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
-                "only_harvested_count": 0,
+                "staged_count": 0,
+                "harvested_count": 0,
                 "harvested_preserved_count": 0,
                 "harvested_preserved_tape_count": 0,
                 "harvested_preserved_registry_count": 0,
                 "harvested_preserved_tape_registry_count": 0,
+                "others_count": 0,
             },
         )
 
@@ -119,10 +130,31 @@ class StepStatisticsEndpointTest(APITestCase):
         self.assertEqual(
             response.data,
             {
-                "only_harvested_count": 1,
+                "staged_count": 1,
+                "harvested_count": 1,
                 "harvested_preserved_count": 2,
                 "harvested_preserved_tape_count": 1,
                 "harvested_preserved_registry_count": 1,
                 "harvested_preserved_tape_registry_count": 1,
+                "others_count": 0,
+            },
+        )
+
+    def test_step_statistics_others_count(self):
+        self.create_archive_with_steps([Steps.CHECKSUM, Steps.PUSH_TO_CTA])
+        self.create_archive_with_steps([Steps.INVENIO_RDM_PUSH])
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "staged_count": 1,
+                "harvested_count": 1,
+                "harvested_preserved_count": 1,
+                "harvested_preserved_tape_count": 1,
+                "harvested_preserved_registry_count": 1,
+                "harvested_preserved_tape_registry_count": 1,
+                "others_count": 2,
             },
         )
