@@ -395,6 +395,11 @@ class StepType(models.Model):
         self.enabled = enabled
         self.save()
 
+    def unblock(self):
+        self.failed_count = 0
+        self.enabled = True
+        self.save()
+
 
 class StepManager(models.Manager):
     def create(self, *, step_name: StepName, **kwargs):
@@ -425,7 +430,7 @@ class Step(models.Model):
     )
     initiated_by_harvest_batch = models.ForeignKey(
         "HarvestBatch",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="steps",
@@ -457,6 +462,12 @@ class Step(models.Model):
     def set_status(self, status):
         self.status = status
         self.save()
+
+        if self.is_batch_initiated:
+            # Check if the batch is finished
+            batch = self.initiated_by_harvest_batch
+            if batch.size == batch.completed:
+                batch.set_status(BatchStatus.COMPLETED)
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -730,6 +741,10 @@ class HarvestRun(models.Model):
         self.collection = collection
         self.save()
 
+    @property
+    def size(self):
+        return self.collection.archives.count()
+
 
 class BatchStatus(models.TextChoices):
     PENDING = "PENDING"
@@ -755,18 +770,22 @@ class HarvestBatch(models.Model):
 
     @property
     def completed(self):
-        archives = self.harvest_run.collection.archives.values_list("id", flat=True)
         return (
-            Step.objects.filter(
-                initiated_by_harvest_batch=self, archive_id__in=archives
-            )
-            .values("archive_id")
-            .annotate(
-                incomplete=models.Count("id", filter=~models.Q(status=Status.COMPLETED))
+            self.archives.annotate(
+                incomplete=models.Count(
+                    "steps",
+                    filter=models.Q(steps__initiated_by_harvest_batch=self)
+                    & ~models.Q(steps__status=Status.COMPLETED),
+                    distinct=True,
+                )
             )
             .filter(incomplete=0)
             .count()
         )
+
+    @property
+    def archives(self):
+        return Archive.objects.filter(steps__initiated_by_harvest_batch=self).distinct()
 
     class Meta:
         unique_together = ("harvest_run", "batch_number")

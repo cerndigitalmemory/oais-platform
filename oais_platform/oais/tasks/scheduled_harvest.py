@@ -152,12 +152,12 @@ def batch_harvest(self, batch_id):
                 source_url=record["source_url"],
                 requester=batch.harvest_run.user,
                 approver=batch.harvest_run.user,
-                original_file_size=record.get("file_size", 0),
+                original_file_size=record.get("file_size") or 0,
             )
             batch.harvest_run.collection.add_archive(archive.id)
 
-            for step in batch.harvest_run.pipeline:
-                archive.add_step_to_pipeline(step, harvest_batch=batch)
+            for step_name in batch.harvest_run.pipeline:
+                archive.add_step_to_pipeline(step_name, harvest_batch=batch)
 
             step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
             sigs.append(sig)
@@ -194,15 +194,9 @@ def finalize_batch(self, results, batch_id):
             )
             batch.set_status(BatchStatus.BLOCKED)
             return
-        elif (
-            failed_archives > 0
-            or batch.size != batch.harvest_run.collection.archives.count()
-        ):
+        elif failed_archives > 0 or batch.size != batch.archives.count():
             logger.warning(f"Batch {batch_id} had failed archives.")
             batch.set_status(BatchStatus.PARTIALLY_FAILED)
-        else:
-            batch.set_status(BatchStatus.COMPLETED)
-            logger.info(f"Batch {batch_id} completed successfully.")
 
         next_batch = batch.harvest_run.get_next_pending_batch()
         if next_batch:
