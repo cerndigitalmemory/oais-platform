@@ -24,8 +24,8 @@ class StepStatisticsEndpointTest(APITestCase):
         staged_archive.staged = True
         staged_archive.save()
 
-        self.create_archive_with_steps([Steps.CHECKSUM])
-        self.create_archive_with_steps([Steps.CHECKSUM, Steps.ARCHIVE])
+        self.create_archive_with_steps([StepName.CHECKSUM])
+        self.create_archive_with_steps([StepName.CHECKSUM, StepName.ARCHIVE])
         self.create_archive_with_steps(
             [StepName.CHECKSUM, StepName.ARCHIVE, StepName.PUSH_TO_CTA]
         )
@@ -147,8 +147,8 @@ class StepStatisticsEndpointTest(APITestCase):
         )
 
     def test_step_statistics_others_count(self):
-        self.create_archive_with_steps([Steps.CHECKSUM, Steps.PUSH_TO_CTA])
-        self.create_archive_with_steps([Steps.INVENIO_RDM_PUSH])
+        self.create_archive_with_steps([StepName.CHECKSUM, StepName.PUSH_TO_CTA])
+        self.create_archive_with_steps([StepName.INVENIO_RDM_PUSH])
 
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
