@@ -1093,7 +1093,6 @@ def step_statistics(request):
         "staged": {
             "staged": True,
             "excluded": [
-                StepName.CHECKSUM,
                 StepName.ARCHIVE,
                 StepName.PUSH_TO_CTA,
                 StepName.INVENIO_RDM_PUSH,
