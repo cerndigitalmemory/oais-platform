@@ -1,5 +1,3 @@
-from unittest import skip
-
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -31,7 +29,6 @@ class StatisticsEndpointTest(APITestCase):
                 )
             archive.save()
 
-    @skip("Temporarily skipped")
     def test_statistics(self):
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -40,11 +37,10 @@ class StatisticsEndpointTest(APITestCase):
         self.assertEqual(response.data["pushed_to_tape_count"], 1)
         self.assertEqual(response.data["pushed_to_registry_count"], 1)
 
-    @skip("Temporarily skipped")
     def test_statistics_multiple_pushes(self):
         for step in (StepName.INVENIO_RDM_PUSH, StepName.PUSH_TO_CTA):
             Step.objects.create(
-                name=step, status=Status.COMPLETED, archive=self.pushed_archive
+                step_name=step, status=Status.COMPLETED, archive=self.pushed_archive
             )
         self.pushed_archive.save()
 
