@@ -13,10 +13,10 @@ class StatisticsEndpointTest(APITestCase):
         self.preserved_archive = Archive.objects.create()
         self.pushed_archive = Archive.objects.create()
         step_data = {
-            self.harvested_archive: [StepName.CHECKSUM],
-            self.preserved_archive: [StepName.CHECKSUM, StepName.ARCHIVE],
+            self.harvested_archive: [StepName.HARVEST],
+            self.preserved_archive: [StepName.HARVEST, StepName.ARCHIVE],
             self.pushed_archive: [
-                StepName.CHECKSUM,
+                StepName.HARVEST,
                 StepName.ARCHIVE,
                 StepName.PUSH_TO_CTA,
                 StepName.INVENIO_RDM_PUSH,
