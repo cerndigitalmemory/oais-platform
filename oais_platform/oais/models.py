@@ -395,6 +395,15 @@ class StepType(models.Model):
         self.enabled = enabled
         self.save()
 
+    def increment_failed_count(self):
+        self.failed_count += 1
+        if (
+            self.failed_blocking_limit is not None
+            and self.failed_count >= self.failed_blocking_limit
+        ):
+            self.enabled = False
+        self.save()
+
     def unblock(self):
         self.failed_count = 0
         self.enabled = True
