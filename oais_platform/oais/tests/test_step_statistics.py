@@ -1,5 +1,3 @@
-from unittest import skip
-
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -24,28 +22,27 @@ class StepStatisticsEndpointTest(APITestCase):
         staged_archive.staged = True
         staged_archive.save()
 
-        self.create_archive_with_steps([StepName.CHECKSUM])
-        self.create_archive_with_steps([StepName.CHECKSUM, StepName.ARCHIVE])
+        self.create_archive_with_steps([StepName.HARVEST])
+        self.create_archive_with_steps([StepName.HARVEST, StepName.ARCHIVE])
         self.create_archive_with_steps(
-            [StepName.CHECKSUM, StepName.ARCHIVE, StepName.PUSH_TO_CTA]
+            [StepName.HARVEST, StepName.ARCHIVE, StepName.PUSH_TO_CTA]
         )
         self.create_archive_with_steps(
             [
-                StepName.CHECKSUM,
+                StepName.HARVEST,
                 StepName.ARCHIVE,
                 StepName.INVENIO_RDM_PUSH,
             ]
         )
         self.create_archive_with_steps(
             [
-                StepName.CHECKSUM,
+                StepName.HARVEST,
                 StepName.ARCHIVE,
                 StepName.PUSH_TO_CTA,
                 StepName.INVENIO_RDM_PUSH,
             ]
         )
 
-    @skip("Temporarily skipped")
     def test_step_statistics(self):
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -62,18 +59,17 @@ class StepStatisticsEndpointTest(APITestCase):
             },
         )
 
-    @skip("Temporarily skipped")
     def test_step_statistics_more_archives(self):
         self.create_archive_with_steps(
             [
-                StepName.CHECKSUM,
+                StepName.HARVEST,
                 StepName.ARCHIVE,
                 StepName.PUSH_TO_CTA,
             ]
         )
         self.create_archive_with_steps(
             [
-                StepName.CHECKSUM,
+                StepName.HARVEST,
                 StepName.ARCHIVE,
                 StepName.INVENIO_RDM_PUSH,
             ]
@@ -94,7 +90,6 @@ class StepStatisticsEndpointTest(APITestCase):
             },
         )
 
-    @skip("Temporarily skipped")
     def test_step_statistics_empty_database(self):
         Archive.objects.all().delete()
         Step.objects.all().delete()
@@ -114,10 +109,9 @@ class StepStatisticsEndpointTest(APITestCase):
             },
         )
 
-    @skip("Temporarily skipped")
     def test_step_statistics_mixed_status_steps(self):
         archive_mixed_status = self.create_archive_with_steps(
-            [StepName.CHECKSUM, StepName.ARCHIVE]
+            [StepName.HARVEST, StepName.ARCHIVE]
         )
         Step.objects.create(
             step_name=StepName.PUSH_TO_CTA,
@@ -147,7 +141,7 @@ class StepStatisticsEndpointTest(APITestCase):
         )
 
     def test_step_statistics_others_count(self):
-        self.create_archive_with_steps([StepName.CHECKSUM, StepName.PUSH_TO_CTA])
+        self.create_archive_with_steps([StepName.HARVEST, StepName.PUSH_TO_CTA])
         self.create_archive_with_steps([StepName.INVENIO_RDM_PUSH])
 
         response = self.client.get(self.url, format="json")
