@@ -1093,35 +1093,39 @@ def step_statistics(request):
         "staged": {
             "staged": True,
             "excluded": [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.PUSH_TO_CTA,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.CHECKSUM,
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
             ],
         },
         "harvested": {
             "state": ArchiveState.SIP,
-            "excluded": [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+            "excluded": [
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
+            ],
         },
         "harvested_preserved": {
             "state": ArchiveState.AIP,
-            "excluded": [Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+            "excluded": [StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_tape": {
             "state": ArchiveState.AIP,
-            "included": [Steps.PUSH_TO_CTA],
-            "excluded": [Steps.INVENIO_RDM_PUSH],
+            "included": [StepName.PUSH_TO_CTA],
+            "excluded": [StepName.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_registry": {
             "state": ArchiveState.AIP,
-            "included": [Steps.INVENIO_RDM_PUSH],
-            "excluded": [Steps.PUSH_TO_CTA],
+            "included": [StepName.INVENIO_RDM_PUSH],
+            "excluded": [StepName.PUSH_TO_CTA],
         },
         "harvested_preserved_tape_registry": {
             "state": ArchiveState.AIP,
             "included": [
-                Steps.PUSH_TO_CTA,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
             ],
         },
     }
