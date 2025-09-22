@@ -1,4 +1,5 @@
 import io
+import logging
 import re
 from xml.sax import SAXParseException
 
@@ -34,8 +35,10 @@ class CDS(AbstractSource):
                     "jrec": int(size) * (int(page) - 1) + 1,
                 },
                 cookies=self.cookies,
+                verify="/etc/pki/tls/certs/ca-bundle.crt",
             )
-        except Exception:
+        except Exception as e:
+            logging.error(f"CDS search request failed: {e}")
             raise ServiceUnavailable("Cannot perform search")
 
         if not req.ok:
@@ -64,9 +67,13 @@ class CDS(AbstractSource):
             # The "sc" parameter (split by collection) is used to provide
             # search results consistent with the ones from the CDS website
             req = requests.get(
-                self.get_record_url(recid), params={"of": "xm"}, cookies=self.cookies
+                self.get_record_url(recid),
+                params={"of": "xm"},
+                cookies=self.cookies,
+                verify="/etc/pki/tls/certs/ca-bundle.crt",
             )
-        except Exception:
+        except Exception as e:
+            logging.error(f"CDS search request failed: {e}")
             raise ServiceUnavailable("Cannot perform search")
 
         if req.ok:
