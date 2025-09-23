@@ -240,7 +240,7 @@ def resource_check(task, current_step, archive):
 
     with transaction.atomic():
         current_am_steps = Step.objects.select_for_update().filter(
-            step_type__name=StepName.ARCHIVE,
+            step_name=StepName.ARCHIVE,
             status__in=[Status.WAITING, Status.IN_PROGRESS],
             celery_task_id__isnull=False,
         )

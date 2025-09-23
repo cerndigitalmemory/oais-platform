@@ -56,7 +56,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
             total_size = (
                 Step.objects.select_for_update()
-                .filter(step_type__name=StepName.HARVEST, status=Status.IN_PROGRESS)
+                .filter(step_name=StepName.HARVEST, status=Status.IN_PROGRESS)
                 .aggregate(total_original_size=Sum("archive__original_file_size"))[
                     "total_original_size"
                 ]

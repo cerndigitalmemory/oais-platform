@@ -303,7 +303,7 @@ class Archive(models.Model):
         if (
             self.state == ArchiveState.AIP
             or Step.objects.filter(
-                id__in=self.pipeline_steps, step_type__name=StepName.ARCHIVE
+                id__in=self.pipeline_steps, step_name=StepName.ARCHIVE
             ).exists()
         ):
             push_to_cta_step = StepType.get_by_stepname(StepName.PUSH_TO_CTA)
@@ -408,12 +408,27 @@ class StepType(models.Model):
         self.save()
 
 
+class StepQuerySet(models.QuerySet):
+    def filter(self, *args, **kwargs):
+        if "step_name" in kwargs:
+            step_name = kwargs.pop("step_name")
+            try:
+                step_type = StepType.get_by_stepname(step_name)
+            except StepType.DoesNotExist:
+                return self.none()
+            kwargs["step_type"] = step_type
+        return super().filter(*args, **kwargs)
+
+
 class StepManager(models.Manager):
     def create(self, *, step_name: StepName, **kwargs):
         # resolve StepType from StepName
         step_type = StepType.get_by_stepname(step_name)
         kwargs["step_type"] = step_type
         return super().create(**kwargs)
+
+    def get_queryset(self):
+        return StepQuerySet(self.model, using=self._db)
 
 
 class Step(models.Model):
