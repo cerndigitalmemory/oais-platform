@@ -239,7 +239,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if status:
             step_filter |= Q(status=status)
         if name:
-            step_filter |= Q(step_type__name=name)
+            step_filter |= Q(step_name=name)
         filtered_steps = Step.objects.filter(step_filter).order_by("-start_date")
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
@@ -1079,13 +1079,13 @@ def statistics(request):
         "harvested_count": harvested_count + preserved_count,
         "preserved_count": preserved_count,
         "pushed_to_tape_count": Step.objects.filter(
-            step_type__name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
+            step_name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()
         .count(),
         "pushed_to_registry_count": Step.objects.filter(
-            step_type__name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
+            step_name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()

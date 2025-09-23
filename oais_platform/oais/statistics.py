@@ -25,7 +25,7 @@ def count_archives_by_steps(category):
             Exists(
                 Step.objects.filter(
                     archive=OuterRef("pk"),
-                    step_type__name=step_name,
+                    step_name=step_name,
                     status=Status.COMPLETED,
                 )
             )
@@ -36,7 +36,7 @@ def count_archives_by_steps(category):
             ~Exists(
                 Step.objects.filter(
                     archive=OuterRef("pk"),
-                    step_type__name=step_name,
+                    step_name=step_name,
                     status=Status.COMPLETED,
                 )
             )

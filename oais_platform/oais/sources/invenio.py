@@ -153,14 +153,14 @@ class Invenio(AbstractSource):
 
         harvest_time = (
             archive.steps.all()
-            .filter(step_type__name=StepName.HARVEST, status=Status.COMPLETED)
+            .filter(step_name=StepName.HARVEST, status=Status.COMPLETED)
             .first()
             .start_date
         )
 
         archive_time = (
             archive.steps.all()
-            .filter(step_type__name=StepName.ARCHIVE, status=Status.COMPLETED)
+            .filter(step_name=StepName.ARCHIVE, status=Status.COMPLETED)
             .order_by("-start_date")
             .first()
             .start_date
@@ -195,8 +195,7 @@ class Invenio(AbstractSource):
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
 
-    def get_records_to_harvest(self, start=None, end=None):
-        size = 500
+    def get_records_to_harvest(self, start=None, end=None, size=500):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
         logging.info(f"Starting fetching records from {start} to {end}.")
