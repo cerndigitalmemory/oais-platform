@@ -962,7 +962,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             loglevel=logging.DEBUG,
             target=base_path,
             source_path=uj.tmp_dir,
-            author=request.username,
+            author=request.user.username,
             workdir=BIC_WORKDIR,
         )
 
