@@ -155,7 +155,6 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "staged",
             "title",
             "restricted",
-            "invenio_version",
             "resource",  # this points to the serialized resource
             "state",
             "last_update",

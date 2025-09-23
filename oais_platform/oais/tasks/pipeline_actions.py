@@ -89,17 +89,13 @@ def execute_pipeline(
                 next_steps = archive.get_next_steps()
 
                 if last_completed_step.step_type.automatic_next_step:
-                    if len(next_steps) > 1:
-                        if StepType.get_by_stepname(StepName.VALIDATION) in next_steps:
-                            # if there are multiple next steps and one of them is validation, run validation
-                            next_step = StepName.VALIDATION
-                        else:
-                            logger.warning(
-                                f"Multiple next steps found for step {last_completed_step.id} but automatic_next_step is True. Cannot decide which step to run next."
-                            )
-                            return None
-                    elif len(next_steps) == 1:
-                        next_step = next_steps[0].step_type.name
+                    extract_title_step = StepType.get_by_stepname(
+                        StepName.EXTRACT_TITLE
+                    )
+                    if extract_title_step in next_steps:
+                        next_steps.remove(extract_title_step)
+                    if len(next_steps) == 1:
+                        next_step = next_steps[0].name
 
                     step = create_step(
                         step_name=next_step,

@@ -386,9 +386,7 @@ class StepType(models.Model):
     def get_all_order_constraints(cls):
         constraint_map = {}
         for step_type in cls.objects.all():
-            constraint_map[step_type.name] = list(
-                step_type.next_steps.all().values_list("name", flat=True)
-            )
+            constraint_map[step_type.name] = list(step_type.next_steps.all())
         return constraint_map
 
     def set_enabled(self, enabled):

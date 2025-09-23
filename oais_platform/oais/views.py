@@ -990,9 +990,8 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
             source = sip_json["source"]
             recid = sip_json["recid"]
-            url = get_source(source).get_record_url(recid)
             archive = Archive.objects.create(
-                recid=recid, source=source, source_url=url, requester=request.user
+                recid=recid, source=source, source_url="", requester=request.user
             )
 
             step = Step.objects.create(
@@ -1053,7 +1052,13 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Returns all StepType order constraints
         """
-        return Response(StepType.get_all_order_constraints())
+        constraints = StepType.get_all_order_constraints()
+        serialized_dict = {}
+
+        for key, step_list in constraints.items():
+            serializer = StepTypeMinimalSerializer(step_list, many=True)
+            serialized_dict[key] = serializer.data
+        return Response(serialized_dict)
 
 
 @api_view(["GET"])
