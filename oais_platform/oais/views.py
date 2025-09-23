@@ -1000,9 +1000,9 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
                 logging.warning(f"Source with name {source} not found.")
                 url = ""
             archive = Archive.objects.create(
-                recid=recid, 
-                source=source, 
-                source_url=url, 
+                recid=recid,
+                source=source,
+                source_url=url,
                 requester=request.user,
                 title=f"{source} - {recid}",
             )
