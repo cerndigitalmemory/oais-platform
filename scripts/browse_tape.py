@@ -1,5 +1,6 @@
 import logging
 import stat
+import time
 
 import click
 import gfal2
@@ -69,6 +70,23 @@ def main(path, summary):
             logging.warning(f"Error accessing directory: {e}")
             raise e
 
+    def count_files(files):
+        """
+        Recursively counts the number of files and directories.
+        """
+        file_count = 0
+        directory_count = 0
+        for entry in files.values():
+            if not entry:
+                file_count += 1
+            else:
+                directory_count += 1
+            new_files, new_dirs = count_files(entry)
+            file_count += new_files
+            directory_count += new_dirs
+        return file_count, directory_count
+
+    start_time = time.time()
     logging.info("Script started successfully!")
     click.echo(f"Listing contents of: {path}\n")
 
@@ -85,6 +103,20 @@ def main(path, summary):
         print_directory_contents(files)
     else:
         click.echo(click.style("No files found or an error occurred.", fg="red"))
+
+    end_time = time.time()
+    duration_seconds = end_time - start_time
+    if files and not summary:
+        file_count, directory_count = count_files(files)
+        records_per_second = (
+            file_count / duration_seconds if duration_seconds > 0 else 0
+        )
+        logging.info(
+            f"Processing took {(duration_seconds / 60):.2f} minutes "
+            f"({records_per_second:.2f} files per second (total of {file_count} files and {directory_count} directories))"
+        )
+    else:
+        logging.info(f"Processing took {(duration_seconds / 60):.2f} minutes")
 
     logging.info("Script finished.")
 
