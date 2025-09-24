@@ -962,7 +962,7 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             loglevel=logging.DEBUG,
             target=base_path,
             source_path=uj.tmp_dir,
-            author=str(request.user.id),
+            author=request.user.username,
             workdir=BIC_WORKDIR,
         )
 
@@ -994,9 +994,17 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
 
             source = sip_json["source"]
             recid = sip_json["recid"]
-            url = get_source(source).get_record_url(recid)
+            try:
+                url = get_source(source).get_record_url(recid)
+            except InvalidSource:
+                logging.warning(f"Source with name {source} not found.")
+                url = ""
             archive = Archive.objects.create(
-                recid=recid, source=source, source_url=url, requester=request.user
+                recid=recid,
+                source=source,
+                source_url=url,
+                requester=request.user,
+                title=f"{source} - {recid}",
             )
 
             step = Step.objects.create(
