@@ -1,0 +1,10 @@
+version: "3"
+
+services:
+  scripts-test:
+    build:
+      context: .
+      dockerfile: ./scripts/Dockerfile
+    command: python3 -m unittest discover -s /tests
+    volumes:
+      - ./scripts:/scripts
