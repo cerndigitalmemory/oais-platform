@@ -47,7 +47,30 @@ django-tests:
   coverage: '/TOTAL.+ ([0-9]{1,3}%)/'
   tags:
     - docker-privileged-xl
-    
+
+scripts-tests:
+  stage: test
+  image: registry.cern.ch/docker.io/library/docker:20.10.16
+  services:
+    - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker-compose -f test-scripts-compose.yml up --build --exit-code-from scripts-test
+  tags:
+    - docker-privileged-xl
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - scripts/**/*
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - scripts/**/*
+      when: always
+    - when: manual
+
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
