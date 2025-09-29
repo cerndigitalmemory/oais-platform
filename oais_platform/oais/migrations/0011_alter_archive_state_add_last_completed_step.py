@@ -23,10 +23,10 @@ def save_archives(apps, schema_editor):
             obj.state = ArchiveState.NONE
             for step in archive_steps:
                 if step.status == Status.COMPLETED:
-                    if step.name == 4:
+                    if step.name == 4:  # Steps.CHECKSUM
                         obj.state = ArchiveState.SIP
                         break
-                    elif step.name == 5:
+                    elif step.name == 5:  # Steps.ARCHIVE
                         obj.state = ArchiveState.AIP
                         break
         except Exception:

@@ -12,7 +12,7 @@ def add_archive_path_to_aip(apps, schema_editor):
     for obj in archives.objects.all():
         try:
             aip_step = (
-                obj.steps.filter(name=5, status=Status.COMPLETED)
+                obj.steps.filter(name=5, status=Status.COMPLETED)  # 5 = Steps.ARCHIVE
                 .order_by("-start_date")
                 .first()
             )
