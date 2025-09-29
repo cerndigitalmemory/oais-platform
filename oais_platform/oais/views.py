@@ -979,7 +979,6 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
                 source_url=url,
                 requester=request.user,
                 title=f"{source} - {recid}",
-                recid=recid, source=source, source_url="", requester=request.user
             )
 
             step = Step.objects.create(
