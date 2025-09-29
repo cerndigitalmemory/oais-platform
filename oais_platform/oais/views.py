@@ -426,17 +426,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(serializer.data)
 
-    @action(detail=True, url_path="next-steps", url_name="next-steps")
-    def archive_next_steps(self, request, pk=None):
-        """
-        Returns the type of possible next Steps of an identified Archive
-        """
-        archive = self.get_object()
-        next_steps = archive.get_next_steps()
-
-        serializer = StepTypeMinimalSerializer(next_steps, many=True)
-        return Response(serializer.data)
-
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
         """
@@ -643,7 +632,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if len(archives) > 0:
             first_state = Archive.objects.get(pk=archives[0]["id"]).state
             state_intersection = True
-            next_steps_intersection = None
             all_last_step_failed = True
             can_continue = True
 
@@ -663,24 +651,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     if len(archive.pipeline_steps) == 0:
                         can_continue = False
 
-                    next_step = archive.get_next_steps()
-                    if not next_steps_intersection:
-                        next_steps_intersection = next_step
-                    else:
-                        next_steps_intersection = set(
-                            next_steps_intersection
-                        ).intersection(next_step)
-                        if (
-                            len(next_steps_intersection) == 0
-                            and not state_intersection
-                            and not all_last_step_failed
-                        ):
-                            break
+                    if (
+                        not state_intersection
+                        and not all_last_step_failed
+                        and not can_continue
+                    ):
+                        break
+
                 result["state_intersection"] = state_intersection
-                serializer = StepTypeMinimalSerializer(
-                    next_steps_intersection, many=True
-                )
-                result["next_steps_intersection"] = serializer.data
                 result["all_last_step_failed"] = all_last_step_failed
                 result["can_continue"] = all_last_step_failed and can_continue
 
@@ -1053,22 +1031,7 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return super().get_queryset().order_by("name")
-
-    @action(
-        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
-    )
-    def get_steps_order_constraints(self, request):
-        """
-        Returns all StepType order constraints
-        """
-        constraints = StepType.get_all_order_constraints()
-        serialized_dict = {}
-
-        for key, step_list in constraints.items():
-            serializer = StepTypeMinimalSerializer(step_list, many=True)
-            serialized_dict[key] = serializer.data
-        return Response(serialized_dict)
+        return super().get_queryset().filter(enabled=True).order_by("name")
 
 
 @api_view(["GET"])

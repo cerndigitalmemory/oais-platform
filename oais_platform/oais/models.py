@@ -1,12 +1,11 @@
 import json
-import logging
 from pathlib import Path
 
 from celery import current_app
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -233,7 +232,7 @@ class Archive(models.Model):
         archive = self
 
         try:
-            step_type = StepType.objects.get(name=step_name)
+            StepType.objects.get(name=step_name)
         except StepType.DoesNotExist:
             raise Exception("Invalid Step type")
 
@@ -248,18 +247,10 @@ class Archive(models.Model):
             if len(archive.pipeline_steps) == 0:
                 if archive.last_step:
                     input_step_id = archive.last_step.id
-                    prev_step_type = archive.last_step.step_type
                 else:
                     input_step_id = None
-                    prev_step_type = None
             else:
                 input_step_id = archive.pipeline_steps[-1]
-                prev_step_type = Step.objects.get(pk=input_step_id).step_type
-
-            if input_step_id and step_type not in archive._get_next_steps(
-                prev_step_type
-            ):
-                raise Exception("Invalid Step order")
 
             step = Step.objects.create(
                 archive=archive,
@@ -272,62 +263,6 @@ class Archive(models.Model):
 
             archive.pipeline_steps.append(step.id)
             archive.save()
-
-    def get_next_steps(self):
-        with transaction.atomic():
-            locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
-
-            # Determine the last step's type
-            if len(locked_archive.pipeline_steps) == 0:
-                if not locked_archive.last_completed_step:
-                    return []
-                step_type = locked_archive.last_completed_step.step_type
-            else:
-                step_type = Step.objects.get(
-                    pk=locked_archive.pipeline_steps[-1]
-                ).step_type
-
-            # Get possible next steps
-            return locked_archive._get_next_steps(step_type)
-
-    def _get_next_steps(self, step_type):
-        next_steps = step_type.get_allowed_next_steps()
-
-        if (
-            not self.title
-            or self.title == ""
-            or self.title == f"{self.source} - {self.recid}"
-        ) and self.state != ArchiveState.NONE:
-            next_steps.append(StepType.get_by_stepname(StepName.EXTRACT_TITLE))
-
-        if (
-            self.state == ArchiveState.AIP
-            or Step.objects.filter(
-                id__in=self.pipeline_steps, step_name=StepName.ARCHIVE
-            ).exists()
-        ):
-            push_to_cta_step = StepType.get_by_stepname(StepName.PUSH_TO_CTA)
-            if push_to_cta_step not in next_steps:
-                next_steps.append(push_to_cta_step)
-
-            try:
-                source = Source.objects.get(name=self.source)
-                notify_source_step = StepType.get_by_stepname(StepName.NOTIFY_SOURCE)
-                if (
-                    source
-                    and source.notification_enabled
-                    and source.notification_endpoint
-                    and notify_source_step not in next_steps
-                ):
-                    next_steps.append(notify_source_step)
-            except Source.DoesNotExist:
-                logging.warning(f"Source with name {self.source} does not exists.")
-            except Source.MultipleObjectsReturned:
-                logging.warning(
-                    f"Source with name {self.source} returned multiple objects."
-                )
-
-        return next_steps
 
 
 class StepName(models.TextChoices):
@@ -363,31 +298,15 @@ class StepType(models.Model):
     failed_count = models.IntegerField(default=0)
     failed_blocking_limit = models.IntegerField(default=None, null=True)
     enabled = models.BooleanField(default=True)
-    next_steps = models.ManyToManyField(
-        "self",
-        blank=True,
-        symmetrical=False,
-        related_name="preceding_steps",
-        help_text="Steps that can follow this step",
-    )
     has_sip = models.BooleanField(default=False)
     has_aip = models.BooleanField(default=False)
-    automatic_next_step = models.BooleanField(default=False)
-
-    def get_allowed_next_steps(self):
-        """Get all step types that can follow this step"""
-        return list(self.next_steps.all())
+    automatic_next_step = models.ForeignKey(
+        "self", null=True, on_delete=models.SET_NULL
+    )
 
     @classmethod
     def get_by_stepname(cls, stepname):
         return cls.objects.get(name=stepname)
-
-    @classmethod
-    def get_all_order_constraints(cls):
-        constraint_map = {}
-        for step_type in cls.objects.all():
-            constraint_map[step_type.name] = list(step_type.next_steps.all())
-        return constraint_map
 
     def set_enabled(self, enabled):
         self.enabled = enabled
@@ -710,18 +629,6 @@ class ScheduledHarvest(models.Model):
     def set_enabled(self, enabled):
         self.enabled = enabled
         self.save()
-
-    def validate_pipeline(pipeline):
-        for i in range(len(pipeline) - 1):
-            current = StepType.get_by_stepname(pipeline[i])
-            nxt = StepType.get_by_stepname(pipeline[i + 1])
-
-            allowed = current.get_allowed_next_steps()
-            if nxt not in allowed:
-                raise ValidationError(
-                    f"Step {nxt.name} is not allowed after {current.name}. Allowed: {allowed.values_list('name', flat=True)}"
-                )
-        return
 
     def set_pipeline(self, pipeline):
         self.validate_pipeline(pipeline)

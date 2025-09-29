@@ -11,41 +11,27 @@ from oais_platform.oais.models import StepName
 def add_step_types(apps, schema_editor):
     StepType = apps.get_model("oais", "StepType")
 
-    harvest = StepType.objects.create(name=StepName.HARVEST, label="Harvest", description="Harvest from upstream source", task_name="harvest", has_sip=True, automatic_next_step=True)
-    validate = StepType.objects.create(name=StepName.VALIDATION, label="Validation", description="Validate SIP structure and contents", task_name="validate", automatic_next_step=True)
+    harvest = StepType.objects.create(name=StepName.HARVEST, label="Harvest", description="Harvest from upstream source", task_name="harvest", has_sip=True)
+    validate = StepType.objects.create(name=StepName.VALIDATION, label="Validation", description="Validate SIP structure and contents", task_name="validate")
     checksum = StepType.objects.create(name=StepName.CHECKSUM, label="Checksum", description="Verify checksums", task_name="checksum")
     archive = StepType.objects.create(name=StepName.ARCHIVE, label="Archive", description="Create the Preservation Bag", task_name="archivematica", has_aip=True)
     cta = StepType.objects.create(name=StepName.PUSH_TO_CTA, label="Push to CTA", description="Copy Preservation Bag to Long Term Storage", task_name="push_to_cta")
     registry = StepType.objects.create(name=StepName.INVENIO_RDM_PUSH, label="Push to Registry", description="Register bag in central registry", task_name="process_invenio")
-    announce = StepType.objects.create(name=StepName.ANNOUNCE, label="Announce", description="Process SIP from CERN cloud", task_name="announce", has_sip=True, automatic_next_step=True)
+    announce = StepType.objects.create(name=StepName.ANNOUNCE, label="Announce", description="Process SIP from CERN cloud", task_name="announce", has_sip=True)
     extract = StepType.objects.create(name=StepName.EXTRACT_TITLE, label="Extract Title", description="Extract title from SIP metadata", task_name="extract_title")
     notify = StepType.objects.create(name=StepName.NOTIFY_SOURCE, label="Notify Source", description="Notify upstream source about the preservation", task_name="notify_source")
-    upload = StepType.objects.create(name=StepName.SIP_UPLOAD, label="SIP Upload", description="Upload SIP", has_sip=True, automatic_next_step=True)
+    upload = StepType.objects.create(name=StepName.SIP_UPLOAD, label="SIP Upload", description="Upload SIP", has_sip=True)
     edit = StepType.objects.create(name=StepName.EDIT_MANIFEST, label="Edit Manifest", description="Edit manifest file")
 
-    harvest.next_steps.set([validate])
-    validate.next_steps.set([checksum])
-    upload.next_steps.set([validate])
-    announce.next_steps.set([validate])
-    checksum.next_steps.set([archive, registry])
-    archive.next_steps.set([cta, registry, archive, notify])
-    cta.next_steps.set([cta, registry, archive])
-    registry.next_steps.set([cta, registry, archive])
-    extract.next_steps.set([registry, archive])
-    notify.next_steps.set([registry, archive, cta])
-    edit.next_steps.set([registry, archive])
+    harvest.automatic_next_step = validate
+    validate.automatic_next_step = checksum
+    upload.automatic_next_step = validate
+    announce.automatic_next_step = validate
 
     harvest.save()
     validate.save()
-    checksum.save()
-    archive.save()
-    cta.save()
-    registry.save()
     announce.save()
-    extract.save()
-    notify.save()
     upload.save()
-    edit.save()
 
     Step = apps.get_model("oais", "Step")
     steps = Step.objects.all()
@@ -167,8 +153,7 @@ class Migration(migrations.Migration):
                 ('enabled', models.BooleanField(default=True)),
                 ('has_sip', models.BooleanField(default=False)),
                 ('has_aip', models.BooleanField(default=False)),
-                ('automatic_next_step', models.BooleanField(default=False)),
-                ('next_steps', models.ManyToManyField(blank=True, help_text='Steps that can follow this step', related_name='preceding_steps', to='oais.steptype')),
+                ('automatic_next_step', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='oais.steptype')),
             ],
         ),
         migrations.AddField(

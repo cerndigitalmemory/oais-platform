@@ -126,14 +126,15 @@ class StepTypeAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "failed_blocking_limit",
         "has_sip",
         "has_aip",
-        "automatic_next_step",
-        "next_steps_list_str",
+        "automatic_next_step_name",
     )
 
-    def next_steps_list_str(self, obj):
-        return ", ".join([step.name for step in obj.next_steps.all()])
+    def automatic_next_step_name(self, obj):
+        if obj.automatic_next_step:
+            return obj.automatic_next_step.name
+        return None
 
-    next_steps_list_str.short_description = "Next possible Steps"
+    automatic_next_step_name.short_description = "Automatic Next Step"
 
 
 @admin.register(Resource)

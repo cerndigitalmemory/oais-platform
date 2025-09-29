@@ -81,26 +81,15 @@ def execute_pipeline(
                 step = Step.objects.get(pk=step_id)
             # No available step in the pipeline
             else:
-                # Automatically run next step ONLY if next_steps length is one (only one possible following step)
-                # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
-                last_completed_step = Step.objects.get(
-                    pk=archive.last_completed_step_id
-                )
-                next_steps = archive.get_next_steps()
+                # Automatically run next step ONLY if the automatic_next_step is set
+                next_step = archive.last_completed_step.step_type.automatic_next_step
+                print(next_step)
 
-                if last_completed_step.step_type.automatic_next_step:
-                    extract_title_step = StepType.get_by_stepname(
-                        StepName.EXTRACT_TITLE
-                    )
-                    if extract_title_step in next_steps:
-                        next_steps.remove(extract_title_step)
-                    if len(next_steps) == 1:
-                        next_step = next_steps[0].name
-
+                if next_step:
                     step = create_step(
-                        step_name=next_step,
+                        step_name=next_step.name,
                         archive=archive,
-                        input_step_id=last_completed_step.id,
+                        input_step_id=archive.last_completed_step.id,
                     )
                 else:
                     return None, None

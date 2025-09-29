@@ -75,23 +75,6 @@ class PipelineTests(APITestCase):
                 status.HTTP_400_BAD_REQUEST,
             ),  # invalid size
             ([-1], status.HTTP_400_BAD_REQUEST),  # invalid type of the step
-            (
-                [StepName.PUSH_TO_CTA, StepName.VALIDATION, StepName.CHECKSUM],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
-            (
-                [StepName.VALIDATION, StepName.CHECKSUM, StepName.HARVEST],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
-            (
-                [
-                    StepName.HARVEST,
-                    StepName.VALIDATION,
-                    StepName.CHECKSUM,
-                    StepName.NOTIFY_SOURCE,
-                ],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
         ]
     )
     def test_execute_pipeline_invalid_input(self, pipeline, status_code):
@@ -343,26 +326,6 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.archive.manifest, {"test": "test"})
-
-    def test_extract_title_invalid_step_order(self):
-        # Not allowed if state is not SIP
-        self.client.force_authenticate(user=self.testuser)
-
-        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
-        response = self.client.post(
-            url,
-            {
-                "archive": self.dict_archive.data,
-                "pipeline_steps": [StepName.EXTRACT_TITLE],
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["detail"],
-            "Invalid Step order",
-        )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_extract_title_success(self, mock_dispatch):
