@@ -607,6 +607,11 @@ class ApiKey(models.Model):
 
 
 class ScheduledHarvest(models.Model):
+    """
+    This model represents a scheduled harvest job that can be periodically executed.
+    The parameters will be used for the next harvest run.
+    """
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, null=False, unique=True)
     source = models.ForeignKey(
@@ -637,6 +642,11 @@ class ScheduledHarvest(models.Model):
 
 
 class HarvestRun(models.Model):
+    """
+    This model represents a single execution of a ScheduledHarvest.
+    It contains all the parameters used for the executed harvest.
+    """
+
     id = models.AutoField(primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)
     source = models.ForeignKey(
@@ -684,6 +694,12 @@ class BatchStatus(models.TextChoices):
 
 
 class HarvestBatch(models.Model):
+    """
+    This model represents a single batch of records to be harvested in a HarvestRun.
+    batch_number is unique per HarvestRun and represents the order of execution.
+    If a batch is blocked further batches will not be executed.
+    """
+
     id = models.AutoField(primary_key=True)
     batch_number = models.PositiveIntegerField()
     status = models.CharField(choices=BatchStatus.choices, default=BatchStatus.PENDING)

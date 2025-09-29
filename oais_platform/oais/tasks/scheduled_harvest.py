@@ -27,6 +27,11 @@ logger = get_task_logger(__name__)
 
 @shared_task(name="scheduled_harvest", bind=True, ignore_result=True)
 def scheduled_harvest(self, scheduled_harvest_id):
+    """
+    This task can be triggered periodically (by a PeriodicTask) to start an automatic harvest.
+    ScheduledHarvest object has to be created in the admin interface with all the parameters.
+    The PeriodicTask needs the ID of the ScheduledHarvest object as argument to trigger it.
+    """
     try:
         scheduled_harvest = ScheduledHarvest.objects.get(id=scheduled_harvest_id)
     except ScheduledHarvest.DoesNotExist:
@@ -128,6 +133,10 @@ def scheduled_harvest(self, scheduled_harvest_id):
 
 @shared_task(name="batch_harvest", bind=True, ignore_result=True)
 def batch_harvest(self, batch_id):
+    """
+    The ScheduledHarvest task creates a HarvestRun object and splits the records to be harvested into batches.
+    This function processes one batch at a time, creating Archive objects and triggering the pipeline for each.
+    """
     api_key = None
     try:
         batch = HarvestBatch.objects.get(id=batch_id)
