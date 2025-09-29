@@ -83,7 +83,6 @@ def execute_pipeline(
             else:
                 # Automatically run next step ONLY if the automatic_next_step is set
                 next_step = archive.last_completed_step.step_type.automatic_next_step
-                print(next_step)
 
                 if next_step:
                     step = create_step(
