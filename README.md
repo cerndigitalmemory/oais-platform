@@ -151,7 +151,7 @@ Running the script in OpenShift:
 # Login to OpenShift and select the desired project
 oc login --token=<token> --server=https://api.paas.okd.cern.ch
 oc project <project>
-# Start up the scripts pod and enteres the shell
+# Start up the scripts pod and enter the shell
 oc run oais-scripts --image=gitlab-registry.cern.ch/digitalmemory/oais-platform/scripts:<tag> \
   --restart=Never \
   --rm -i --tty -- bash
