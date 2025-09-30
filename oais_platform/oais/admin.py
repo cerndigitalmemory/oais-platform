@@ -328,6 +328,8 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     harvest_run_link.short_description = "Harvest Run"
 
     def archive_count(self, obj):
-        return obj.archives.count()
+        if obj.archives:
+            return obj.archives.count()
+        return 0
 
     archive_count.short_description = "Archives Count"

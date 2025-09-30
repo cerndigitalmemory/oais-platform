@@ -40,6 +40,7 @@ from oais_platform.oais.models import (
     StepType,
     UploadJob,
 )
+from oais_platform.oais.pagination import StepTypePagination
 from oais_platform.oais.permissions import (
     ArchivePermission,
     StepPermission,
@@ -1028,6 +1029,7 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = StepType.objects.all().order_by("name")
     serializer_class = StepTypeMinimalSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StepTypePagination
 
     def get_queryset(self):
         return super().get_queryset().filter(enabled=True).order_by("name")

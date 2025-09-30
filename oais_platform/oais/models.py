@@ -682,6 +682,8 @@ class HarvestRun(models.Model):
 
     @property
     def size(self):
+        if self.collection is None or self.collection.archives is None:
+            return 0
         return self.collection.archives.count()
 
 
