@@ -13,7 +13,8 @@ from oais_platform.oais.models import (
     Collection,
     Resource,
     Step,
-    Steps,
+    StepName,
+    StepType,
 )
 
 
@@ -225,8 +226,12 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)
 
-        self.step1 = Step.objects.create(archive=self.private_archive, name=0)
-        self.step2 = Step.objects.create(archive=self.private_archive, name=0)
+        self.step1 = Step.objects.create(
+            archive=self.private_archive, step_name=StepName.CHECKSUM
+        )
+        self.step2 = Step.objects.create(
+            archive=self.private_archive, step_name=StepName.ARCHIVE
+        )
 
         response = self.client.get(
             url,
@@ -250,8 +255,18 @@ class ArchiveTests(APITestCase):
 
     def test_record_check(self):
         self.client.force_authenticate(user=self.requester)
-        Step.objects.create(archive=self.private_archive, name=5, status=4)
-        Step.objects.create(archive=self.public_archives[0], name=5, status=4)
+        Step.objects.create(
+            archive=self.private_archive, step_name=StepName.HARVEST, status=4
+        )
+        Step.objects.create(
+            archive=self.private_archive, step_name=StepName.ARCHIVE, status=4
+        )
+        Step.objects.create(
+            archive=self.public_archives[0], step_name=StepName.HARVEST, status=4
+        )
+        Step.objects.create(
+            archive=self.public_archives[0], step_name=StepName.ARCHIVE, status=4
+        )
 
         url = reverse("archives-duplicates")
         response = self.client.post(
@@ -346,11 +361,12 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.data["approver"]["id"], self.requester.id)
         self.private_archive.refresh_from_db()
         mock_dispatch.assert_called_once_with(
-            Steps.HARVEST,
+            StepType.get_by_stepname(StepName.HARVEST),
             self.private_archive.id,
             self.private_archive.last_step.id,
             None,
             None,
+            False,
         )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
@@ -363,11 +379,12 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.data["approver"]["id"], self.superuser.id)
         self.private_archive.refresh_from_db()
         mock_dispatch.assert_called_once_with(
-            Steps.HARVEST,
+            StepType.get_by_stepname(StepName.HARVEST),
             self.private_archive.id,
             self.private_archive.last_step.id,
             None,
             None,
+            False,
         )
 
     def test_archive_mlt_unstage_forbidden(self):
@@ -408,11 +425,12 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.private_archive.refresh_from_db()
         mock_dispatch.assert_called_once_with(
-            Steps.HARVEST,
+            StepType.get_by_stepname(StepName.HARVEST),
             self.private_archive.id,
             self.private_archive.last_step.id,
             None,
             None,
+            False,
         )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
@@ -441,16 +459,24 @@ class ArchiveTests(APITestCase):
         self.assertEqual(
             mock_dispatch.mock_calls[0].args,
             (
-                Steps.HARVEST,
+                StepType.get_by_stepname(StepName.HARVEST),
                 self.private_archive.id,
                 self.private_archive.last_step.id,
                 None,
                 None,
+                False,
             ),
         )
         self.assertEqual(
             mock_dispatch.mock_calls[1].args,
-            (Steps.HARVEST, other_archive.id, other_archive.last_step.id, None, None),
+            (
+                StepType.get_by_stepname(StepName.HARVEST),
+                other_archive.id,
+                other_archive.last_step.id,
+                None,
+                None,
+                False,
+            ),
         )
 
     def test_archive_delete_staged_other_user(self):

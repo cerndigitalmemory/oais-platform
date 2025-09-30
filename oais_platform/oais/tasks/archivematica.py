@@ -13,7 +13,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
@@ -240,7 +240,7 @@ def resource_check(task, current_step, archive):
 
     with transaction.atomic():
         current_am_steps = Step.objects.select_for_update().filter(
-            name=Steps.ARCHIVE,
+            step_name=StepName.ARCHIVE,
             status__in=[Status.WAITING, Status.IN_PROGRESS],
             celery_task_id__isnull=False,
         )

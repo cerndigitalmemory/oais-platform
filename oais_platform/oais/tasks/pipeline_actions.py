@@ -7,32 +7,29 @@ from celery.utils.log import get_task_logger
 from django.db import transaction
 
 from oais_platform.celery import app
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.utils import create_step
 
 logger = get_task_logger(__name__)
 
-TASK_MAP = {
-    Steps.HARVEST: "harvest",
-    Steps.VALIDATION: "validate",
-    Steps.CHECKSUM: "checksum",
-    Steps.ARCHIVE: "archivematica",
-    Steps.INVENIO_RDM_PUSH: "process_invenio",
-    Steps.PUSH_TO_CTA: "push_to_cta",
-    Steps.EXTRACT_TITLE: "extract_title",
-    Steps.NOTIFY_SOURCE: "notify_source",
-    Steps.ANNOUNCE: "announce",
-}
+
+def dispatch_task(
+    step_type,
+    archive_id,
+    step_id,
+    input_data=None,
+    api_key=None,
+    return_signature=False,
+):
+    sig = app.signature(
+        step_type.task_name, args=(archive_id, step_id, input_data, api_key)
+    )
+    if return_signature:
+        return sig
+    return sig.delay()
 
 
-def dispatch_task(step_name, archive_id, step_id, input_data=None, api_key=None):
-    task = TASK_MAP.get(step_name)
-    if not task:
-        raise ValueError(f"No task found for step {step_id}: {step_name}")
-    app.signature(task).delay(archive_id, step_id, input_data, api_key)
-
-
-def run_step(step, archive_id, api_key=None):
+def run_step(step, archive_id, api_key=None, return_signature=False):
     """
     Execute the given Step by spawning a Celery tasks for it
 
@@ -40,7 +37,6 @@ def run_step(step, archive_id, api_key=None):
     archive_id: ID of target Archive
     api_key: API key
     """
-
     # If no input_data, set the output of the input_step
     if step.input_data is None and step.input_step is not None:
         step.input_data = step.input_step.output_data
@@ -53,12 +49,26 @@ def run_step(step, archive_id, api_key=None):
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         archive.set_last_step(step.id)
 
-    dispatch_task(step.name, archive_id, step.id, step.input_data, api_key)
+    if not step.step_type.enabled:
+        step.set_status(Status.FAILED)
+        step.set_output_data(
+            {
+                "status": 1,
+                "errormsg": f"Step type {step.step_type.name} is disabled",
+            }
+        )
+        return step, None
 
-    return step
+    res = dispatch_task(
+        step.step_type, archive_id, step.id, step.input_data, api_key, return_signature
+    )
+
+    return step, res
 
 
-def execute_pipeline(archive_id, api_key=None, force_continue=False):
+def execute_pipeline(
+    archive_id, api_key=None, force_continue=False, return_signature=False
+):
 
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
@@ -71,31 +81,22 @@ def execute_pipeline(archive_id, api_key=None, force_continue=False):
                 step = Step.objects.get(pk=step_id)
             # No available step in the pipeline
             else:
-                # Automatically run next step ONLY if next_steps length is one (only one possible following step)
-                # and current step is UPLOAD, HARVEST, CHECKSUM, VALIDATE or ANNOUNCE
-                last_completed_step = Step.objects.get(
-                    pk=archive.last_completed_step_id
-                )
-                next_steps = archive.get_next_steps()
+                # Automatically run next step ONLY if the automatic_next_step is set
+                next_step = archive.last_completed_step.step_type.automatic_next_step
 
-                if len(next_steps) == 1 and last_completed_step.name in [
-                    Steps.SIP_UPLOAD,
-                    Steps.HARVEST,
-                    Steps.VALIDATION,
-                    Steps.ANNOUNCE,
-                ]:
+                if next_step:
                     step = create_step(
-                        step_name=next_steps[0],
+                        step_name=next_step.name,
                         archive=archive,
-                        input_step_id=last_completed_step.id,
+                        input_step_id=archive.last_completed_step.id,
                     )
                 else:
-                    return None
+                    return None, None
         else:
-            return None
+            return None, None
 
     if step.status == Status.WAITING:
-        return run_step(step, archive.id, api_key)
+        return run_step(step, archive.id, api_key, return_signature)
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
@@ -104,12 +105,12 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
     last_step = Step.objects.get(pk=archive.last_step.id)
     if last_step and last_step.status != Status.FAILED:
         return {"errormsg": "Retry operation not permitted, last step is not failed."}
-    if step_name and last_step.name != step_name:
+    if step_name and last_step.step_type.name != step_name:
         return {
             "errormsg": f"Retry operation not permitted, last step is not {step_name}."
         }
     step = create_step(
-        step_name=last_step.name,
+        step_name=last_step.step_type.name,
         archive=archive,
         input_step_id=last_step.id,
         input_data=last_step.output_data,
@@ -160,12 +161,12 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
             step.set_finish_date()
-            if step.name != Steps.ARCHIVE:
+            if step.step_type != StepType.get_by_stepname(StepName.ARCHIVE):
                 step.set_output_data(retval)
 
             # If harvest, upload or announce is completed then add the audit of the sip.json to the
             #  archive.manifest field
-            if step.name in [Steps.SIP_UPLOAD, Steps.HARVEST, Steps.ANNOUNCE]:
+            if step.step_type.has_sip:
                 sip_folder_name = archive.path_to_sip
                 sip_manifest_path = "data/meta/sip.json"
                 sip_location = os.path.join(sip_folder_name, sip_manifest_path)

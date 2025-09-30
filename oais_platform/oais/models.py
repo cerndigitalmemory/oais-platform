@@ -1,19 +1,19 @@
 import json
-import logging
 from pathlib import Path
 
+from celery import current_app
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
 
 from oais_platform.oais.sources.abstract_source import AbstractSource
 from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
-
-from . import pipeline
 
 
 class Profile(models.Model):
@@ -40,20 +40,6 @@ def create_user_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
-
-
-class Steps(models.IntegerChoices):
-    SIP_UPLOAD = 1
-    HARVEST = 2
-    VALIDATION = 3
-    CHECKSUM = 4
-    ARCHIVE = 5
-    EDIT_MANIFEST = 6
-    INVENIO_RDM_PUSH = 7
-    ANNOUNCE = 8
-    PUSH_TO_CTA = 9
-    EXTRACT_TITLE = 10
-    NOTIFY_SOURCE = 11
 
 
 class Status(models.IntegerChoices):
@@ -216,16 +202,20 @@ class Archive(models.Model):
 
     def set_state(self):
         try:
-            steps = self.steps.all().order_by("-start_date", "-create_date")
-            state = ArchiveState.NONE
-            for step in steps:
-                if step.status == Status.COMPLETED:
-                    if step.name == Steps.CHECKSUM:
-                        state = ArchiveState.SIP
-                        break
-                    elif step.name == Steps.ARCHIVE:
-                        state = ArchiveState.AIP
-                        break
+            is_sip = self.steps.filter(
+                step_type__has_sip=True, status=Status.COMPLETED
+            ).exists()
+            is_aip = self.steps.filter(
+                step_type__has_aip=True, status=Status.COMPLETED
+            ).exists()
+
+            if is_sip and is_aip:
+                state = ArchiveState.AIP
+            elif is_sip:
+                state = ArchiveState.SIP
+            else:
+                state = ArchiveState.NONE
+
             self.state = state
         except Exception:
             self.state = ArchiveState.NONE
@@ -236,10 +226,14 @@ class Archive(models.Model):
 
         return step_id
 
-    def add_step_to_pipeline(self, step_name, lock=False):
+    def add_step_to_pipeline(
+        self, step_name, user=None, harvest_batch=None, lock=False
+    ):
         archive = self
 
-        if step_name not in Steps:
+        try:
+            StepType.objects.get(name=step_name)
+        except StepType.DoesNotExist:
             raise Exception("Invalid Step type")
 
         with transaction.atomic():
@@ -253,79 +247,107 @@ class Archive(models.Model):
             if len(archive.pipeline_steps) == 0:
                 if archive.last_step:
                     input_step_id = archive.last_step.id
-                    prev_step_name = archive.last_step.name
                 else:
                     input_step_id = None
-                    prev_step_name = None
             else:
                 input_step_id = archive.pipeline_steps[-1]
-                prev_step_name = Step.objects.get(pk=input_step_id).name
-
-            if input_step_id and step_name not in archive._get_next_steps(
-                prev_step_name
-            ):
-                raise Exception("Invalid Step order")
 
             step = Step.objects.create(
                 archive=archive,
-                name=step_name,
+                step_name=step_name,
                 input_step_id=input_step_id,
                 status=Status.WAITING,
+                initiated_by_user=user,
+                initiated_by_harvest_batch=harvest_batch,
             )
 
             archive.pipeline_steps.append(step.id)
             archive.save()
 
-    def get_next_steps(self):
-        with transaction.atomic():
-            locked_archive = Archive.objects.select_for_update().get(pk=self.pk)
 
-            # Determine the last step's type
-            if len(locked_archive.pipeline_steps) == 0:
-                if not locked_archive.last_completed_step:
-                    return []
-                step_name = locked_archive.last_completed_step.name
-            else:
-                step_name = Step.objects.get(pk=locked_archive.pipeline_steps[-1]).name
+class StepName(models.TextChoices):
+    SIP_UPLOAD = "SIP_UPLOAD"
+    HARVEST = "HARVEST"
+    VALIDATION = "VALIDATION"
+    CHECKSUM = "CHECKSUM"
+    ARCHIVE = "ARCHIVE"
+    EDIT_MANIFEST = "EDIT_MANIFEST"
+    INVENIO_RDM_PUSH = "INVENIO_RDM_PUSH"
+    ANNOUNCE = "ANNOUNCE"
+    PUSH_TO_CTA = "PUSH_TO_CTA"
+    EXTRACT_TITLE = "EXTRACT_TITLE"
+    NOTIFY_SOURCE = "NOTIFY_SOURCE"
 
-            # Get possible next steps
-            return locked_archive._get_next_steps(step_name)
 
-    def _get_next_steps(self, step_name):
-        next_steps = pipeline.get_next_steps(step_name).copy()  # shallow
+def get_task_names():
+    return [
+        (task, task)
+        for task in current_app.tasks.keys()
+        if not task.startswith("celery.")
+    ]
 
+
+class StepType(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=50, choices=StepName.choices, unique=True)
+    label = models.CharField(max_length=100)
+    description = models.TextField(max_length=250, null=True, default=None)
+    task_name = models.CharField(max_length=50, choices=get_task_names, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    failed_count = models.IntegerField(default=0)
+    failed_blocking_limit = models.IntegerField(default=None, null=True)
+    enabled = models.BooleanField(default=True)
+    has_sip = models.BooleanField(default=False)
+    has_aip = models.BooleanField(default=False)
+    automatic_next_step = models.ForeignKey(
+        "self", null=True, on_delete=models.SET_NULL
+    )
+
+    @classmethod
+    def get_by_stepname(cls, stepname):
+        return cls.objects.get(name=stepname)
+
+    def set_enabled(self, enabled):
+        self.enabled = enabled
+        self.save()
+
+    def increment_failed_count(self):
+        self.failed_count += 1
         if (
-            not self.title
-            or self.title == ""
-            or self.title == f"{self.source} - {self.recid}"
-        ) and self.state != ArchiveState.NONE:
-            next_steps.append(Steps.EXTRACT_TITLE)
-
-        if self.state == ArchiveState.AIP or Steps.ARCHIVE in list(
-            Step.objects.filter(id__in=self.pipeline_steps).values_list(
-                "name", flat=True
-            )
+            self.failed_blocking_limit is not None
+            and self.failed_count >= self.failed_blocking_limit
         ):
-            if Steps.PUSH_TO_CTA not in next_steps:
-                next_steps.append(Steps.PUSH_TO_CTA)
+            self.enabled = False
+        self.save()
 
+    def unblock(self):
+        self.failed_count = 0
+        self.enabled = True
+        self.save()
+
+
+class StepQuerySet(models.QuerySet):
+    def filter(self, *args, **kwargs):
+        if "step_name" in kwargs:
+            step_name = kwargs.pop("step_name")
             try:
-                source = Source.objects.get(name=self.source)
-                if (
-                    source
-                    and source.notification_enabled
-                    and source.notification_endpoint
-                    and Steps.NOTIFY_SOURCE not in next_steps
-                ):
-                    next_steps.append(Steps.NOTIFY_SOURCE)
-            except Source.DoesNotExist:
-                logging.warning(f"Source with name {self.source} does not exists.")
-            except Source.MultipleObjectsReturned:
-                logging.warning(
-                    f"Source with name {self.source} returned multiple objects."
-                )
+                step_type = StepType.get_by_stepname(step_name)
+            except StepType.DoesNotExist:
+                return self.none()
+            kwargs["step_type"] = step_type
+        return super().filter(*args, **kwargs)
 
-        return next_steps
+
+class StepManager(models.Manager):
+    def create(self, *, step_name: StepName, **kwargs):
+        # resolve StepType from StepName
+        step_type = StepType.get_by_stepname(step_name)
+        kwargs["step_type"] = step_type
+        return super().create(**kwargs)
+
+    def get_queryset(self):
+        return StepQuerySet(self.model, using=self._db)
 
 
 class Step(models.Model):
@@ -336,11 +358,24 @@ class Step(models.Model):
     id = models.AutoField(primary_key=True)
     # The archival process this step is in
     archive = models.ForeignKey(Archive, on_delete=models.CASCADE, related_name="steps")
-    name = models.IntegerField(choices=Steps.choices)
+    step_type = models.ForeignKey(
+        StepType, on_delete=models.PROTECT, related_name="steps", null=True
+    )
     create_date = models.DateTimeField(default=timezone.now)
     start_date = models.DateTimeField(default=None, null=True)
     finish_date = models.DateTimeField(default=None, null=True)
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_RUN)
+
+    initiated_by_user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="steps"
+    )
+    initiated_by_harvest_batch = models.ForeignKey(
+        "HarvestBatch",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="steps",
+    )
 
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     input_data = models.TextField(null=True, default=None)
@@ -353,9 +388,27 @@ class Step(models.Model):
     )
     output_data = models.TextField(null=True, default=None)
 
+    objects = StepManager()
+
+    @property
+    def is_user_initiated(self):
+        """Check if this step was initiated by a user"""
+        return self.initiated_by_user is not None
+
+    @property
+    def is_batch_initiated(self):
+        """Check if this step was initiated by a harvest batch"""
+        return self.initiated_by_harvest_batch is not None
+
     def set_status(self, status):
         self.status = status
         self.save()
+
+        if self.is_batch_initiated:
+            # Check if the batch is finished
+            batch = self.initiated_by_harvest_batch
+            if batch.size == batch.completed:
+                batch.set_status(BatchStatus.COMPLETED)
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -551,3 +604,140 @@ class ApiKey(models.Model):
         self._key = self.encrypt(val)
 
     key = property(get_key, set_key)
+
+
+class ScheduledHarvest(models.Model):
+    """
+    This model represents a scheduled harvest job that can be periodically executed.
+    The parameters will be used for the next harvest run.
+    """
+
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, null=False, unique=True)
+    source = models.ForeignKey(
+        Source, on_delete=models.PROTECT, null=False, related_name="scheduled_harvests"
+    )
+    scheduling_task = models.ForeignKey(
+        PeriodicTask, on_delete=models.SET_NULL, null=True
+    )
+    enabled = models.BooleanField(default=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
+    pipeline = ArrayField(
+        models.CharField(choices=StepName.choices), blank=True, default=list
+    )
+    condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+
+    def set_condition_unmodified_for_days(self, days):
+        self.condition_unmodified_for_days = days
+        self.save()
+
+    def set_enabled(self, enabled):
+        self.enabled = enabled
+        self.save()
+
+    def set_pipeline(self, pipeline):
+        self.validate_pipeline(pipeline)
+        self.pipeline = pipeline
+        self.save()
+
+
+class HarvestRun(models.Model):
+    """
+    This model represents a single execution of a ScheduledHarvest.
+    It contains all the parameters used for the executed harvest.
+    """
+
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    source = models.ForeignKey(
+        Source, on_delete=models.PROTECT, null=False, related_name="harvest_runs"
+    )
+    collection = models.ForeignKey(
+        Collection, on_delete=models.PROTECT, null=True, related_name="harvest_runs"
+    )
+    scheduled_harvest = models.ForeignKey(
+        ScheduledHarvest,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="harvest_runs",
+    )
+    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
+    pipeline = ArrayField(
+        models.CharField(choices=StepName.choices), blank=True, default=list
+    )
+    query_start_time = models.DateTimeField(default=None, null=True)
+    query_end_time = models.DateTimeField(default=None, null=True)
+    condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+
+    def get_next_pending_batch(self):
+        return (
+            self.batches.filter(status=BatchStatus.PENDING)
+            .order_by("batch_number")
+            .first()
+        )
+
+    def set_collection(self, collection):
+        self.collection = collection
+        self.save()
+
+    @property
+    def size(self):
+        if self.collection is None or self.collection.archives is None:
+            return 0
+        return self.collection.archives.count()
+
+
+class BatchStatus(models.TextChoices):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    BLOCKED = "BLOCKED"
+    PARTIALLY_FAILED = "PARTIALLY_FAILED"
+
+
+class HarvestBatch(models.Model):
+    """
+    This model represents a single batch of records to be harvested in a HarvestRun.
+    batch_number is unique per HarvestRun and represents the order of execution.
+    If a batch is blocked further batches will not be executed.
+    """
+
+    id = models.AutoField(primary_key=True)
+    batch_number = models.PositiveIntegerField()
+    status = models.CharField(choices=BatchStatus.choices, default=BatchStatus.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    records = models.JSONField(default=list)
+    harvest_run = models.ForeignKey(
+        HarvestRun, on_delete=models.CASCADE, related_name="batches"
+    )
+
+    @property
+    def size(self):
+        return len(self.records or [])
+
+    @property
+    def completed(self):
+        return (
+            self.archives.annotate(
+                incomplete=models.Count(
+                    "steps",
+                    filter=models.Q(steps__initiated_by_harvest_batch=self)
+                    & ~models.Q(steps__status=Status.COMPLETED),
+                    distinct=True,
+                )
+            )
+            .filter(incomplete=0)
+            .count()
+        )
+
+    @property
+    def archives(self):
+        return Archive.objects.filter(steps__initiated_by_harvest_batch=self).distinct()
+
+    class Meta:
+        unique_together = ("harvest_run", "batch_number")
+        ordering = ["batch_number"]
+
+    def set_status(self, status):
+        self.status = status
+        self.save()

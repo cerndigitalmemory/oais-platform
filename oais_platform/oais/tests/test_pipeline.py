@@ -13,7 +13,8 @@ from oais_platform.oais.models import (
     Source,
     Status,
     Step,
-    Steps,
+    StepName,
+    StepType,
 )
 from oais_platform.oais.serializers import ArchiveSerializer
 from oais_platform.settings import PIPELINE_SIZE_LIMIT
@@ -55,11 +56,11 @@ class PipelineTests(APITestCase):
         self.dict_archive = ArchiveSerializer(self.archive, many=False)
 
         self.harvest_step = Step.objects.create(
-            archive=self.archive, name=Steps.HARVEST
+            archive=self.archive, step_name=StepName.HARVEST
         )
 
         self.checksum_step = Step.objects.create(
-            archive=self.archive, name=Steps.CHECKSUM
+            archive=self.archive, step_name=StepName.CHECKSUM
         )
 
         self.init_step_count = Step.objects.count()
@@ -74,18 +75,6 @@ class PipelineTests(APITestCase):
                 status.HTTP_400_BAD_REQUEST,
             ),  # invalid size
             ([-1], status.HTTP_400_BAD_REQUEST),  # invalid type of the step
-            (
-                [Steps.PUSH_TO_CTA, Steps.VALIDATION, Steps.CHECKSUM],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
-            (
-                [Steps.VALIDATION, Steps.CHECKSUM, Steps.HARVEST],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
-            (
-                [Steps.HARVEST, Steps.VALIDATION, Steps.CHECKSUM, Steps.NOTIFY_SOURCE],
-                status.HTTP_400_BAD_REQUEST,
-            ),  # invalid order
         ]
     )
     def test_execute_pipeline_invalid_input(self, pipeline, status_code):
@@ -104,7 +93,7 @@ class PipelineTests(APITestCase):
     def test_execute_pipeline_ongoing_execution(self):
         self.client.force_authenticate(user=self.testuser)
 
-        pipeline = [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH]
+        pipeline = [StepName.ARCHIVE, StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH]
 
         # simulate ongoing checksum step: last_completed_step != last_step
         self.archive.set_last_step(self.checksum_step.id)
@@ -125,7 +114,7 @@ class PipelineTests(APITestCase):
     def test_execute_pipeline_forbidden(self):
         self.client.force_authenticate(user=self.other_user)
 
-        pipeline = [Steps.VALIDATION, Steps.CHECKSUM]
+        pipeline = [StepName.VALIDATION, StepName.CHECKSUM]
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -142,7 +131,7 @@ class PipelineTests(APITestCase):
         self.other_user.save()
         self.client.force_authenticate(user=self.other_user)
 
-        pipeline = [Steps.VALIDATION, Steps.CHECKSUM]
+        pipeline = [StepName.VALIDATION, StepName.CHECKSUM]
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -153,64 +142,62 @@ class PipelineTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.archive.refresh_from_db()
         mock_dispatch.assert_called_once_with(
-            Steps.VALIDATION, self.archive.id, self.archive.last_step.id, None, None
+            StepType.get_by_stepname(StepName.VALIDATION),
+            self.archive.id,
+            self.archive.last_step.id,
+            None,
+            None,
+            False,
         )
 
     @parameterized.expand(
         [
             (
                 {
-                    "pipeline": [Steps.HARVEST],
+                    "pipeline": [StepName.HARVEST],
                     "prev_step": None,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.VALIDATION],
-                    "prev_step": Steps.HARVEST,
+                    "pipeline": [StepName.VALIDATION],
+                    "prev_step": StepName.HARVEST,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.CHECKSUM],
-                    "prev_step": Steps.VALIDATION,
+                    "pipeline": [StepName.CHECKSUM],
+                    "prev_step": StepName.VALIDATION,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.ARCHIVE],
-                    "prev_step": Steps.CHECKSUM,
+                    "pipeline": [StepName.ARCHIVE],
+                    "prev_step": StepName.CHECKSUM,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.PUSH_TO_CTA],
-                    "prev_step": Steps.ARCHIVE,
+                    "pipeline": [StepName.PUSH_TO_CTA],
+                    "prev_step": StepName.ARCHIVE,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.INVENIO_RDM_PUSH],
-                    "prev_step": Steps.CHECKSUM,
+                    "pipeline": [StepName.INVENIO_RDM_PUSH],
+                    "prev_step": StepName.CHECKSUM,
                 },
                 status.HTTP_200_OK,
             ),
             (
                 {
-                    "pipeline": [Steps.EXTRACT_TITLE],
-                    "prev_step": Steps.CHECKSUM,
-                },
-                status.HTTP_200_OK,
-            ),
-            (
-                {
-                    "pipeline": [Steps.NOTIFY_SOURCE],
-                    "prev_step": Steps.ARCHIVE,
+                    "pipeline": [StepName.NOTIFY_SOURCE],
+                    "prev_step": StepName.ARCHIVE,
                 },
                 status.HTTP_200_OK,
             ),
@@ -229,7 +216,7 @@ class PipelineTests(APITestCase):
             if input["prev_step"]:
                 step = Step.objects.create(
                     archive=self.archive,
-                    name=input["prev_step"],
+                    step_name=input["prev_step"],
                     status=Status.COMPLETED,
                 )
                 self.archive.set_last_completed_step(step.id)
@@ -261,12 +248,31 @@ class PipelineTests(APITestCase):
                 Archive.objects.get(pk=self.archive.id).last_step.id, latest_step.id
             )
             mock_dispatch.assert_called_once_with(
-                input["pipeline"][0],
+                StepType.get_by_stepname(input["pipeline"][0]),
                 self.archive.id,
                 latest_step.id,
                 latest_step.input_data,
                 self.testuser_api_key.key,
+                False,
             )
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_step_disabled(self, mock_dispatch):
+        StepType.objects.get(name=StepName.VALIDATION).set_enabled(False)
+        self.client.force_authenticate(user=self.testuser)
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {
+                "archive": self.dict_archive.data,
+                "pipeline_steps": [StepName.VALIDATION],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_step = Step.objects.latest("id")
+        self.assertEqual(latest_step.status, Status.FAILED)
+        mock_dispatch.assert_not_called()
 
     def test_edit_manifests(self):
         self.client.force_authenticate(user=self.testuser)
@@ -320,3 +326,34 @@ class PipelineTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.archive.manifest, {"test": "test"})
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_extract_title_success(self, mock_dispatch):
+        self.client.force_authenticate(user=self.testuser)
+        Step.objects.create(
+            archive=self.archive, step_name=StepName.HARVEST, status=Status.COMPLETED
+        )
+
+        url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
+        response = self.client.post(
+            url,
+            {
+                "archive": self.dict_archive.data,
+                "pipeline_steps": [StepName.EXTRACT_TITLE],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_step = Step.objects.latest("id")
+        self.assertEqual(latest_step.step_type.name, StepName.EXTRACT_TITLE)
+        self.assertEqual(latest_step.status, Status.WAITING)
+
+        mock_dispatch.assert_called_once_with(
+            StepType.get_by_stepname(StepName.EXTRACT_TITLE),
+            self.archive.id,
+            latest_step.id,
+            latest_step.input_data,
+            self.testuser_api_key.key,
+            False,
+        )

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Steps
+from oais_platform.oais.models import StepName, StepType
 
 
 class IntegrationAPITests(APITestCase):
@@ -107,5 +107,10 @@ class IntegrationAPITests(APITestCase):
         self.assertEqual(len(response.data), 1)
 
         mock_dispatch.assert_called_once_with(
-            Steps.HARVEST, result["id"], response.data[0]["id"], None, None
+            StepType.get_by_stepname(StepName.HARVEST),
+            result["id"],
+            response.data[0]["id"],
+            None,
+            None,
+            False,
         )

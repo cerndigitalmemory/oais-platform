@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 
 
 class StepStatisticsEndpointTest(APITestCase):
@@ -10,7 +10,7 @@ class StepStatisticsEndpointTest(APITestCase):
         archive = Archive.objects.create()
         for step_name in steps_to_complete:
             Step.objects.create(
-                name=step_name, status=Status.COMPLETED, archive=archive
+                step_name=step_name, status=Status.COMPLETED, archive=archive
             )
         archive.save()
         return archive
@@ -22,24 +22,24 @@ class StepStatisticsEndpointTest(APITestCase):
         staged_archive.staged = True
         staged_archive.save()
 
-        self.create_archive_with_steps([Steps.CHECKSUM])
-        self.create_archive_with_steps([Steps.CHECKSUM, Steps.ARCHIVE])
+        self.create_archive_with_steps([StepName.HARVEST])
+        self.create_archive_with_steps([StepName.HARVEST, StepName.ARCHIVE])
         self.create_archive_with_steps(
-            [Steps.CHECKSUM, Steps.ARCHIVE, Steps.PUSH_TO_CTA]
+            [StepName.HARVEST, StepName.ARCHIVE, StepName.PUSH_TO_CTA]
         )
         self.create_archive_with_steps(
             [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.HARVEST,
+                StepName.ARCHIVE,
+                StepName.INVENIO_RDM_PUSH,
             ]
         )
         self.create_archive_with_steps(
             [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.PUSH_TO_CTA,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.HARVEST,
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
             ]
         )
 
@@ -62,16 +62,16 @@ class StepStatisticsEndpointTest(APITestCase):
     def test_step_statistics_more_archives(self):
         self.create_archive_with_steps(
             [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.PUSH_TO_CTA,
+                StepName.HARVEST,
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
             ]
         )
         self.create_archive_with_steps(
             [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.HARVEST,
+                StepName.ARCHIVE,
+                StepName.INVENIO_RDM_PUSH,
             ]
         )
 
@@ -111,15 +111,15 @@ class StepStatisticsEndpointTest(APITestCase):
 
     def test_step_statistics_mixed_status_steps(self):
         archive_mixed_status = self.create_archive_with_steps(
-            [Steps.CHECKSUM, Steps.ARCHIVE]
+            [StepName.HARVEST, StepName.ARCHIVE]
         )
         Step.objects.create(
-            name=Steps.PUSH_TO_CTA,
+            step_name=StepName.PUSH_TO_CTA,
             status=Status.IN_PROGRESS,
             archive=archive_mixed_status,
         )
         Step.objects.create(
-            name=Steps.INVENIO_RDM_PUSH,
+            step_name=StepName.INVENIO_RDM_PUSH,
             status=Status.FAILED,
             archive=archive_mixed_status,
         )
@@ -141,8 +141,8 @@ class StepStatisticsEndpointTest(APITestCase):
         )
 
     def test_step_statistics_others_count(self):
-        self.create_archive_with_steps([Steps.CHECKSUM, Steps.PUSH_TO_CTA])
-        self.create_archive_with_steps([Steps.INVENIO_RDM_PUSH])
+        self.create_archive_with_steps([StepName.HARVEST, StepName.PUSH_TO_CTA])
+        self.create_archive_with_steps([StepName.INVENIO_RDM_PUSH])
 
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)

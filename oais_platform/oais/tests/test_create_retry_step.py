@@ -2,7 +2,7 @@ import json
 
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, Steps
+from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step
 
 
@@ -11,7 +11,7 @@ class CreateRetryStepTests(APITestCase):
         self.archive = Archive.objects.create()
         self.step = Step.objects.create(
             archive=self.archive,
-            name=Steps.PUSH_TO_CTA,
+            step_name=StepName.PUSH_TO_CTA,
             status=Status.FAILED,
             output_data=json.dumps({"test": True}),
         )
@@ -20,7 +20,9 @@ class CreateRetryStepTests(APITestCase):
     def test_create_retry_step_success(self):
         create_retry_step.apply(args=[self.archive.id])
         retry_step = Step.objects.filter(
-            name=self.step.name, archive=self.archive, input_step_id=self.step.id
+            step_type=self.step.step_type,
+            archive=self.archive,
+            input_step_id=self.step.id,
         ).first()
         self.assertIsNotNone(retry_step)
         self.archive.refresh_from_db()
@@ -31,16 +33,20 @@ class CreateRetryStepTests(APITestCase):
         create_retry_step.apply(args=[self.archive.id])
         self.assertFalse(
             Step.objects.filter(
-                name=self.step.name, archive=self.archive, input_step_id=self.step.id
+                step_type=self.step.step_type,
+                archive=self.archive,
+                input_step_id=self.step.id,
             ).exists()
         )
 
     def test_create_retry_step_name_mismatch(self):
         create_retry_step.apply(
-            args=[self.archive.id], kwargs={"step_name": Steps.ARCHIVE}
+            args=[self.archive.id], kwargs={"step_name": StepName.ARCHIVE}
         )
         self.assertFalse(
             Step.objects.filter(
-                name=self.step.name, archive=self.archive, input_step_id=self.step.id
+                step_type=self.step.step_type,
+                archive=self.archive,
+                input_step_id=self.step.id,
             ).exists()
         )

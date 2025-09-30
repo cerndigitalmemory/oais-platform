@@ -12,7 +12,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Collection, Steps
+from oais_platform.oais.models import Archive, Collection, StepName, StepType
 from oais_platform.oais.tasks.announce import batch_announce_task
 from oais_platform.settings import BIC_WORKDIR
 
@@ -224,8 +224,14 @@ class BatchAnnounceTests(APITestCase):
         self.assertEqual(Collection.objects.count(), 1)
         self.assertEqual(self.tag.description, "Batch Announce completed successfully")
         self.assertEqual(mock_dispatch.call_count, 2)
-        self.assertEqual(mock_dispatch.mock_calls[0].args[0], Steps.ANNOUNCE)
-        self.assertEqual(mock_dispatch.mock_calls[1].args[0], Steps.ANNOUNCE)
+        self.assertEqual(
+            mock_dispatch.mock_calls[0].args[0],
+            StepType.get_by_stepname(StepName.ANNOUNCE),
+        )
+        self.assertEqual(
+            mock_dispatch.mock_calls[1].args[0],
+            StepType.get_by_stepname(StepName.ANNOUNCE),
+        )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_batch_announce_task_one_validation_failed(self, mock_dispatch):
@@ -263,7 +269,10 @@ class BatchAnnounceTests(APITestCase):
             " ERRORS: The given path is not a valid SIP:" + path_to_sip + ".",
         )
         self.assertEqual(mock_dispatch.call_count, 1)
-        self.assertEqual(mock_dispatch.mock_calls[0].args[0], Steps.ANNOUNCE)
+        self.assertEqual(
+            mock_dispatch.mock_calls[0].args[0],
+            StepType.get_by_stepname(StepName.ANNOUNCE),
+        )
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_batch_announce_task_all_validation_failed(self, mock_dispatch):

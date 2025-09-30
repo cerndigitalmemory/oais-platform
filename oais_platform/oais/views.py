@@ -21,6 +21,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -35,9 +36,11 @@ from oais_platform.oais.models import (
     Source,
     Status,
     Step,
-    Steps,
+    StepName,
+    StepType,
     UploadJob,
 )
+from oais_platform.oais.pagination import StepTypePagination
 from oais_platform.oais.permissions import (
     ArchivePermission,
     StepPermission,
@@ -54,6 +57,7 @@ from oais_platform.oais.serializers import (
     CollectionSerializer,
     LoginSerializer,
     StepSerializer,
+    StepTypeMinimalSerializer,
     UploadJobSerializer,
     UserSerializer,
 )
@@ -69,8 +73,6 @@ from oais_platform.oais.tasks.pipeline_actions import (
     run_step,
 )
 from oais_platform.settings import ALLOW_LOCAL_LOGIN, BIC_WORKDIR, PIPELINE_SIZE_LIMIT
-
-from . import pipeline
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -214,7 +216,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     title=record["title"],
                     requester=request.user,
                     staged=True,
-                    original_file_size=record.get("file_size", 0),
+                    original_file_size=record.get("file_size") or 0,
                 )
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
@@ -238,7 +240,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if status:
             step_filter |= Q(status=status)
         if name:
-            step_filter |= Q(name=name)
+            step_filter |= Q(step_name=name)
         filtered_steps = Step.objects.filter(step_filter).order_by("-start_date")
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
@@ -298,7 +300,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "source": ["source"],
         "tag": ["archive_collections__id"],
         "exclude_tag": ["archive_collections__id"],
-        "step_name": ["last_step__name"],
+        "step_name": ["last_step__step_type__name"],
         "step_status": ["last_step__status"],
         "query": ["title__icontains", "recid__icontains"],
     }
@@ -425,16 +427,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(serializer.data)
 
-    @action(detail=True, url_path="next-steps", url_name="next-steps")
-    def archive_next_steps(self, request, pk=None):
-        """
-        Returns the type of possible next Steps of an identified Archive
-        """
-        archive = self.get_object()
-        next_steps = archive.get_next_steps()
-
-        return Response(next_steps)
-
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
         """
@@ -464,7 +456,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             # If manifest operations are successful, create manifest step
             step = Step.objects.create(
                 archive=archive,
-                name=Steps.EDIT_MANIFEST,
+                step_name=StepName.EDIT_MANIFEST,
                 input_step=archive.last_completed_step,
                 status=Status.IN_PROGRESS,
                 input_data=archive.manifest,
@@ -490,7 +482,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.set_unstaged(approver=request.user)
 
         step = Step.objects.create(
-            archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+            archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
         )
 
         try:
@@ -529,7 +521,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             job_tag.add_archive(archive)
 
             step = Step.objects.create(
-                archive=archive, name=Steps.HARVEST, status=Status.NOT_RUN
+                archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
             )
             # Step is auto-approved and harvest step runs
             try:
@@ -591,7 +583,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest("Invalid pipeline size")
                     try:
                         for step_name in steps:
-                            archive.add_step_to_pipeline(step_name)
+                            archive.add_step_to_pipeline(step_name, user=request.user)
                     except Exception as e:
                         raise BadRequest(e)
                 case "retry":
@@ -625,7 +617,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
                     )
 
-        step = execute_pipeline(
+        step, _ = execute_pipeline(
             archive_id, api_key=api_key, force_continue=force_continue
         )
         serializer = StepSerializer(step, many=False)
@@ -641,7 +633,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if len(archives) > 0:
             first_state = Archive.objects.get(pk=archives[0]["id"]).state
             state_intersection = True
-            next_steps_intersection = None
             all_last_step_failed = True
             can_continue = True
 
@@ -661,21 +652,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     if len(archive.pipeline_steps) == 0:
                         can_continue = False
 
-                    next_step = archive.get_next_steps()
-                    if not next_steps_intersection:
-                        next_steps_intersection = next_step
-                    else:
-                        next_steps_intersection = set(
-                            next_steps_intersection
-                        ).intersection(next_step)
-                        if (
-                            len(next_steps_intersection) == 0
-                            and not state_intersection
-                            and not all_last_step_failed
-                        ):
-                            break
+                    if (
+                        not state_intersection
+                        and not all_last_step_failed
+                        and not can_continue
+                    ):
+                        break
+
                 result["state_intersection"] = state_intersection
-                result["next_steps_intersection"] = sorted(next_steps_intersection)
                 result["all_last_step_failed"] = all_last_step_failed
                 result["can_continue"] = all_last_step_failed and can_continue
 
@@ -731,15 +715,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     )
                     return response
         return HttpResponse(status=404)
-
-    @action(
-        detail=False, methods=["GET"], url_path="constraints", url_name="constraints"
-    )
-    def get_steps_order_constraints(self, request):
-        """
-        Returns all Step order constraints
-        """
-        return Response(pipeline.get_next_steps_constraints())
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -1008,7 +983,9 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
             step = Step.objects.create(
-                archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+                archive=archive,
+                step_name=StepName.SIP_UPLOAD,
+                status=Status.IN_PROGRESS,
             )
             step.set_start_date()
 
@@ -1044,6 +1021,20 @@ class UploadJobViewSet(viewsets.ReadOnlyModelViewSet):
             raise BadRequest({"status": 1, "msg": e})
 
 
+class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint that allows StepTypes to be viewed
+    """
+
+    queryset = StepType.objects.all().order_by("name")
+    serializer_class = StepTypeMinimalSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StepTypePagination
+
+    def get_queryset(self):
+        return super().get_queryset().filter(enabled=True).order_by("name")
+
+
 @api_view(["GET"])
 def statistics(request):
     harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
@@ -1052,13 +1043,13 @@ def statistics(request):
         "harvested_count": harvested_count + preserved_count,
         "preserved_count": preserved_count,
         "pushed_to_tape_count": Step.objects.filter(
-            name=Steps.PUSH_TO_CTA, status=Status.COMPLETED
+            step_name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()
         .count(),
         "pushed_to_registry_count": Step.objects.filter(
-            name=Steps.INVENIO_RDM_PUSH, status=Status.COMPLETED
+            step_name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
         )
         .values("archive")
         .distinct()
@@ -1073,35 +1064,38 @@ def step_statistics(request):
         "staged": {
             "staged": True,
             "excluded": [
-                Steps.CHECKSUM,
-                Steps.ARCHIVE,
-                Steps.PUSH_TO_CTA,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
             ],
         },
         "harvested": {
             "state": ArchiveState.SIP,
-            "excluded": [Steps.ARCHIVE, Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+            "excluded": [
+                StepName.ARCHIVE,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
+            ],
         },
         "harvested_preserved": {
             "state": ArchiveState.AIP,
-            "excluded": [Steps.PUSH_TO_CTA, Steps.INVENIO_RDM_PUSH],
+            "excluded": [StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_tape": {
             "state": ArchiveState.AIP,
-            "included": [Steps.PUSH_TO_CTA],
-            "excluded": [Steps.INVENIO_RDM_PUSH],
+            "included": [StepName.PUSH_TO_CTA],
+            "excluded": [StepName.INVENIO_RDM_PUSH],
         },
         "harvested_preserved_registry": {
             "state": ArchiveState.AIP,
-            "included": [Steps.INVENIO_RDM_PUSH],
-            "excluded": [Steps.PUSH_TO_CTA],
+            "included": [StepName.INVENIO_RDM_PUSH],
+            "excluded": [StepName.PUSH_TO_CTA],
         },
         "harvested_preserved_tape_registry": {
             "state": ArchiveState.AIP,
             "included": [
-                Steps.PUSH_TO_CTA,
-                Steps.INVENIO_RDM_PUSH,
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
             ],
         },
     }
@@ -1163,7 +1157,7 @@ def upload_sip(request):
         )
 
         step = Step.objects.create(
-            archive=archive, name=Steps.SIP_UPLOAD, status=Status.IN_PROGRESS
+            archive=archive, step_name=StepName.SIP_UPLOAD, status=Status.IN_PROGRESS
         )
         step.set_start_date()
 

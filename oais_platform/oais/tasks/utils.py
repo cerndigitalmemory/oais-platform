@@ -20,7 +20,7 @@ def create_step(step_name, archive, input_step_id=None, input_data=None):
     """
     return Step.objects.create(
         archive=archive,
-        name=step_name,
+        step_name=step_name,
         input_step_id=input_step_id,
         input_data=input_data,
         status=Status.WAITING,

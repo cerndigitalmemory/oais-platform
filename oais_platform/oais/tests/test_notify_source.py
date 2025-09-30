@@ -8,7 +8,7 @@ from oais_platform.oais.models import (
     Source,
     Status,
     Step,
-    Steps,
+    StepName,
 )
 from oais_platform.oais.tasks.notify_source import notify_source
 
@@ -39,13 +39,18 @@ class NotifySourceTests(APITestCase):
             path_to_sip="sip/test/path",
         )
 
-        Step.objects.create(archive=self.archive, name=Steps.HARVEST)
+        Step.objects.create(archive=self.archive, step_name=StepName.HARVEST)
 
-        self.step = Step.objects.create(archive=self.archive, name=Steps.NOTIFY_SOURCE)
+        self.step = Step.objects.create(
+            archive=self.archive, step_name=StepName.NOTIFY_SOURCE
+        )
 
     def setup_aip(self):
         Step.objects.create(
-            archive=self.archive, name=Steps.ARCHIVE, status=Status.COMPLETED
+            archive=self.archive, step_name=StepName.HARVEST, status=Status.COMPLETED
+        )
+        Step.objects.create(
+            archive=self.archive, step_name=StepName.ARCHIVE, status=Status.COMPLETED
         )
 
         self.archive.set_aip_path("aip/test/path2")
