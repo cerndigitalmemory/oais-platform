@@ -127,6 +127,40 @@ docker compose -f test-compose.yml up --exit-code-from django
 
 Code is formatted using **black** and linted with **flake8**. A VSCode settings file is provided for convenience.
 
+
+### Scripts
+
+To browse the contents of a tape namespace, there is the browse_tape.py script in the scripts folder. The script can be ran in a separate oais_scripts pod.
+
+Running the script locally:
+
+```bash
+# Start up the pod for running scripts
+docker compose up scripts
+# Enter the pod shell
+docker exec -it oais_scripts bash
+# Run the script
+python3 browse_tape.py https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
+```
+
+The script will list the contents of a given path.
+
+Running the script in OpenShift:
+
+```bash
+# Login to OpenShift and select the desired project
+oc login --token=<token> --server=https://api.paas.okd.cern.ch
+oc project <project>
+# Start up the scripts pod and enteres the shell
+oc run oais-scripts --image=gitlab-registry.cern.ch/digitalmemory/oais-platform/scripts:<tag> \
+  --restart=Never \
+  --rm -i --tty -- bash
+# Run the script
+python3 browse_tape.py https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
+# Exit and terminate the pod when done
+exit
+```
+
 ## Configuration
 
 ### CERN SSO
@@ -205,14 +239,6 @@ Make sure that:
 
 1. The FTS link has correctly mapped the certificate you are planning to use to the service account. This is usually automatic for user Grid certificates but not for Robot ones.
 2. The service account has permissions to read and write from the specified CTA space.
-
-To browse the contents of a tape namespace, run the following command in the container shell with `docker exec -it oais_django sh`:
-
-```bash
-python manage.py browse_tape https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/
-```
-
-The command will list the contents of a given path (when not providing a path, `CTA_BASE_PATH` will be used as default).
 
 ## CI/CD
 
