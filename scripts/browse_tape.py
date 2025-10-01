@@ -67,7 +67,7 @@ def main(path, summary):
 
             return result
         except Exception as e:
-            logging.warning(f"Error accessing directory: {e}")
+            logging.error(f"Error accessing directory: {e}")
             raise e
 
     def count_files(files):
@@ -88,21 +88,19 @@ def main(path, summary):
 
     start_time = time.time()
     logging.info("Script started successfully!")
-    click.echo(f"Listing contents of: {path}\n")
+    logging.info(f"Listing contents of: {path}\n")
 
     try:
         gfal2.set_verbose(gfal2.verbose_level.warning)
         ctx = gfal2.creat_context()
         files = list_gfal2_directory(ctx, path)
+        if files:
+            click.echo(f"\nContents of {path}:")
+            print_directory_contents(files)
+        else:
+            click.echo(click.style("No files found.", fg="red"))
     except Exception as e:
-        logging.error(f"Error occurred: {e}")
-        files = None
-
-    if files:
-        click.echo(f"\nContents of {path}:")
-        print_directory_contents(files)
-    else:
-        click.echo(click.style("No files found or an error occurred.", fg="red"))
+        click.echo(click.style(f"An error occurred: {e}", fg="red"))
 
     end_time = time.time()
     duration_seconds = end_time - start_time
