@@ -34,7 +34,7 @@ class TestBrowseTapeScript(unittest.TestCase):
         test_path = "/custom/path/"
         result = self.runner.invoke(main, test_path)
 
-        self.assertIn("An error occurred.", result.output)
+        self.assertIn("An error occurred: Permission denied", result.output)
 
     @patch("browse_tape.gfal2")
     def test_browse_tape_empty_directory(self, mock_gfal2):
