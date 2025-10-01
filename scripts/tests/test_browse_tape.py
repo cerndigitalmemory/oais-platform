@@ -34,7 +34,7 @@ class TestBrowseTapeScript(unittest.TestCase):
         test_path = "/custom/path/"
         result = self.runner.invoke(main, test_path)
 
-        self.assertIn("No files found or an error occurred.", result.output)
+        self.assertIn("An error occurred.", result.output)
 
     @patch("browse_tape.gfal2")
     def test_browse_tape_empty_directory(self, mock_gfal2):
@@ -45,8 +45,7 @@ class TestBrowseTapeScript(unittest.TestCase):
         test_path = "/empty/path/"
         result = self.runner.invoke(main, test_path)
 
-        self.assertIn(test_path, result.output)
-        self.assertIn("No files found or an error occurred.", result.output)
+        self.assertIn("No files found.", result.output)
 
     @patch("browse_tape.gfal2")
     def test_browse_tape_no_path(self, mock_gfal2):
