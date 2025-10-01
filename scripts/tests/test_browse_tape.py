@@ -1,12 +1,9 @@
-import logging
 import stat
 import unittest
 from unittest.mock import Mock, patch
 
 from browse_tape import main
 from click.testing import CliRunner
-
-logging.disable(logging.CRITICAL)
 
 
 class TestBrowseTapeScript(unittest.TestCase):
@@ -17,8 +14,7 @@ class TestBrowseTapeScript(unittest.TestCase):
     def test_browse_tape_with_path(self, mock_gfal2):
         mock_ctx = Mock()
         mock_ctx.listdir.return_value = ["file1.txt", "file2.csv"]
-        mock_ctx_stat = Mock(st_size=123456, st_mode=stat.S_IFREG)
-        mock_ctx.stat.return_value = mock_ctx_stat
+        mock_ctx.stat.return_value = Mock(st_size=123456, st_mode=stat.S_IFREG)
         mock_gfal2.creat_context.return_value = mock_ctx
 
         test_path = "/custom/path/"
@@ -91,7 +87,3 @@ class TestBrowseTapeScript(unittest.TestCase):
         self.assertIn("- file_a.txt (100 bytes)", result.output)
         self.assertIn("- subdir (100 bytes)", result.output)
         self.assertIn("    - nested_file_b.dat (100 bytes)", result.output)
-
-
-if __name__ == "__main__":
-    unittest.main()
