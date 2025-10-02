@@ -235,6 +235,8 @@ class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "pipeline",
         "condition_unmodified_for_days",
         "scheduling_task",
+        "batch_size",
+        "batch_delay_minutes",
     )
 
     def user_name(self, obj):
@@ -266,6 +268,8 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "query_end_time",
         "condition_unmodified_for_days",
         "created_at",
+        "batch_size",
+        "batch_delay_minutes",
     )
 
     def user_name(self, obj):

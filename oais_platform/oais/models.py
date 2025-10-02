@@ -630,6 +630,8 @@ class ScheduledHarvest(models.Model):
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
     condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+    batch_size = models.PositiveIntegerField(default=100, null=False)
+    batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
 
     def set_condition_unmodified_for_days(self, days):
         self.condition_unmodified_for_days = days
@@ -672,6 +674,8 @@ class HarvestRun(models.Model):
     query_start_time = models.DateTimeField(default=None, null=True)
     query_end_time = models.DateTimeField(default=None, null=True)
     condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+    batch_size = models.PositiveIntegerField(default=100, null=False)
+    batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
 
     def get_next_pending_batch(self):
         return (

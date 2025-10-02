@@ -17,10 +17,6 @@ from oais_platform.oais.models import (
 )
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import execute_pipeline
-from oais_platform.settings import (
-    AUTOMATIC_HARVEST_BATCH_DELAY,
-    AUTOMATIC_HARVEST_BATCH_SIZE,
-)
 
 logger = get_task_logger(__name__)
 
@@ -78,6 +74,8 @@ def scheduled_harvest(self, scheduled_harvest_id):
         query_start_time=last_harvest_time,
         query_end_time=end,
         condition_unmodified_for_days=scheduled_harvest.condition_unmodified_for_days,
+        batch_size=scheduled_harvest.batch_size,
+        batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
     )
     records_count = 0
     try:
@@ -102,7 +100,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 )
                 harvest_run.set_collection(harvest_collection)
 
-            batch_size = AUTOMATIC_HARVEST_BATCH_SIZE
+            batch_size = scheduled_harvest.batch_size
             batch_number = 1
             for i in range(0, len(records_to_harvest), batch_size):
                 batch = records_to_harvest[i : i + batch_size]
@@ -210,10 +208,10 @@ def finalize_batch(self, results, batch_id):
         next_batch = batch.harvest_run.get_next_pending_batch()
         if next_batch:
             logger.info(
-                f"Scheduling the next batch {next_batch.id} for {batch.harvest_run.source.name} in {AUTOMATIC_HARVEST_BATCH_DELAY} minutes."
+                f"Scheduling the next batch {next_batch.id} for {batch.harvest_run.source.name} in {batch.harvest_run.batch_delay_minutes} minutes."
             )
             batch_harvest.apply_async(
-                (next_batch.id,), countdown=AUTOMATIC_HARVEST_BATCH_DELAY * 60
+                (next_batch.id,), countdown=batch.harvest_run.batch_delay_minutes * 60
             )
         else:
             logger.info(
