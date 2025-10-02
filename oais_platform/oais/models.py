@@ -409,6 +409,10 @@ class Step(models.Model):
             batch = self.initiated_by_harvest_batch
             if batch.size == batch.completed:
                 batch.set_status(BatchStatus.COMPLETED)
+            elif batch.size == batch.failed:
+                batch.set_status(BatchStatus.BLOCKED)
+            elif batch.size == batch.completed + batch.failed:
+                batch.set_status(BatchStatus.PARTIALLY_FAILED)
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -716,19 +720,27 @@ class HarvestBatch(models.Model):
         return len(self.records or [])
 
     @property
-    def completed(self):
-        return (
-            self.archives.annotate(
-                incomplete=models.Count(
-                    "steps",
-                    filter=models.Q(steps__initiated_by_harvest_batch=self)
-                    & ~models.Q(steps__status=Status.COMPLETED),
-                    distinct=True,
-                )
+    def archives_with_batch_status(self):
+        last_batch_step = (
+            Step.objects.filter(
+                archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
-            .filter(incomplete=0)
-            .count()
+            .order_by("-create_date")
+            .values("status")[:1]
         )
+        return self.archives.annotate(batch_status=models.Subquery(last_batch_step))
+
+    @property
+    def failed(self):
+        return self.archives_with_batch_status.filter(
+            batch_status=Status.FAILED
+        ).count()
+
+    @property
+    def completed(self):
+        return self.archives_with_batch_status.filter(
+            batch_status=Status.COMPLETED
+        ).count()
 
     @property
     def archives(self):

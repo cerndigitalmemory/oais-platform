@@ -8,7 +8,7 @@ from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
 from celery.exceptions import Retry
 from celery.utils.log import get_task_logger
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -237,45 +237,61 @@ def resource_check(task, current_step, archive):
             current_step,
             f"SIP exceeds the Archivematica file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB).",
         )
+    try:
+        with transaction.atomic():
+            current_am_steps = Step.objects.select_for_update().filter(
+                step_name=StepName.ARCHIVE,
+                status__in=[Status.WAITING, Status.IN_PROGRESS],
+                celery_task_id__isnull=False,
+            )
+            current_am_steps_count = current_am_steps.count()
 
-    with transaction.atomic():
-        current_am_steps = Step.objects.select_for_update().filter(
-            step_name=StepName.ARCHIVE,
-            status__in=[Status.WAITING, Status.IN_PROGRESS],
-            celery_task_id__isnull=False,
-        )
-        current_am_steps_count = current_am_steps.count()
+            total_sip_size = (
+                Archive.objects.select_for_update()
+                .filter(last_step__in=current_am_steps)
+                .aggregate(total=Sum("sip_size"))["total"]
+                or 0
+            )
 
-        total_sip_size = (
-            Archive.objects.select_for_update()
-            .filter(last_step__in=current_am_steps)
-            .aggregate(total=Sum("sip_size"))["total"]
-            or 0
-        )
+            if (
+                current_am_steps_count >= AM_CONCURRENCY_LIMT
+                or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
+            ):
+                if task.request.retries >= task.max_retries:
+                    return set_and_return_error(
+                        current_step,
+                        "Archivematica max retries exceeded. Try again later.",
+                    )
 
-        if (
-            current_am_steps_count >= AM_CONCURRENCY_LIMT
-            or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
-        ):
+                retry_interval = 10 * (task.request.retries + 1)
+
+                exc_message = (
+                    "Archivematica concurrency limit reached."
+                    if current_am_steps_count >= AM_CONCURRENCY_LIMT
+                    else "Archivematica aggregated file size limit reached."
+                )
+                raise task.retry(
+                    countdown=60 * retry_interval,
+                    exc=Exception(exc_message),
+                )
+            current_step.set_status(Status.WAITING)
+            current_step.set_task(task.request.id)
+            return 0
+    except OperationalError as e:
+        if "deadlock detected" in str(e):
             if task.request.retries >= task.max_retries:
                 return set_and_return_error(
                     current_step, "Archivematica max retries exceeded. Try again later."
                 )
 
-            retry_interval = 10 * (task.request.retries + 1)
-
-            exc_message = (
-                "Archivematica concurrency limit reached."
-                if current_am_steps_count >= AM_CONCURRENCY_LIMT
-                else "Archivematica aggregated file size limit reached."
-            )
+            retry_interval = 2 * (task.request.retries + 1)
+            logger.warning(f"Deadlock detected, retrying in {retry_interval} seconds")
             raise task.retry(
                 countdown=60 * retry_interval,
-                exc=Exception(exc_message),
+                exc=e,
             )
-        current_step.set_status(Status.WAITING)
-        current_step.set_task(task.request.id)
-        return 0
+        else:
+            raise
 
 
 def get_am_client():

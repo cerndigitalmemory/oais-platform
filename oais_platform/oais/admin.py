@@ -315,6 +315,7 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "harvest_run_link",
         "size",
         "completed",
+        "failed",
         "archive_count",
     )
 
