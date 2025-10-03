@@ -17,6 +17,7 @@ from oais_platform.oais.models import (
     StepType,
     UploadJob,
 )
+from oais_platform.oais.tasks.scheduled_harvest import batch_harvest
 
 
 class NullToNotRequiredMixin:
@@ -312,6 +313,8 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
 @admin.register(HarvestBatch)
 class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    actions = ["run_harvest_batch"]
+
     list_display = (
         "id",
         "batch_number",
@@ -338,3 +341,11 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return 0
 
     archive_count.short_description = "Archives Count"
+
+    def run_harvest_batch(self, request, queryset):
+        delay = queryset.first().harvest_run.batch_delay_minutes
+        for idx, batch in enumerate(queryset):
+            batch_harvest.apply_async((batch.id,), countdown=idx * delay * 60)
+        self.message_user(request, f"{queryset.count()} batches scheduled to run.")
+
+    run_harvest_batch.short_description = "Run selected batches"
