@@ -55,6 +55,9 @@ BASE_URL = "http://localhost"
 # Allow local accounts to login
 ALLOW_LOCAL_LOGIN = environ.get("ALLOW_LOCAL_LOGIN", False)
 
+# App versioning
+APP_VERSION = environ.get("APP_VERSION", "development")
+
 ## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
@@ -139,6 +142,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "oais_platform.middleware.api_version_middleware",
 ]
 
 ROOT_URLCONF = "oais_platform.urls"
