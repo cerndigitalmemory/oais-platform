@@ -729,6 +729,7 @@ class HarvestBatch(models.Model):
             Step.objects.filter(
                 archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
+            .exclude(status=Status.WAITING)
             .order_by("-create_date")
             .values("status")[:1]
         )
