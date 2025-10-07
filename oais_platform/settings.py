@@ -247,7 +247,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SPECTACULAR_SETTINGS = {
     "TITLE": "OAIS Platform API",
     "DESCRIPTION": "CERN Digital Memory platform API documentation",
-    "VERSION": "0.1",
+    "VERSION": APP_VERSION,
     # OTHER SETTINGS
 }
 
