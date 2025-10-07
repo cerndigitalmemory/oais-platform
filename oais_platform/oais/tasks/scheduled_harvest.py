@@ -148,6 +148,15 @@ def batch_harvest(self, batch_id):
         logger.warning(
             f"User with name {batch.harvest_run.user.username} does not have API key set for the given source."
         )
+
+    if (
+        batch.status == BatchStatus.BLOCKED
+    ):  # Option to stop further processing of the batches by setting the next PENDING batch status to BLOCKED
+        logger.warning(f"Batch {batch_id} is blocked - not processing.")
+        return
+    elif batch.status != BatchStatus.PENDING:
+        logger.info(f"Batch {batch_id} has already been processed - re-run triggered.")
+
     sigs = []
     batch.set_status(BatchStatus.IN_PROGRESS)
     for record in batch.records:
@@ -192,18 +201,30 @@ def finalize_batch(self, results, batch_id):
         )
         return
     else:
-        failed_archives = batch.harvest_run.collection.archives.filter(
-            Q(last_step__status=Status.FAILED) | Q(state=ArchiveState.NONE)
-        ).count()
-        if failed_archives == batch.size:
+        none_state_archive = batch.archives.filter(
+            Q(state=ArchiveState.NONE)
+        )  # Count archives that did not progress, first step should always create an SIP
+        if none_state_archive.count() == batch.size:
             logger.error(
-                f"Batch {batch_id} had all archives failed. Halting further batches."
+                f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches."
             )
             batch.set_status(BatchStatus.BLOCKED)
             return
-        elif failed_archives > 0 or batch.size != batch.archives.count():
-            logger.warning(f"Batch {batch_id} had failed archives.")
-            batch.set_status(BatchStatus.PARTIALLY_FAILED)
+        if none_state_archive.count() > 0:
+            logger.warning(
+                f"Batch {batch_id}: {none_state_archive.count} archives had no SIP: {none_state_archive.all().values_list('recid', flat=True)}."
+            )
+        if batch.size != batch.archives.count():
+            recid_list = [
+                record["recid"]
+                for record in batch.records
+                if record.get("recid") is not None
+            ]
+            archived_recid_list = batch.archives.all().values_list("recid", flat=True)
+            missing_recid_list = set(recid_list) - set(archived_recid_list)
+            logger.warning(
+                f"Batch {batch_id} has {len(missing_recid_list)} missing archives: {missing_recid_list}"
+            )
 
         next_batch = batch.harvest_run.get_next_pending_batch()
         if next_batch:
