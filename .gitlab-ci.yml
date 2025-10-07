@@ -125,7 +125,6 @@ create-release:
     - git remote add gitlab_origin https://oauth2:$CREATE_NEW_TAG_TOKEN@gitlab.cern.ch/digitalmemory/oais-platform.git
     - git tag -a $TAG -m "Release $TAG"
     - git push gitlab_origin $TAG
-    
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
