@@ -44,7 +44,7 @@ RUN dnf install -y epel-release && \
       zlib \
       zlib-devel \
       git \
-      swig 
+      swig
 
 # Install python packages
 COPY ./requirements.txt /requirements.txt

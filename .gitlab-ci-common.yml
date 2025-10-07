@@ -28,7 +28,6 @@ build-image:
     - buildah build -t $FQ_IMAGE_NAME
     - buildah push $FQ_IMAGE_NAME
 
-
 .deploy_template:
   when: manual
   image: registry.cern.ch/docker.io/library/docker:20.10.16
