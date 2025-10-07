@@ -46,6 +46,8 @@ services:
     # Current path contains the Dockerfile for the Django app
     build:
       context: .
+      args:
+        TAG: local
     ports:
       - "8000:8000"
     volumes:
