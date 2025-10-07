@@ -234,7 +234,7 @@ class Archive(models.Model):
         try:
             StepType.objects.get(name=step_name)
         except StepType.DoesNotExist:
-            raise Exception("Invalid Step type")
+            raise Exception(f"Invalid Step type: {step_name}")
 
         with transaction.atomic():
 
