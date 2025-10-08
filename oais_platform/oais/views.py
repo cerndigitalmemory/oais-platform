@@ -433,7 +433,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns the Tag(s) the Archive has
         """
         archive = self.get_object()
-        collections = archive.get_collections().filter(internal=None)
+        collections = archive.get_collections().filter(internal=False)
         return self.make_paginated_response(collections, CollectionSerializer)
 
     @action(
