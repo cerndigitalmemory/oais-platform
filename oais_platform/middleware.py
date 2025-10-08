@@ -9,7 +9,7 @@ determine which version of the API they are interacting with.
 """
 
 
-class api_version_middleware:
+class ApiVersionMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
