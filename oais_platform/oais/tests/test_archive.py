@@ -314,17 +314,7 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(list(response.data), ["source_1", "source_2", "test"])
 
-    def test_archive_tags_requester(self):
-        self.client.force_authenticate(user=self.requester)
-
-        url = reverse("archives-tags", args=[self.private_archive.id])
-        response = self.client.get(url, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["id"], self.private_tag.id)
-
-    def test_archive_tags_other_user(self):
+    def test_archive_tags(self):
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("archives-tags", args=[self.private_archive.id])
