@@ -142,7 +142,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "oais_platform.middleware.APIVersionMiddleware",
+    "oais_platform.middleware.ApiVersionMiddleware",
 ]
 
 ROOT_URLCONF = "oais_platform.urls"
