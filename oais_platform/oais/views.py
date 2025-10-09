@@ -628,40 +628,34 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Get common possible actions for the archives
         """
-        archives = request.data["archives"]
+        archives_data = request.data["archives"]
         result = {}
-        if len(archives) > 0:
-            first_state = Archive.objects.get(pk=archives[0]["id"]).state
-            state_intersection = True
-            all_last_step_failed = True
-            can_continue = True
-
+        if len(archives_data) > 0:
+            archive_ids = [archive["id"] for archive in archives_data]
             with transaction.atomic():
-                for archive in archives:
-                    archive = Archive.objects.select_for_update().get(pk=archive["id"])
+                archives = Archive.objects.select_for_update().filter(
+                    pk__in=archive_ids
+                )
+                # Convert to list to avoid multiple evaluations
+                archives_list = list(archives)
 
-                    if state_intersection and archive.state != first_state:
-                        state_intersection = False
+                if not archives_list:
+                    return Response(result)
 
-                    if (
-                        not archive.last_step
-                        or archive.last_step.status != Status.FAILED
-                    ):
-                        all_last_step_failed = False
+                first_state = archives_list[0].state
 
-                    if len(archive.pipeline_steps) == 0:
-                        can_continue = False
+                state_intersection = not archives.exclude(state=first_state).exists()
 
-                    if (
-                        not state_intersection
-                        and not all_last_step_failed
-                        and not can_continue
-                    ):
-                        break
+                all_last_step_failed = all(
+                    archive.last_step and archive.last_step.status == Status.FAILED
+                    for archive in archives_list
+                )
 
-                result["state_intersection"] = state_intersection
-                result["all_last_step_failed"] = all_last_step_failed
-                result["can_continue"] = all_last_step_failed and can_continue
+                can_continue = not archives.filter(pipeline_steps=[]).exists()
+
+            result["state_intersection"] = state_intersection
+            result["all_last_step_failed"] = all_last_step_failed
+            result["can_continue"] = all_last_step_failed and can_continue
 
         return Response(result)
 
