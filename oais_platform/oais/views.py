@@ -642,10 +642,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 if not archives_list:
                     return Response(result)
 
-                first_state = archives_list[0].state
-
-                state_intersection = not archives.exclude(state=first_state).exists()
-
                 all_last_step_failed = all(
                     archive.last_step and archive.last_step.status == Status.FAILED
                     for archive in archives_list
@@ -653,7 +649,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
                 can_continue = not archives.filter(pipeline_steps=[]).exists()
 
-            result["state_intersection"] = state_intersection
             result["all_last_step_failed"] = all_last_step_failed
             result["can_continue"] = all_last_step_failed and can_continue
 

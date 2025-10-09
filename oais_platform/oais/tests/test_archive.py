@@ -570,7 +570,6 @@ class ArchiveTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["state_intersection"], True)
         self.assertEqual(response.data["all_last_step_failed"], False)
         self.assertEqual(response.data["can_continue"], False)
 
@@ -598,6 +597,5 @@ class ArchiveTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["state_intersection"], True)
         self.assertEqual(response.data["all_last_step_failed"], False)
         self.assertEqual(response.data["can_continue"], False)
