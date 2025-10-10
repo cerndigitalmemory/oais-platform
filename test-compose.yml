@@ -6,7 +6,7 @@ services:
     build:
       context: nginx/
     ports:
-      - 80:80
+      - "127.0.0.1:80:80"
     volumes:
       - ./oais-web:/oais_web
     depends_on:
@@ -38,7 +38,7 @@ services:
     volumes:
       - pgadmin:/var/lib/pgadmin
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     restart: unless-stopped
 
   # Django app
@@ -48,7 +48,7 @@ services:
     build:
       context: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - .:/oais_platform
     command:
