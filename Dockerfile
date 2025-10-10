@@ -1,12 +1,12 @@
 FROM registry.cern.ch/docker.io/cern/alma9-base
 
-ARG TAG=development
+ARG APP_VERSION=1.0.0
 
 # Ensure that the python output is sent straight to terminal
 ENV PYTHONUNBUFFERED 1
 
 # Django configuration
-ENV APP_VERSION=${TAG}
+ENV APP_VERSION=${APP_VERSION}
 ENV CELERY_BROKER_URL=
 ENV OIDC_RP_CLIENT_ID=
 ENV OIDC_RP_CLIENT_SECRET=
