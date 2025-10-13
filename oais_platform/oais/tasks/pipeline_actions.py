@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 from celery import shared_task
@@ -57,6 +58,10 @@ def run_step(step, archive_id, api_key=None, return_signature=False):
                 "errormsg": f"Step type {step.step_type.name} is disabled",
             }
         )
+        archive.set_last_step(step.id)
+        logging.warning(
+            f"Step type {step.step_type.name} is disabled: setting step {step.id} to FAILED"
+        )
         return step, None
 
     res = dispatch_task(
@@ -114,6 +119,7 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
         archive=archive,
         input_step_id=last_step.id,
         input_data=last_step.output_data,
+        harvest_batch=last_step.initiated_by_harvest_batch,  # Keep tracking the batch to update batch status
     )
 
     # get steps that are preceded by the failed step

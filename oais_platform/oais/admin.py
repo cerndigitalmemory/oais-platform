@@ -164,7 +164,8 @@ class CollectionAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
-    list_display = ["user_name"]
+    list_display = ["user_name", "department", "system"]
+    list_filter = ["department", "system"]
 
     def user_name(self, obj):
         if obj.user:
@@ -230,7 +231,6 @@ class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "id",
         "name",
         "source_name",
-        "user_name",
         "enabled",
         "pipeline",
         "condition_unmodified_for_days",
@@ -238,13 +238,6 @@ class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "batch_size",
         "batch_delay_minutes",
     )
-
-    def user_name(self, obj):
-        if obj.user:
-            return obj.user.username
-        return None
-
-    user_name.short_description = "Username"
 
     def source_name(self, obj):
         if obj.source:
@@ -259,7 +252,6 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "source_name",
-        "user_name",
         "scheduled_harvest_link",
         "collection_link",
         "pipeline",
@@ -271,13 +263,6 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "batch_size",
         "batch_delay_minutes",
     )
-
-    def user_name(self, obj):
-        if obj.user:
-            return obj.user.username
-        return None
-
-    user_name.short_description = "Username"
 
     def source_name(self, obj):
         if obj.source:
@@ -312,6 +297,9 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
 @admin.register(HarvestBatch)
 class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    ordering = ["-id"]
+    list_filter = ["status", "harvest_run"]
+
     list_display = (
         "id",
         "batch_number",
