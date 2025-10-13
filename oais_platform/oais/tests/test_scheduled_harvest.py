@@ -33,6 +33,31 @@ class ScheduledHarvestTests(APITestCase):
             pipeline=self.pipeline,
         )
 
+    def batch_setup(self):
+        self.collection = Collection.objects.create(title="Test Collection")
+        self.run = HarvestRun.objects.create(
+            scheduled_harvest=self.schedule,
+            source=self.source,
+            pipeline=self.pipeline,
+            query_start_time=None,
+            query_end_time=datetime.now(timezone.utc),
+            collection=self.collection,
+        )
+        self.batch = HarvestBatch.objects.create(
+            harvest_run=self.run,
+            status=BatchStatus.PENDING,
+            records=[
+                {
+                    "source_url": "https://example.com/record/1",
+                    "recid": "1",
+                    "title": "test",
+                    "authors": [],
+                    "source": "test",
+                }
+            ],
+            batch_number=1,
+        )
+
     def test_scheduled_harvest_not_found(self):
         with self.assertLogs(level="ERROR") as log:
             result = scheduled_harvest.apply(args=[999])
@@ -46,6 +71,17 @@ class ScheduledHarvestTests(APITestCase):
             result = scheduled_harvest.apply(args=[self.schedule.id])
             self.assertIn(
                 f"ScheduledHarvest with id {self.schedule.id} is disabled.",
+                log.output[0],
+            )
+            self.assertIsNone(result.result)
+
+    def test_scheduled_harvest_no_system_user(self):
+        self.system_user.profile.delete()
+        self.system_user.delete()
+        with self.assertLogs(level="ERROR") as log:
+            result = scheduled_harvest.apply(args=[self.schedule.id])
+            self.assertIn(
+                "System user does not exist - cannot execute scheduled harvest.",
                 log.output[0],
             )
             self.assertIsNone(result.result)
@@ -84,15 +120,13 @@ class ScheduledHarvestTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.scheduled_harvest.batch_harvest.delay")
     def test_scheduled_harvest_success(self, mock_batch):
-        end_time = datetime.now(timezone.utc)
-        HarvestRun.objects.create(
+        ApiKey.objects.create(source=self.source, user=self.system_user, key="testkey")
+        last_run = HarvestRun.objects.create(
             scheduled_harvest=self.schedule,
             source=self.source,
             pipeline=self.pipeline,
-            query_start_time=None,
-            query_end_time=end_time,
+            query_start_time=datetime.now(timezone.utc).replace(microsecond=0),
         )
-        ApiKey.objects.create(source=self.source, user=self.system_user, key="testkey")
         with self.assertLogs(level="INFO") as log:
             with patch(
                 "oais_platform.oais.tasks.scheduled_harvest.get_source"
@@ -100,7 +134,7 @@ class ScheduledHarvestTests(APITestCase):
                 mock_get_source.return_value = TestSource()
                 scheduled_harvest.apply(args=[self.schedule.id])
                 self.assertIn(
-                    "Last harvest run for source",
+                    f"Last harvest run for source {self.source.name} was until {last_run.query_end_time}.",
                     log.output[1],
                 )
                 run_obj = (
@@ -111,7 +145,6 @@ class ScheduledHarvestTests(APITestCase):
                 self.assertIsNotNone(run_obj)
                 self.assertEqual(run_obj.source.id, self.source.id)
                 self.assertEqual(run_obj.pipeline, self.pipeline)
-                self.assertEqual(run_obj.query_start_time, end_time)
                 self.assertIn(
                     f"Number of IDs to harvest for source {self.source.name}: 1",
                     log.output[2],
@@ -122,21 +155,40 @@ class ScheduledHarvestTests(APITestCase):
 
     def test_batch_harvest_not_existing(self):
         with self.assertLogs(level="ERROR") as log:
-            batch_harvest.apply(args=[999])
+            result = batch_harvest.apply(args=[999])
             self.assertIn("HarvestBatch with id 999 does not exist.", log.output[0])
+            self.assertIsNone(result.result)
 
-    def test_batch_harvest_success(self):
-        collection = Collection.objects.create(title="Test Collection")
-        run = HarvestRun.objects.create(
-            scheduled_harvest=self.schedule,
-            source=self.source,
-            pipeline=self.pipeline,
-            query_start_time=None,
-            query_end_time=datetime.now(timezone.utc),
-            collection=collection,
-        )
-        batch = HarvestBatch.objects.create(
-            harvest_run=run,
+    def test_batch_harvest_no_system_user(self):
+        self.batch_setup()
+        self.system_user.profile.delete()
+        self.system_user.delete()
+        with self.assertLogs(level="ERROR") as log:
+            result = batch_harvest.apply(args=[self.batch.id])
+            self.assertIn(
+                "System user does not exist - cannot execute batch harvest.",
+                log.output[0],
+            )
+            self.assertIsNone(result.result)
+
+    def test_batch_harvest_blocked(self):
+        self.batch_setup()
+        self.batch.status = BatchStatus.BLOCKED
+        self.batch.save()
+        with self.assertLogs(level="ERROR") as log:
+            result = batch_harvest.apply(args=[self.batch.id])
+            self.assertIn(
+                "has a blocked/failed batch, further batches will not be processed.",
+                log.output[0],
+            )
+            self.assertIsNone(result.result)
+
+    def test_batch_harvest_previous_failed(self):
+        self.batch_setup()
+        self.batch.status = BatchStatus.FAILED
+        self.batch.save()
+        new_batch = HarvestBatch.objects.create(
+            harvest_run=self.run,
             status=BatchStatus.PENDING,
             records=[
                 {
@@ -147,8 +199,18 @@ class ScheduledHarvestTests(APITestCase):
                     "source": "test",
                 }
             ],
-            batch_number=1,
+            batch_number=2,
         )
+        with self.assertLogs(level="ERROR") as log:
+            result = batch_harvest.apply(args=[new_batch.id])
+            self.assertIn(
+                "has a blocked/failed batch, further batches will not be processed.",
+                log.output[0],
+            )
+            self.assertIsNone(result.result)
+
+    def test_batch_harvest_success(self):
+        self.batch_setup()
         with patch(
             "oais_platform.oais.tasks.scheduled_harvest.chord"
         ) as mock_chord, patch(
@@ -160,18 +222,18 @@ class ScheduledHarvestTests(APITestCase):
                 fake_sig = MagicMock(name="sig")
                 mock_execute_pipeline.return_value = (fake_step, fake_sig)
 
-                batch_harvest.apply(args=[batch.id])
+                batch_harvest.apply(args=[self.batch.id])
                 self.assertIn(
                     "does not have API key set for the given source",
                     log.output[0],
                 )
-                batch.refresh_from_db()
-                self.assertEqual(batch.status, BatchStatus.IN_PROGRESS)
-                archives = batch.archives
+                self.batch.refresh_from_db()
+                self.assertEqual(self.batch.status, BatchStatus.IN_PROGRESS)
+                archives = self.batch.archives
                 self.assertEqual(archives.count(), 1)
                 archive = archives.first()
                 self.assertIn(
-                    archive.id, collection.archives.values_list("id", flat=True)
+                    archive.id, self.collection.archives.values_list("id", flat=True)
                 )
                 self.assertEqual(archive.source, self.source.name)
                 step_names = [

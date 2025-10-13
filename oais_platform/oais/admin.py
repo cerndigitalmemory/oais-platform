@@ -337,7 +337,10 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     archive_count.short_description = "Archives Count"
 
     def continue_batch(modeladmin, request, queryset):
-        """Continue from single pending batch only"""
+        """
+        In case the batch processing stopped (blocked or failed)
+        this action should be triggered for the first PENDING batch
+        """
         if queryset.count() != 1:
             modeladmin.message_user(
                 request,
