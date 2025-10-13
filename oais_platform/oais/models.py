@@ -738,8 +738,8 @@ class HarvestBatch(models.Model):
         return len(self.records or [])
 
     @property
-    def archives_with_batch_status(self):
-        last_batch_step = (
+    def failed(self):
+        last_non_waiting_step = (
             Step.objects.filter(
                 archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
@@ -747,19 +747,28 @@ class HarvestBatch(models.Model):
             .order_by("-create_date")
             .values("status")[:1]
         )
-        return self.archives.annotate(batch_status=models.Subquery(last_batch_step))
 
-    @property
-    def failed(self):
-        return self.archives_with_batch_status.filter(
-            batch_status=Status.FAILED
-        ).count()
+        archives_with_status = self.archives.annotate(
+            batch_status=models.Subquery(last_non_waiting_step)
+        )
+
+        return archives_with_status.filter(batch_status=Status.FAILED).count()
 
     @property
     def completed(self):
-        return self.archives_with_batch_status.filter(
-            batch_status=Status.COMPLETED
-        ).count()
+        last_step = (
+            Step.objects.filter(
+                archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
+            )
+            .order_by("-create_date")
+            .values("status")[:1]
+        )
+
+        archives_with_status = self.archives.annotate(
+            batch_status=models.Subquery(last_step)
+        )
+
+        return archives_with_status.filter(batch_status=Status.COMPLETED).count()
 
     @property
     def archives(self):
