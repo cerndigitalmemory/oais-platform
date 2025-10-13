@@ -157,13 +157,16 @@ def batch_harvest(self, batch_id):
             f"System user({user.username}) does not have API key set for the given source."
         )
 
-    if (
-        batch.status == BatchStatus.BLOCKED
-    ):  # Mechanism to stop batches from being processed
-        logger.warning(f"Batch {batch_id} is blocked - not processing.")
+    if batch.harvest_run.batches.filter(
+        status__in=[
+            BatchStatus.FAILED,
+            BatchStatus.BLOCKED,
+        ]  # Failed in case all last steps failed, blocked by manual intervention
+    ).exists():
+        logger.error(
+            f"Harvest run {batch.harvest_run.id} has a blocked/failed batch, further batches will not be processed."
+        )
         return
-    elif batch.status != BatchStatus.PENDING:
-        logger.info(f"Batch {batch_id} has already been processed - re-run triggered.")
 
     sigs = []
     batch.set_status(BatchStatus.IN_PROGRESS)
@@ -203,7 +206,7 @@ def finalize_batch(self, results, batch_id):
         logger.error(f"HarvestBatch with id {batch_id} does not exist.")
         return
 
-    if batch.status == BatchStatus.BLOCKED:
+    if batch.status in [BatchStatus.BLOCKED, BatchStatus.FAILED]:
         logger.error(
             f"Batch {batch_id} had a blocking error, further batches will not be processed."
         )
@@ -216,7 +219,7 @@ def finalize_batch(self, results, batch_id):
             logger.error(
                 f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches."
             )
-            batch.set_status(BatchStatus.BLOCKED)
+            batch.set_status(BatchStatus.FAILED)
             return
         if none_state_archive.count() > 0:
             logger.warning(

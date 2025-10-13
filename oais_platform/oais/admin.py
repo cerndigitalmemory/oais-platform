@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
@@ -6,6 +6,7 @@ from django.utils.html import format_html
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    BatchStatus,
     Collection,
     HarvestBatch,
     HarvestRun,
@@ -17,6 +18,7 @@ from oais_platform.oais.models import (
     StepType,
     UploadJob,
 )
+from oais_platform.oais.tasks.scheduled_harvest import batch_harvest
 
 
 class NullToNotRequiredMixin:
@@ -255,6 +257,7 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "scheduled_harvest_link",
         "collection_link",
         "pipeline",
+        "size",
         "archive_count",
         "query_start_time",
         "query_end_time",
@@ -289,8 +292,13 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
     scheduled_harvest_link.short_description = "Scheduled Harvest"
 
-    def archive_count(self, obj):
+    def size(self, obj):
         return obj.size
+
+    size.short_description = "Size"
+
+    def archive_count(self, obj):
+        return obj.archive_count
 
     archive_count.short_description = "Archives Count"
 
@@ -299,6 +307,7 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
     ordering = ["-id"]
     list_filter = ["status", "harvest_run"]
+    actions = ["continue_batch"]
 
     list_display = (
         "id",
@@ -326,3 +335,38 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return 0
 
     archive_count.short_description = "Archives Count"
+
+    def continue_batch(modeladmin, request, queryset):
+        """Continue from single pending batch only"""
+        if queryset.count() != 1:
+            modeladmin.message_user(
+                request,
+                "Please select exactly one PENDING item for this action.",
+                level=messages.ERROR,
+            )
+            return
+
+        item = queryset.first()
+        if item.status != BatchStatus.PENDING:
+            modeladmin.message_user(
+                request,
+                f"Selected item has status '{item.status}'. Continue action is limited to PENDING batches.",
+                level=messages.ERROR,
+            )
+            return
+
+        try:
+            batch_harvest.delay(item.id)
+            modeladmin.message_user(
+                request,
+                f"Successfully sent Batch Harvest task to Celery: batch {item.id}",
+                level=messages.SUCCESS,
+            )
+        except Exception as e:
+            modeladmin.message_user(
+                request,
+                f"Failed to trigger batch harvest task for batch {item.id}: {str(e)}",
+                level=messages.ERROR,
+            )
+
+    continue_batch.short_description = "Continue Batch Harvest"
