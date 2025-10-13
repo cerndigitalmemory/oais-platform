@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.db import migrations, models
+from django.contrib.auth.hashers import make_password
 
 
 def add_system_user(apps, schema_editor):
@@ -22,9 +23,8 @@ def add_system_user(apps, schema_editor):
         system_user = User.objects.create_user(
             username='system_user',
             email='system@example.com',
+            password=make_password(None),  # password is set unusable
         )
-        system_user.set_unusable_password()  # cannot login
-        system_user.save()
 
     # Get or create the profile
     try:
@@ -60,9 +60,9 @@ class Migration(migrations.Migration):
             name='system',
             field=models.BooleanField(default=False),
         ),
-        migrations.RunPython(add_system_user, backwards),
         migrations.AddConstraint(
             model_name='profile',
             constraint=models.UniqueConstraint(condition=models.Q(('system', True)), fields=('system',), name='unique_system_user'),
         ),
+        migrations.RunPython(add_system_user, backwards),
     ]
