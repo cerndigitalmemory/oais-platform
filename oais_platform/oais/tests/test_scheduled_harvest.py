@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import (
@@ -10,6 +9,7 @@ from oais_platform.oais.models import (
     Collection,
     HarvestBatch,
     HarvestRun,
+    Profile,
     ScheduledHarvest,
     Source,
     Step,
@@ -21,7 +21,7 @@ from oais_platform.oais.tests.utils import TestSource
 
 class ScheduledHarvestTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="testuser", password="testpass")
+        self.system_user = Profile.objects.get(system=True).user
         self.source = Source.objects.create(
             name="Test Source", enabled=True, classname="TestSource"
         )
@@ -29,7 +29,6 @@ class ScheduledHarvestTests(APITestCase):
         self.schedule = ScheduledHarvest.objects.create(
             name="Test Schedule",
             source=self.source,
-            user=self.user,
             enabled=True,
             pipeline=self.pipeline,
         )
@@ -62,7 +61,7 @@ class ScheduledHarvestTests(APITestCase):
                 mock_get_source.return_value = mock_instance
                 scheduled_harvest.apply(args=[self.schedule.id])
                 self.assertIn(
-                    f"User with name {self.user.username} does not have API key set for the given source, only public records will be available.",
+                    "does not have API key set for the given source, only public records will be available.",
                     log.output[1],
                 )
                 self.assertIn(
@@ -74,7 +73,6 @@ class ScheduledHarvestTests(APITestCase):
                 ).first()
                 self.assertIsNotNone(run_obj)
                 self.assertEqual(run_obj.source.id, self.source.id)
-                self.assertEqual(run_obj.user.id, self.user.id)
                 self.assertEqual(run_obj.pipeline, self.pipeline)
                 self.assertIsNone(run_obj.query_start_time)
                 self.assertIn(
@@ -90,12 +88,11 @@ class ScheduledHarvestTests(APITestCase):
         HarvestRun.objects.create(
             scheduled_harvest=self.schedule,
             source=self.source,
-            user=self.user,
             pipeline=self.pipeline,
             query_start_time=None,
             query_end_time=end_time,
         )
-        ApiKey.objects.create(source=self.source, user=self.user, key="testkey")
+        ApiKey.objects.create(source=self.source, user=self.system_user, key="testkey")
         with self.assertLogs(level="INFO") as log:
             with patch(
                 "oais_platform.oais.tasks.scheduled_harvest.get_source"
@@ -113,7 +110,6 @@ class ScheduledHarvestTests(APITestCase):
                 )
                 self.assertIsNotNone(run_obj)
                 self.assertEqual(run_obj.source.id, self.source.id)
-                self.assertEqual(run_obj.user.id, self.user.id)
                 self.assertEqual(run_obj.pipeline, self.pipeline)
                 self.assertEqual(run_obj.query_start_time, end_time)
                 self.assertIn(
@@ -134,7 +130,6 @@ class ScheduledHarvestTests(APITestCase):
         run = HarvestRun.objects.create(
             scheduled_harvest=self.schedule,
             source=self.source,
-            user=self.user,
             pipeline=self.pipeline,
             query_start_time=None,
             query_end_time=datetime.now(timezone.utc),
