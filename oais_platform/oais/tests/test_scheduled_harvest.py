@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import (
     ApiKey,
+    Archive,
     BatchStatus,
     Collection,
     HarvestBatch,
@@ -12,8 +13,10 @@ from oais_platform.oais.models import (
     Profile,
     ScheduledHarvest,
     Source,
+    Status,
     Step,
     StepName,
+    StepType,
 )
 from oais_platform.oais.tasks.scheduled_harvest import batch_harvest, scheduled_harvest
 from oais_platform.oais.tests.utils import TestSource
@@ -245,3 +248,47 @@ class ScheduledHarvestTests(APITestCase):
                     archive.id, None, return_signature=True
                 )
                 mock_chord.assert_called_once_with([fake_sig])
+
+    def test_batch_archive_counts(self):
+        self.batch_setup()
+        archive = self.create_batch_archive()
+        self.create_batch_step(archive, StepName.HARVEST, Status.COMPLETED)
+        self.create_batch_step(archive, StepName.VALIDATION, Status.COMPLETED)
+        self.create_batch_step(archive, StepName.CHECKSUM, Status.COMPLETED)
+        archive2 = self.create_batch_archive()
+        self.create_batch_step(archive2, StepName.HARVEST, Status.COMPLETED)
+        self.create_batch_step(archive2, StepName.VALIDATION, Status.FAILED)
+        self.create_batch_step(archive2, StepName.CHECKSUM, Status.WAITING)
+        archive3 = self.create_batch_archive()
+        self.create_batch_step(archive3, StepName.HARVEST, Status.COMPLETED)
+        self.create_batch_step(archive3, StepName.VALIDATION, Status.COMPLETED)
+        self.create_batch_step(archive3, StepName.CHECKSUM, Status.IN_PROGRESS)
+        archive4 = self.create_batch_archive()
+        self.create_batch_step(archive4, StepName.HARVEST, Status.COMPLETED)
+        self.create_batch_step(archive4, StepName.VALIDATION, Status.COMPLETED)
+        self.create_batch_step(archive4, StepName.CHECKSUM, Status.COMPLETED)
+        self.create_batch_step(archive4, StepName.ARCHIVE, Status.WAITING)
+
+        self.assertEqual(self.batch.completed, 1)
+        self.assertEqual(self.batch.failed, 1)
+        self.assertEqual(self.batch.archives.count(), 4)
+
+    def create_batch_archive(self):
+        archive = Archive.objects.create(
+            recid="1",
+            title="test",
+            source="test",
+            source_url="https://example.com/record/1",
+            requester=self.system_user,
+            approver=self.system_user,
+        )
+        self.collection.add_archive(archive)
+        return archive
+
+    def create_batch_step(self, archive, name, status):
+        Step.objects.create(
+            archive=archive,
+            step_name=name,
+            initiated_by_harvest_batch=self.batch,
+            status=status,
+        )
