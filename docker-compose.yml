@@ -8,7 +8,7 @@ services:
     ports:
       - 80:80
     volumes:
-      - ./oais-web:/oais_web
+      - ../oais-web:/oais_web
     depends_on:
       - django
   db:
@@ -70,6 +70,8 @@ services:
       - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
       - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
       - ALLOW_LOCAL_LOGIN=True
+      - OIDC_RP_CLIENT_ID=<YOUR_OIDC_CLIENT>
+      - OIDC_RP_CLIENT_SECRET=<YOUR_OIDC_SECRET>
     env_file:
       - ./.env.dev
     depends_on:
@@ -117,6 +119,21 @@ services:
     restart: unless-stopped
     tty: true
     stdin_open: true
+
+  web:
+    container_name: oais_web
+    build:
+      context: ../oais-web/
+      dockerfile: ../oais-web/Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    command: npm run serve
+    volumes:
+      - ../oais-web:/oais-web
+    environment:
+      # Needed to let npm detect if there are changes in the src directory
+      - CHOKIDAR_USEPOLLING=true
 
 volumes:
   postgres:

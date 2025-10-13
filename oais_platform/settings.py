@@ -96,7 +96,7 @@ OIDC_OP_JWKS_ENDPOINT = (
 OIDC_RP_SIGN_ALGO = "RS256"
 # Path to redirect to on successful login.
 # This is used to fetch the user information from the SPA.
-LOGIN_REDIRECT_URL = "/index.html#/login/callback"
+LOGIN_REDIRECT_URL = "/login/callback"
 
 # Authorization service endpoint to query API token
 AUTH_SERVICE_TOKEN_ENDPOINT = "https://auth.cern.ch/auth/realms/cern/api-access/token"

@@ -42,33 +42,28 @@ Here's how you can run a local instance of the platform.
 
 A docker-compose setup is provided in this repository, bringing up the following services:
 
-| Container name | Software   | Role                            | Exposed endpoint               |
-| :------------- | :--------- | ------------------------------- | ------------------------------ |
-| oais_django    | Django     | Backend API                     | [:8000](http://localhost:8000) |
-| oais_celery    | Celery     | Task queue and scheduler (Beat) |                                |
-| oais_redis     | Redis      | Broker                          |                                |
-| oais_psql      | Postgresql | Database                        |                                |
-| oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050) |
-| oais_nginx     | Nginx      | Reverse Proxy                   | [:80](http://localhost:80)     |
+| Container name | Software   | Role                            | Exposed endpoint                |
+|:---------------|:-----------|---------------------------------|---------------------------------|
+| oais_django    | Django     | Backend API                     | [:8000](http://localhost:8000)  |
+| oais_celery    | Celery     | Task queue and scheduler (Beat) |                                 |
+| oais_redis     | Redis      | Broker                          |                                 |
+| oais_psql      | Postgresql | Database                        |                                 |
+| oais_pgadmin   | PGAdmin    | Database Browser                | [:5050](http://localhost:5050)  |
+| oais_nginx     | Nginx      | Reverse Proxy                   | [:80](http://localhost:80)      |
+| oais_web       | React      | Frontend API                    | [:3000](http://localhost:3000)  |
+
 
 To quickly setup a development instance, featuring hot-reloading on the backend and the frontend:
 
 ```bash
 # Start by cloning oais-platform
 git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-platform.git
-# cd into the cloned folder
+# Clone also the web ui at the same level
+git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git
+# cd into the platform folder
 cd oais-platform
 # Bring up the backend and the services:
 docker compose up
-# From another shell in the same folder and clone there the frontend:
-git clone ssh://git@gitlab.cern.ch:7999/digitalmemory/oais-web.git
-# cd into the cloned folder
-cd oais-web
-# Install npm dependencies
-npm install --force
-# Start an hot-reloading webpack build:
-npm run serve
-# This will spawn a tab on `localhost:3000`, but we actually want the React app served through nginx, so ignore that
 ```
 
 The following endpoints are then available, on `localhost`:
@@ -84,6 +79,7 @@ Some remarks:
 - `npm install --force` is required
 - Any changes to the nginx configuration (in nginx/docker.conf) require you to rebuild the image (or shell into the nginx container, edit the file and then `nginx -s reload`)
 - Environment variables need to be set in the docker compose or in a `.env.dev` file. **Environment variables from the host environment will be ignored when using compose.**
+- Login will fail. Go to the section CERN SSO section to check how to fix it.
 
 ### Helper commands
 
@@ -174,6 +170,7 @@ When adding a new "CERN SSO Registration" select OIDC. The redirect URI should b
 export OIDC_RP_CLIENT_ID="Put here the Client ID"
 export OIDC_RP_CLIENT_SECRET="Put here the Client Secret"
 ```
+These variables have to be added to the django container. Check the docker-compose.yml file to find the placeholder.
 
 ### Sentry
 
