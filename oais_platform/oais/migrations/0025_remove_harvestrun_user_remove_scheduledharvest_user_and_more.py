@@ -65,4 +65,9 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(condition=models.Q(('system', True)), fields=('system',), name='unique_system_user'),
         ),
         migrations.RunPython(add_system_user, backwards),
+        migrations.AlterField(
+            model_name='harvestbatch',
+            name='status',
+            field=models.CharField(choices=[('PENDING', 'Pending'), ('IN_PROGRESS', 'In Progress'), ('COMPLETED', 'Completed'), ('BLOCKED', 'Blocked'), ('PARTIALLY_FAILED', 'Partially Failed'), ('FAILED', 'Failed')], default='PENDING'),
+        ),
     ]
