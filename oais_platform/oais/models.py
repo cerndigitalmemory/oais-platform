@@ -19,14 +19,21 @@ from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
 class Profile(models.Model):
     # Each profile is linked to a user and identified by the same PK
     #  and it's used to save additional per-user values
-    #  (e.g. configuration, preferences, department)
-    #  accessible as user.profile.VALUE
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
     department = models.CharField(max_length=10, default=None, null=True)
+    system = models.BooleanField(default=False)
 
     class Meta:
         permissions = [
             ("can_execute_step", "Can execute steps"),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["system"],
+                condition=models.Q(system=True),
+                name="unique_system_user",
+            )  # One system user
         ]
 
 
@@ -625,7 +632,6 @@ class ScheduledHarvest(models.Model):
         PeriodicTask, on_delete=models.SET_NULL, null=True
     )
     enabled = models.BooleanField(default=False)
-    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
@@ -667,7 +673,6 @@ class HarvestRun(models.Model):
         null=True,
         related_name="harvest_runs",
     )
-    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
