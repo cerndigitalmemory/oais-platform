@@ -47,7 +47,7 @@ class FTS:
         logging.debug(f"The certificate is valid for {ttl_days} days")
         if ttl_days < self.cert_ttl_days_error:
             logging.error(
-                f"The certificate {self.cert_path} is going to expire in {ttl_days} (which is smaller than {self.cert_ttl_days_error} days"
+                f"The certificate {self.cert_path} is going to expire in {ttl_days} (which is smaller than {self.cert_ttl_days_error} days)"
             )
 
     def push_to_cta(self, source, dest):

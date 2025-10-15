@@ -187,9 +187,10 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
 def fts_delegate(self):
     try:
         fts = apps.get_app_config("oais").fts
+        fts.check_ttl()
         fts.delegate()
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
 
 
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
