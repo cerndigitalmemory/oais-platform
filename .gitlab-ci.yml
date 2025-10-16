@@ -1,6 +1,7 @@
 stages:
   - format
   - test
+  - tag
   - build
   - deploy-dev
   - trigger-dev
@@ -95,6 +96,36 @@ build-scripts-image:
     - buildah build -t $FQ_IMAGE_NAME --file "$CI_PROJECT_DIR/scripts/Dockerfile" "$CI_PROJECT_DIR"
     - buildah push $FQ_IMAGE_NAME
 
+create-release:
+  stage: tag
+  only:
+    - main
+  script: 
+    - VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
+    - "echo 'Version: $VERSION'"
+    - |
+      if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Invalid VERSION '$VERSION' (expected X.Y.Z)"
+        exit 1
+      fi
+      TAG="v$VERSION"
+
+      if git ls-remote --tags origin | grep -qE "refs/tags/${TAG}(\^\{\})?$"; then
+        echo "Tag v$VERSION already exists, skipping release creation"
+        exit 0
+      fi
+    - |
+      # Make sure we have tags and a clean repo view
+      git fetch --tags --quiet
+    - echo "Tag $TAG does not exist, creating tag"
+    - |
+      # Setup git config
+      git config --global user.email "oais@cern.ch"
+      git config --global user.name "CI/CD"
+    - git remote add gitlab_origin https://oauth2:$CREATE_NEW_TAG_TOKEN@gitlab.cern.ch/digitalmemory/oais-platform.git
+    - git tag -a $TAG -m "Release $TAG"
+    - git push gitlab_origin $TAG
+    
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
