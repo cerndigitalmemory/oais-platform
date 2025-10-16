@@ -101,8 +101,9 @@ create-release:
   only:
     - main
   script: 
-    - VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
-    - "echo 'Version: $VERSION'"
+    - |
+      VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
+      echo Version: $VERSION
     - |
       if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Invalid VERSION '$VERSION' (expected X.Y.Z)"
