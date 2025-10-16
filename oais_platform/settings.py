@@ -314,6 +314,8 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 BIC_UPLOAD_PATH = "oais-data"
 # Path where the bags are processed, but not stored
 BIC_WORKDIR = "/tmp"
+# Path where uploaded files are temporarily stored to be picked up by bagit-create
+LOCAL_UPLOAD_PATH = "uploaded-files"
 
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
