@@ -31,6 +31,8 @@ import sentry_sdk
 from celery.schedules import crontab
 from sentry_sdk.integrations.django import DjangoIntegration
 
+from oais_platform import __version__
+
 ## General Django settings
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -56,7 +58,7 @@ BASE_URL = "http://localhost"
 ALLOW_LOCAL_LOGIN = environ.get("ALLOW_LOCAL_LOGIN", False)
 
 # App versioning
-APP_VERSION = environ.get("APP_VERSION", "development")
+APP_VERSION = __version__
 
 ## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
