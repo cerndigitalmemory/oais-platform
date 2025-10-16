@@ -116,7 +116,14 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
             current_step, f"Error while archiving {current_step.id}: {str(e)}"
         )
 
-    return {"status": 0, "errormsg": "Uploaded to Archivematica"}
+    current_step.set_output_data(
+        {
+            "status": 0,
+            "details": "Uploaded to Archivematica - waiting for processing",
+            "errormsg": None,
+        }
+    )
+    return current_step.output_data
 
 
 @shared_task(

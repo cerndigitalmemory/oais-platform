@@ -12,8 +12,8 @@ from oais_platform.oais.models import (
     Collection,
     HarvestBatch,
     HarvestRun,
+    Profile,
     ScheduledHarvest,
-    Status,
 )
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import execute_pipeline
@@ -43,13 +43,18 @@ def scheduled_harvest(self, scheduled_harvest_id):
         f"Starting the periodic harvest(id: {scheduled_harvest.id}) for {source.name}."
     )
 
-    user = scheduled_harvest.user
+    try:
+        user = Profile.objects.get(system=True).user
+    except Profile.DoesNotExist:
+        logger.error("System user does not exist - cannot execute scheduled harvest.")
+        return
+
     api_key = None
     try:
         api_key = ApiKey.objects.get(source=source, user=user).key
     except ApiKey.DoesNotExist:
         logger.warning(
-            f"User with name {user.username} does not have API key set for the given source, only public records will be available."
+            f"System user({user.username}) does not have API key set for the given source, only public records will be available."
         )
 
     last_run = scheduled_harvest.harvest_runs.all().order_by("-created_at").first()
@@ -68,7 +73,6 @@ def scheduled_harvest(self, scheduled_harvest_id):
 
     harvest_run = HarvestRun.objects.create(
         source=source,
-        user=user,
         scheduled_harvest=scheduled_harvest,
         pipeline=scheduled_harvest.pipeline,
         query_start_time=last_harvest_time,
@@ -135,19 +139,35 @@ def batch_harvest(self, batch_id):
     The ScheduledHarvest task creates a HarvestRun object and splits the records to be harvested into batches.
     This function processes one batch at a time, creating Archive objects and triggering the pipeline for each.
     """
+    try:
+        user = Profile.objects.get(system=True).user
+    except Profile.DoesNotExist:
+        logger.error("System user does not exist - cannot execute batch harvest.")
+        return
+
     api_key = None
     try:
         batch = HarvestBatch.objects.get(id=batch_id)
-        api_key = ApiKey.objects.get(
-            source=batch.harvest_run.source, user=batch.harvest_run.user
-        ).key
+        api_key = ApiKey.objects.get(source=batch.harvest_run.source, user=user).key
     except HarvestBatch.DoesNotExist:
         logger.error(f"HarvestBatch with id {batch_id} does not exist.")
         return
     except ApiKey.DoesNotExist:
         logger.warning(
-            f"User with name {batch.harvest_run.user.username} does not have API key set for the given source."
+            f"System user({user.username}) does not have API key set for the given source."
         )
+
+    if batch.harvest_run.batches.filter(
+        status__in=[
+            BatchStatus.FAILED,
+            BatchStatus.BLOCKED,
+        ]  # Failed in case all last steps failed, blocked by manual intervention
+    ).exists():
+        logger.error(
+            f"Harvest run {batch.harvest_run.id} has a blocked/failed batch, further batches will not be processed."
+        )
+        return
+
     sigs = []
     batch.set_status(BatchStatus.IN_PROGRESS)
     for record in batch.records:
@@ -157,8 +177,8 @@ def batch_harvest(self, batch_id):
                 title=record["title"],
                 source=batch.harvest_run.source.name,
                 source_url=record["source_url"],
-                requester=batch.harvest_run.user,
-                approver=batch.harvest_run.user,
+                requester=user,
+                approver=user,
                 original_file_size=record.get("file_size") or 0,
             )
             batch.harvest_run.collection.add_archive(archive.id)
@@ -186,24 +206,36 @@ def finalize_batch(self, results, batch_id):
         logger.error(f"HarvestBatch with id {batch_id} does not exist.")
         return
 
-    if batch.status == BatchStatus.BLOCKED:
+    if batch.status in [BatchStatus.BLOCKED, BatchStatus.FAILED]:
         logger.error(
             f"Batch {batch_id} had a blocking error, further batches will not be processed."
         )
         return
     else:
-        failed_archives = batch.harvest_run.collection.archives.filter(
-            Q(last_step__status=Status.FAILED) | Q(state=ArchiveState.NONE)
-        ).count()
-        if failed_archives == batch.size:
+        none_state_archive = batch.archives.filter(
+            Q(state=ArchiveState.NONE)
+        )  # Count archives that did not progress, first step should always create an SIP
+        if none_state_archive.count() == batch.size:
             logger.error(
-                f"Batch {batch_id} had all archives failed. Halting further batches."
+                f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches."
             )
-            batch.set_status(BatchStatus.BLOCKED)
+            batch.set_status(BatchStatus.FAILED)
             return
-        elif failed_archives > 0 or batch.size != batch.archives.count():
-            logger.warning(f"Batch {batch_id} had failed archives.")
-            batch.set_status(BatchStatus.PARTIALLY_FAILED)
+        if none_state_archive.count() > 0:
+            logger.warning(
+                f"Batch {batch_id}: {none_state_archive.count()} archives had no SIP: {list(none_state_archive.values_list('recid', flat=True))}."
+            )
+        if batch.size != batch.archives.count():
+            recid_list = [
+                record["recid"]
+                for record in batch.records
+                if record.get("recid") is not None
+            ]
+            archived_recid_list = batch.archives.all().values_list("recid", flat=True)
+            missing_recid_list = set(recid_list) - set(archived_recid_list)
+            logger.warning(
+                f"Batch {batch_id} has {len(missing_recid_list)} missing archives: {missing_recid_list}"
+            )
 
         next_batch = batch.harvest_run.get_next_pending_batch()
         if next_batch:
