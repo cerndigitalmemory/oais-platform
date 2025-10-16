@@ -25,7 +25,6 @@ router.register(r"users", views.UserViewSet, basename="users")
 router.register(r"archives", views.ArchiveViewSet, basename="archives")
 router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
-router.register(r"upload/jobs", views.UploadJobViewSet, basename="upload")
 router.register(r"step-type", views.StepTypeViewSet, basename="step-type")
 
 
@@ -66,6 +65,8 @@ urlpatterns = [
                 path("logout/", views.logout, name="logout"),
                 ## Main API surface
                 path("", include(router.urls)),
+                # Upload a file
+                path("upload/file", views.upload_file, name="upload-file"),
                 # Upload a SIP
                 path("upload/sip", views.upload_sip, name="upload-sip"),
                 # Parse full URL of a supported source to find the record ID
