@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 from celery import current_app
@@ -19,14 +20,21 @@ from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
 class Profile(models.Model):
     # Each profile is linked to a user and identified by the same PK
     #  and it's used to save additional per-user values
-    #  (e.g. configuration, preferences, department)
-    #  accessible as user.profile.VALUE
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)
     department = models.CharField(max_length=10, default=None, null=True)
+    system = models.BooleanField(default=False)
 
     class Meta:
         permissions = [
             ("can_execute_step", "Can execute steps"),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["system"],
+                condition=models.Q(system=True),
+                name="unique_system_user",
+            )  # One system user
         ]
 
 
@@ -234,7 +242,7 @@ class Archive(models.Model):
         try:
             StepType.objects.get(name=step_name)
         except StepType.DoesNotExist:
-            raise Exception("Invalid Step type")
+            raise Exception(f"Invalid Step type: {step_name}")
 
         with transaction.atomic():
 
@@ -409,10 +417,13 @@ class Step(models.Model):
             batch = self.initiated_by_harvest_batch
             if batch.size == batch.completed:
                 batch.set_status(BatchStatus.COMPLETED)
+                logging.info(f"Batch {batch.id} completed")
             elif batch.size == batch.failed:
-                batch.set_status(BatchStatus.BLOCKED)
+                batch.set_status(BatchStatus.FAILED)
+                logging.error(f"Batch {batch.id} failed")
             elif batch.size == batch.completed + batch.failed:
                 batch.set_status(BatchStatus.PARTIALLY_FAILED)
+                logging.warning(f"Batch {batch.id} partially failed")
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -625,7 +636,6 @@ class ScheduledHarvest(models.Model):
         PeriodicTask, on_delete=models.SET_NULL, null=True
     )
     enabled = models.BooleanField(default=False)
-    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
@@ -667,7 +677,6 @@ class HarvestRun(models.Model):
         null=True,
         related_name="harvest_runs",
     )
-    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False)
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
@@ -689,10 +698,14 @@ class HarvestRun(models.Model):
         self.save()
 
     @property
-    def size(self):
+    def archive_count(self):
         if self.collection is None or self.collection.archives is None:
             return 0
         return self.collection.archives.count()
+
+    @property
+    def size(self):
+        return sum(batch.size for batch in self.batches.all())
 
 
 class BatchStatus(models.TextChoices):
@@ -701,13 +714,14 @@ class BatchStatus(models.TextChoices):
     COMPLETED = "COMPLETED"
     BLOCKED = "BLOCKED"
     PARTIALLY_FAILED = "PARTIALLY_FAILED"
+    FAILED = "FAILED"
 
 
 class HarvestBatch(models.Model):
     """
     This model represents a single batch of records to be harvested in a HarvestRun.
     batch_number is unique per HarvestRun and represents the order of execution.
-    If a batch is blocked further batches will not be executed.
+    If a batch is failed or blocked manually further batches will not be executed.
     """
 
     id = models.AutoField(primary_key=True)
@@ -724,27 +738,37 @@ class HarvestBatch(models.Model):
         return len(self.records or [])
 
     @property
-    def archives_with_batch_status(self):
-        last_batch_step = (
+    def failed(self):
+        last_non_waiting_step = (
+            Step.objects.filter(
+                archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
+            )
+            .exclude(status=Status.WAITING)
+            .order_by("-create_date")
+            .values("status")[:1]
+        )
+
+        archives_with_status = self.archives.annotate(
+            batch_status=models.Subquery(last_non_waiting_step)
+        )
+
+        return archives_with_status.filter(batch_status=Status.FAILED).count()
+
+    @property
+    def completed(self):
+        last_step = (
             Step.objects.filter(
                 archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
             .order_by("-create_date")
             .values("status")[:1]
         )
-        return self.archives.annotate(batch_status=models.Subquery(last_batch_step))
 
-    @property
-    def failed(self):
-        return self.archives_with_batch_status.filter(
-            batch_status=Status.FAILED
-        ).count()
+        archives_with_status = self.archives.annotate(
+            batch_status=models.Subquery(last_step)
+        )
 
-    @property
-    def completed(self):
-        return self.archives_with_batch_status.filter(
-            batch_status=Status.COMPLETED
-        ).count()
+        return archives_with_status.filter(batch_status=Status.COMPLETED).count()
 
     @property
     def archives(self):

@@ -9,7 +9,9 @@ from oais_platform.settings import FILES_URL
 logger = get_task_logger(__name__)
 
 
-def create_step(step_name, archive, input_step_id=None, input_data=None):
+def create_step(
+    step_name, archive, input_step_id=None, input_data=None, harvest_batch=None
+):
     """
     Create a new Step of the desired type
     for the given Archive and spawn Celery tasks for it
@@ -24,6 +26,7 @@ def create_step(step_name, archive, input_step_id=None, input_data=None):
         input_step_id=input_step_id,
         input_data=input_data,
         status=Status.WAITING,
+        initiated_by_harvest_batch=harvest_batch,
     )
 
 
