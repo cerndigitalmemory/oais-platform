@@ -11,7 +11,6 @@ from oais_platform.oais.models import (
     Source,
     Step,
     StepType,
-    UploadJob,
 )
 
 
@@ -221,20 +220,6 @@ class CollectionNameSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
-        ]
-
-
-class UploadJobSerializer(serializers.ModelSerializer):
-    creator = UserMinimalSerializer()
-
-    class Meta:
-        model = UploadJob
-        fields = [
-            "id",
-            "creator",
-            "timestamp",
-            "tmp_dir",
-            "sip_dir",
         ]
 
 

@@ -15,7 +15,6 @@ from oais_platform.oais.models import (
     Source,
     Step,
     StepType,
-    UploadJob,
 )
 
 
@@ -172,18 +171,6 @@ class ProfileAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     user_name.short_description = "Username"
-
-
-@admin.register(UploadJob)
-class UploadJobAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
-    list_display = ("id", "creator_name", "timestamp", "sip_dir")
-
-    def creator_name(self, obj):
-        if obj.creator:
-            return obj.creator.username
-        return None
-
-    creator_name.short_description = "Creator"
 
 
 @admin.register(Source)
