@@ -8,7 +8,7 @@ create-release:
   stage: tag
   needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
   only:
-    - 167-display-backend-frontend-version
+    - main
   script: 
     - |
       if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -16,7 +16,7 @@ create-release:
         exit 1
       fi
       TAG="v$VERSION"
-      TAG_EXISTS=$(git ls-remote --tags origin $TAG)
+      TAG_EXISTS=$(git tag --list $TAG)
       if [ -n "$TAG_EXISTS" ]; then
         echo "Tag $TAG already exists, skipping release creation"
         exit 0
