@@ -107,5 +107,5 @@ get-version:
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
-    inputs:
-      project: oais-platform
+    # inputs:
+    #   project: oais-platform
