@@ -1,6 +1,7 @@
 stages:
   - format
   - test
+  - tag
   - build
   - deploy-dev
   - trigger-dev
@@ -94,6 +95,19 @@ build-scripts-image:
   script:
     - buildah build -t $FQ_IMAGE_NAME --file "$CI_PROJECT_DIR/scripts/Dockerfile" "$CI_PROJECT_DIR"
     - buildah push $FQ_IMAGE_NAME
+
+get-version:
+  stage: tag
+  only:
+  - main
+  script:
+  - |
+      VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
+      echo Version: $VERSION
+      echo "VERSION=$VERSION" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
 
 # Add deploy and trigger jobs for all envs
 include:

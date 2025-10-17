@@ -1,4 +1,34 @@
+# spec:
+#   inputs:
+#     project:
+#       description: "oais-platform|oais-web"
+# ---
 # Pipeline stages that are common for oais-platform and oais-web
+# create-release:
+#   stage: tag
+#   needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
+#   only:
+#     - main
+#   script: 
+#     - |
+#       if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+#         echo "Invalid VERSION '$VERSION' (expected X.Y.Z)"
+#         exit 1
+#       fi
+#       TAG="v$VERSION"
+#       TAG_EXISTS=$(git tag --list $TAG)
+#       if [ -n "$TAG_EXISTS" ]; then
+#         echo "Tag $TAG already exists, skipping release creation"
+#         exit 0
+#       fi
+#     - |
+#       # Make sure we have tags and a clean repo view
+#       git fetch --tags --quiet
+#     - echo "Tag $TAG does not exist, creating tag"
+#     - git remote add gitlab_origin https://oauth2:$CREATE_NEW_TAG_TOKEN@gitlab.cern.ch/digitalmemory/$[[ inputs.project ]].git
+#     - git tag $TAG 
+#     - git push gitlab_origin $TAG    
+
 build-image:
   stage: build
   image:
@@ -25,7 +55,7 @@ build-image:
     - cp ~/.config/containers/storage.conf /etc/containers/storage.conf || true
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    - buildah build -t $FQ_IMAGE_NAME
+    - buildah build -t $FQ_IMAGE_NAME .
     - buildah push $FQ_IMAGE_NAME
 
 .deploy_template:

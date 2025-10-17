@@ -31,6 +31,8 @@ import sentry_sdk
 from celery.schedules import crontab
 from sentry_sdk.integrations.django import DjangoIntegration
 
+from oais_platform import __version__
+
 ## General Django settings
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -54,6 +56,9 @@ BASE_URL = "http://localhost"
 
 # Allow local accounts to login
 ALLOW_LOCAL_LOGIN = environ.get("ALLOW_LOCAL_LOGIN", False)
+
+# App versioning
+APP_VERSION = __version__
 
 ## Celery
 CELERY_BROKER_URL = environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
@@ -139,6 +144,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "oais_platform.middleware.ApiVersionMiddleware",
 ]
 
 ROOT_URLCONF = "oais_platform.urls"
@@ -243,7 +249,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SPECTACULAR_SETTINGS = {
     "TITLE": "OAIS Platform API",
     "DESCRIPTION": "CERN Digital Memory platform API documentation",
-    "VERSION": "0.1",
+    "VERSION": APP_VERSION,
     # OTHER SETTINGS
 }
 
