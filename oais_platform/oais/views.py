@@ -984,8 +984,7 @@ def upload_file(request):
         archive=archive,
         step_name=StepName.UPLOAD,
         status=Status.NOT_RUN,
-        # input_data=json.dumps({"tmp_dir": tmp_dir, "author": request.user.username}),
-        input_data={"tmp_dir": tmp_dir, "author": request.user.username},
+        input_data=json.dumps({"tmp_dir": tmp_dir, "author": request.user.username}),
     )
 
     run_step(step, archive.id)
