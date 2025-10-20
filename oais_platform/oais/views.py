@@ -951,7 +951,6 @@ def step_statistics(request):
     [SuperUserPermission]
 )  # TODO: Create and add a specific permission for local file upload
 def upload_file(request):
-    # recid = hashlib.md5((tmp_dir + request.user.username).encode("utf-8")).hexdigest()
     recid = hashlib.md5(
         (request.FILES["file"].name + request.user.username + str(time.time())).encode(
             "utf-8"
@@ -966,18 +965,12 @@ def upload_file(request):
 
     source = "local"
 
-    #     try:
-    #         url = get_source(source).get_record_url(recid)
-    #     except InvalidSource:
-    #         logging.warning(f"Source with name {source} not found.")
-    #         url = ""
-
     archive = Archive.objects.create(
         recid=recid,
         source=source,
         source_url="",
         requester=request.user,
-        title=f"{source} - {recid}",  # TODO: user can enter add a title manually
+        title=f"{source} - {recid}",
     )
 
     step = Step.objects.create(
@@ -993,7 +986,7 @@ def upload_file(request):
         {
             "status": 0,
             "archive": archive.id,
-            "msg": "Files uploaded, see Archives page",
+            "msg": "File uploaded, see Archives page",
         }
     )
 

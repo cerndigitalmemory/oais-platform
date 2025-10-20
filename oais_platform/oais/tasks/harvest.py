@@ -123,6 +123,10 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
     """
     Run BagIt-Create to prepare a Submission Package (SIP) from a locally uploaded file
     """
+    bic_version = bagit_create.version.get_version()
+    logger.info(
+        f"Starting processing of Archive {archive_id} using BagIt Create {bic_version}"
+    )
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
