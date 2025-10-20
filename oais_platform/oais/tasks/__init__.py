@@ -2,9 +2,9 @@
 from . import (
     announce,
     archivematica,
+    bagit,
     cta,
     extract_title,
-    harvest,
     integrity_checks,
     notify_source,
     pipeline_actions,
