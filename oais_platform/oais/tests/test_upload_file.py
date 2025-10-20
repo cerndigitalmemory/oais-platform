@@ -4,6 +4,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from celery.exceptions import Retry
+from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
@@ -11,7 +15,8 @@ from oais_platform.oais.tasks.bagit import upload
 from oais_platform.settings import BIC_UPLOAD_PATH, LOCAL_UPLOAD_PATH
 
 
-class UploadTest(APITestCase):
+@patch("bagit_create.main.process")
+class UploadTaskTest(APITestCase):
     def setUp(self):
         self.archive = Archive.objects.create(
             recid="1",
@@ -25,7 +30,6 @@ class UploadTest(APITestCase):
             input_data=json.dumps({"tmp_dir": tmp_dir, "author": "name"}),
         )
 
-    @patch("bagit_create.main.process")
     def test_upload_success(self, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
@@ -46,7 +50,6 @@ class UploadTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
 
-    @patch("bagit_create.main.process")
     def test_upload_missing_input_data(self, bagit_create):
         result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
@@ -54,7 +57,6 @@ class UploadTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    @patch("bagit_create.main.process")
     def test_upload_bagit_exception(self, bagit_create):
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
@@ -67,7 +69,6 @@ class UploadTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    @patch("bagit_create.main.process")
     def test_upload_retry_failed(self, bagit_create):
         bagit_create.return_value = {"status": 1, "errormsg": "502 Bad Gateway"}
 
@@ -78,7 +79,6 @@ class UploadTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.WAITING)
 
-    @patch("bagit_create.main.process")
     @patch("celery.app.task.Task.request")
     def test_upload_retries_exceeded(self, task_request, bagit_create):
         bagit_create.return_value = {"status": 1, "errormsg": "502 Bad Gateway"}
@@ -93,7 +93,6 @@ class UploadTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    @patch("bagit_create.main.process")
     def test_upload_non_retriable_failed(self, bagit_create):
         bagit_create.return_value = {"status": 1, "errormsg": "Error"}
 
@@ -104,3 +103,50 @@ class UploadTest(APITestCase):
         self.assertEqual(result["errormsg"], "Error")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+
+
+@patch(
+    "hashlib.md5",
+    side_effect=lambda x, **kwargs: MagicMock(hexdigest=lambda: "mock_recid"),
+)
+@patch("oais_platform.oais.views.run_step")
+class UploadFileEndpointTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser("user", "", "pw")
+        self.client.force_authenticate(user=self.user)
+        self.url = reverse("upload-file")
+
+        self.file_content = b"This is a test file content."
+        self.uploaded_file_name = "test_document.txt"
+        self.uploaded_file = SimpleUploadedFile(
+            self.uploaded_file_name, self.file_content, content_type="text/plain"
+        )
+
+        self.expected_tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, "mock_recid")
+
+    def test_upload_success(self, mock_run_step, mock_recid):
+        data = {"file": self.uploaded_file}
+        response = self.client.post(self.url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], 0)
+
+        archive = Archive.objects.get()
+        step = Step.objects.get()
+
+        self.assertEqual(archive.recid, "mock_recid")
+        self.assertEqual(archive.requester, self.user)
+        self.assertEqual(archive.source, "local")
+
+        self.assertEqual(step.archive, archive)
+        self.assertEqual(step.step_type.name, StepName.UPLOAD)
+        self.assertEqual(step.status, Status.NOT_RUN)
+        self.assertEqual(
+            json.loads(step.input_data),
+            {
+                "tmp_dir": self.expected_tmp_dir,
+                "author": self.user.username,
+            },
+        )
+
+        mock_run_step.assert_called_once_with(step, archive.id)
