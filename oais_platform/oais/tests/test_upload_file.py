@@ -156,3 +156,11 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["detail"], "File missing")
         mock_run_step.assert_not_called()
+
+    def test_upload_forbidden(self, mock_run_step, mock_recid):
+        testuser = User.objects.create_user("testuser", "", "pw")
+        self.client.force_authenticate(user=testuser)
+        data = {"file": self.uploaded_file}
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_run_step.assert_not_called()
