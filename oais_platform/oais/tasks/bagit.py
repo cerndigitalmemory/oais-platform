@@ -133,7 +133,6 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
 
     if not input_data:
         return {"status": 1, "errormsg": "Missing input data for step"}
-
     input_data = json.loads(input_data)
 
     try:

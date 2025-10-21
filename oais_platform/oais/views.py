@@ -947,12 +947,11 @@ def step_statistics(request):
 
 
 @api_view(["POST"])
-@permission_classes(
-    [SuperUserPermission]
-)  # TODO: Create and add a specific permission for local file upload
+@permission_classes([SuperUserPermission])
 def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")
+
     recid = hashlib.md5(
         (request.FILES["file"].name + request.user.username + str(time.time())).encode(
             "utf-8"
@@ -961,12 +960,10 @@ def upload_file(request):
 
     tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
     os.makedirs(tmp_dir, exist_ok=True)
-
     file_path = request.FILES["file"].temporary_file_path()
     shutil.move(file_path, tmp_dir)
 
     source = "local"
-
     archive = Archive.objects.create(
         recid=recid,
         source=source,
@@ -974,14 +971,12 @@ def upload_file(request):
         requester=request.user,
         title=f"{source} - {recid}",
     )
-
     step = Step.objects.create(
         archive=archive,
         step_name=StepName.UPLOAD,
         status=Status.NOT_RUN,
         input_data=json.dumps({"tmp_dir": tmp_dir, "author": request.user.username}),
     )
-
     run_step(step, archive.id)
 
     return Response(
