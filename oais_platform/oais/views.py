@@ -951,6 +951,8 @@ def step_statistics(request):
     [SuperUserPermission]
 )  # TODO: Create and add a specific permission for local file upload
 def upload_file(request):
+    if "file" not in request.FILES:
+        raise BadRequest("File missing")
     recid = hashlib.md5(
         (request.FILES["file"].name + request.user.username + str(time.time())).encode(
             "utf-8"
