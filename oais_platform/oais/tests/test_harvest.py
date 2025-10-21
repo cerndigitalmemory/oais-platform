@@ -99,6 +99,17 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
 
     @patch("bagit_create.main.process")
+    def test_harvest_bagit_redirect(self, bagit_create):
+        exc_msg = "Metadata request was redirected"
+        bagit_create.side_effect = RuntimeError(exc_msg)
+
+        result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
+        self.assertEqual(result["status"], 1)
+        self.assertEqual(result["errormsg"], exc_msg)
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.FAILED)
+
+    @patch("bagit_create.main.process")
     def test_harvest_retry_failed(self, bagit_create):
         bagit_create.return_value = {"status": 1, "errormsg": "502 Bad Gateway"}
 

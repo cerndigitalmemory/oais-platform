@@ -118,7 +118,12 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             "503": "Service unavailable",
             "504": "Gateway timeout",
         }
-        if any(key in error_msg for key in retry_codes):
+        if "Metadata request was redirected" in error_msg:
+            logger.warning(
+                f"Archive {archive_id}: URL was redirected; skipping download."
+            )
+            return {"status": 1, "errormsg": error_msg}
+        elif any(key in error_msg for key in retry_codes):
             logger.error(
                 next(retry_codes[key] for key in retry_codes if key in error_msg)
             )
