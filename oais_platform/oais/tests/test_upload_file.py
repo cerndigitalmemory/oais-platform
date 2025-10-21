@@ -150,3 +150,9 @@ class UploadFileEndpointTest(APITestCase):
         )
 
         mock_run_step.assert_called_once_with(step, archive.id)
+
+    def test_upload_missing_file(self, mock_run_step, mock_recid):
+        response = self.client.post(self.url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "File missing")
+        mock_run_step.assert_not_called()
