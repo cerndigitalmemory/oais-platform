@@ -2,7 +2,7 @@
 from . import (
     announce,
     archivematica,
-    bagit,
+    create_sip,
     cta,
     extract_title,
     integrity_checks,
