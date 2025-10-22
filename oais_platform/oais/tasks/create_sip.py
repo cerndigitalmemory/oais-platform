@@ -110,7 +110,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(bagit_result)
 
-    if error_response := _handle_bagit_error(self, step, bagit_result):
+    if error_response := _handle_bagit_error(self, archive_id, step, bagit_result):
         return error_response
 
     return _handle_successful_bagit(archive, bagit_result)
@@ -164,7 +164,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
     return _handle_successful_bagit(archive, bagit_result)
 
 
-def _handle_bagit_error(task, step, bagit_result):
+def _handle_bagit_error(task, archive_id, step, bagit_result):
     """
     Checks the bagit_result for errors and handles retries for specific HTTP error codes.
     Raises task.retry if a retry is initiated.
