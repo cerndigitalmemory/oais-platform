@@ -25,7 +25,7 @@ class UploadTaskTest(APITestCase):
         tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, "1")
         self.step = Step.objects.create(
             archive=self.archive,
-            step_name=StepName.UPLOAD,
+            step_name=StepName.FILE_UPLOAD,
             status=Status.NOT_RUN,
             input_data=json.dumps({"tmp_dir": tmp_dir, "author": "name"}),
         )
@@ -139,7 +139,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(archive.source, "local")
 
         self.assertEqual(step.archive, archive)
-        self.assertEqual(step.step_type.name, StepName.UPLOAD)
+        self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.NOT_RUN)
         self.assertEqual(
             json.loads(step.input_data),

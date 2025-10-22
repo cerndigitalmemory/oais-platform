@@ -9,11 +9,11 @@ from oais_platform.oais.models import StepName
 def add_upload_steptype(apps, schema_editor):
     StepType = apps.get_model("oais", "StepType")
 
-    if not StepType.objects.filter(name="UPLOAD").exists():
+    if not StepType.objects.filter(name="FILE_UPLOAD").exists():
         StepType.objects.create(
-            name="UPLOAD",
-            label="Upload",
-            description="Upload",
+            name="FILE_UPLOAD",
+            label="Local file upload",
+            description="Uploading local files and creating SIP",
             task_name="upload",
             has_sip=True,
             automatic_next_step=StepType.objects.get(name=StepName.VALIDATION),
@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
             field=django.contrib.postgres.fields.ArrayField(
                 base_field=models.CharField(
                     choices=[
-                        ("UPLOAD", "Upload"),
+                        ("FILE_UPLOAD", "File Upload"),
                         ("SIP_UPLOAD", "Sip Upload"),
                         ("HARVEST", "Harvest"),
                         ("VALIDATION", "Validation"),
@@ -63,7 +63,7 @@ class Migration(migrations.Migration):
             field=django.contrib.postgres.fields.ArrayField(
                 base_field=models.CharField(
                     choices=[
-                        ("UPLOAD", "Upload"),
+                        ("FILE_UPLOAD", "File Upload"),
                         ("SIP_UPLOAD", "Sip Upload"),
                         ("HARVEST", "Harvest"),
                         ("VALIDATION", "Validation"),
@@ -87,7 +87,7 @@ class Migration(migrations.Migration):
             name="name",
             field=models.CharField(
                 choices=[
-                    ("UPLOAD", "Upload"),
+                    ("FILE_UPLOAD", "File Upload"),
                     ("SIP_UPLOAD", "Sip Upload"),
                     ("HARVEST", "Harvest"),
                     ("VALIDATION", "Validation"),

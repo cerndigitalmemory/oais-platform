@@ -973,7 +973,7 @@ def upload_file(request):
     )
     step = Step.objects.create(
         archive=archive,
-        step_name=StepName.UPLOAD,
+        step_name=StepName.FILE_UPLOAD,
         status=Status.NOT_RUN,
         input_data=json.dumps({"tmp_dir": tmp_dir, "author": request.user.username}),
     )

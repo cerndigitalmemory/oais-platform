@@ -274,7 +274,7 @@ class Archive(models.Model):
 
 
 class StepName(models.TextChoices):
-    UPLOAD = "UPLOAD"
+    FILE_UPLOAD = "FILE_UPLOAD"
     SIP_UPLOAD = "SIP_UPLOAD"
     HARVEST = "HARVEST"
     VALIDATION = "VALIDATION"
