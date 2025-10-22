@@ -109,8 +109,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(bagit_result)
 
-    error_response = _handle_bagit_error(self, step, bagit_result, logger)
-    if error_response:
+    if error_response := _handle_bagit_error(self, step, bagit_result):
         return error_response
 
     return _handle_successful_bagit(archive, bagit_result)
@@ -155,18 +154,17 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(bagit_result)
 
-    error_response = _handle_bagit_error(self, step, bagit_result, logger, input_data)
-    if error_response:
+    if error_response := _handle_bagit_error(self, step, bagit_result, input_data):
         return error_response
 
     return _handle_successful_bagit(archive, bagit_result)
 
 
-def _handle_bagit_error(task, step, bagit_result, logger, input_data=None):
+def _handle_bagit_error(task, step, bagit_result, input_data=None):
     """
     Checks the bagit_result for errors and handles retries for specific HTTP error codes.
-    Raises self.retry if a retry is initiated.
-    Returns an error dict if max retries is hit or no retry is needed.
+    Raises task.retry if a retry is initiated.
+    Returns an error dict if max retries is hit or error is not retryable.
     """
     if bagit_result["status"] == 1:
         error_msg = str(bagit_result["errormsg"])
@@ -189,14 +187,13 @@ def _handle_bagit_error(task, step, bagit_result, logger, input_data=None):
             )
             retry = True
 
-        error_dict = {"status": 1, "errormsg": error_msg}
         if input_data:
-            error_dict.update(input_data)
+            bagit_result.update(input_data)
 
         if retry:
             if task.request.retries >= task.max_retries:
-                error_dict["errormsg"] = "Max retries exceeded."
-                return error_dict
+                bagit_result["errormsg"] = "Max retries exceeded."
+                return bagit_result
 
             step.set_status(Status.WAITING)
             step.set_output_data(
@@ -209,7 +206,7 @@ def _handle_bagit_error(task, step, bagit_result, logger, input_data=None):
                 exc=Exception(error_msg), countdown=RETRY_INTERVAL_MINUTES * 60
             )
 
-        return error_dict
+        return bagit_result
 
     return
 
