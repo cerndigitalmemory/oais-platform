@@ -154,13 +154,14 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(bagit_result)
 
-    if error_response := _handle_bagit_error(self, step, bagit_result, input_data):
-        return error_response
+    if bagit_result["status"] == 1:
+        bagit_result.update(input_data)
+        return bagit_result
 
     return _handle_successful_bagit(archive, bagit_result)
 
 
-def _handle_bagit_error(task, step, bagit_result, input_data=None):
+def _handle_bagit_error(task, step, bagit_result):
     """
     Checks the bagit_result for errors and handles retries for specific HTTP error codes.
     Raises task.retry if a retry is initiated.
@@ -186,9 +187,6 @@ def _handle_bagit_error(task, step, bagit_result, input_data=None):
                 next(retry_codes[key] for key in retry_codes if key in error_msg)
             )
             retry = True
-
-        if input_data:
-            bagit_result.update(input_data)
 
         if retry:
             if task.request.retries >= task.max_retries:

@@ -22,12 +22,15 @@ class UploadTaskTest(APITestCase):
             recid="1",
             source="local",
         )
-        tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, "1")
+        self.tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, "1")
+        self.author_name = "name"
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.FILE_UPLOAD,
             status=Status.NOT_RUN,
-            input_data=json.dumps({"tmp_dir": tmp_dir, "author": "name"}),
+            input_data=json.dumps(
+                {"tmp_dir": self.tmp_dir, "author": self.author_name}
+            ),
         )
 
     def test_upload_success(self, bagit_create):
@@ -66,41 +69,22 @@ class UploadTaskTest(APITestCase):
         ).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], exc_msg)
+        self.assertEqual(result["tmp_dir"], self.tmp_dir)
+        self.assertEqual(result["author"], self.author_name)
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    def test_upload_retry_failed(self, bagit_create):
-        bagit_create.return_value = {"status": 1, "errormsg": "502 Bad Gateway"}
-
-        with self.assertRaises(Retry):
-            upload.apply(
-                args=[self.archive.id, self.step.id, self.step.input_data], throw=True
-            ).get()
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.WAITING)
-
-    @patch("celery.app.task.Task.request")
-    def test_upload_retries_exceeded(self, task_request, bagit_create):
-        bagit_create.return_value = {"status": 1, "errormsg": "502 Bad Gateway"}
-
-        task_request.id = "test_task_id"
-        task_request.retries = 10
-        result = upload.apply(
-            args=[self.archive.id, self.step.id, self.step.input_data], throw=True
-        ).get()
-        self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], "Max retries exceeded.")
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
-
-    def test_upload_non_retriable_failed(self, bagit_create):
-        bagit_create.return_value = {"status": 1, "errormsg": "Error"}
+    def test_upload_bagit_unsuccessful_status(self, bagit_create):
+        error_msg = "An error occurred"
+        bagit_create.return_value = {"status": 1, "errormsg": error_msg}
 
         result = upload.apply(
             args=[self.archive.id, self.step.id, self.step.input_data], throw=True
         ).get()
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], "Error")
+        self.assertEqual(result["errormsg"], error_msg)
+        self.assertEqual(result["tmp_dir"], self.tmp_dir)
+        self.assertEqual(result["author"], self.author_name)
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
