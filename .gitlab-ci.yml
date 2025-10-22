@@ -75,7 +75,7 @@ build-scripts-image:
     FQ_IMAGE_NAME: "${CI_REGISTRY_IMAGE}/scripts:$CI_COMMIT_TAG"
     CONTAINER_STORAGE: "/builds/container-storage"
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG && $CI_PIPELINE_SOURCE != "schedule"'
   before_script:
     - mkdir -p ${CONTAINER_STORAGE}
     - mkdir -p ~/.config/containers/
@@ -108,6 +108,8 @@ get-version:
   artifacts:
     reports:
       dotenv: build.env
+  except:
+    - schedules
 
 # Add deploy and trigger jobs for all envs
 include:
