@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 
 import bagit_create
 from celery import shared_task
@@ -158,6 +159,8 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
         bagit_result.update(input_data)
         return bagit_result
 
+    _delete_local_upload(input_data.get("tmp_dir"))
+
     return _handle_successful_bagit(archive, bagit_result)
 
 
@@ -229,3 +232,16 @@ def _handle_successful_bagit(archive, bagit_result):
     bagit_result["artifact"] = output_artifact
 
     return bagit_result
+
+
+def _delete_local_upload(upload_path):
+    """
+    Deletes the folder and its contents on the specified path.
+    """
+    if not os.path.exists(upload_path):
+        logger.warning(f"Attempted to delete non-existent folder: {upload_path}")
+        return
+    try:
+        shutil.rmtree(upload_path)
+    except OSError as e:
+        logger.error(f"Error deleting folder {upload_path}: {e}")

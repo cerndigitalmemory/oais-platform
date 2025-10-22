@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -32,6 +33,7 @@ class UploadTaskTest(APITestCase):
                 {"tmp_dir": self.tmp_dir, "author": self.author_name}
             ),
         )
+        os.makedirs(self.tmp_dir, exist_ok=True)
 
     def test_upload_success(self, bagit_create):
         sip_folder = "result_folder"
@@ -50,6 +52,7 @@ class UploadTaskTest(APITestCase):
             result["artifact"]["artifact_localpath"],
             os.path.join(BIC_UPLOAD_PATH, sip_folder),
         )
+        self.assertFalse(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
 
@@ -57,6 +60,7 @@ class UploadTaskTest(APITestCase):
         result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], "Missing input data for step")
+        self.assertTrue(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
@@ -71,6 +75,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(result["errormsg"], exc_msg)
         self.assertEqual(result["tmp_dir"], self.tmp_dir)
         self.assertEqual(result["author"], self.author_name)
+        self.assertTrue(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
@@ -85,6 +90,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(result["errormsg"], error_msg)
         self.assertEqual(result["tmp_dir"], self.tmp_dir)
         self.assertEqual(result["author"], self.author_name)
+        self.assertTrue(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
@@ -107,6 +113,10 @@ class UploadFileEndpointTest(APITestCase):
         )
 
         self.expected_tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, "mock_recid")
+
+    def tearDown(self):
+        if os.path.exists(self.expected_tmp_dir):
+            shutil.rmtree(self.expected_tmp_dir)
 
     def test_upload_success(self, mock_run_step, mock_recid):
         data = {"file": self.uploaded_file}
