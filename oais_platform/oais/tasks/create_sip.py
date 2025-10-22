@@ -193,8 +193,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
 
         if retry:
             if task.request.retries >= task.max_retries:
-                bagit_result["errormsg"] = "Max retries exceeded."
-                return bagit_result
+                return {"status": 1, "errormsg": "Max retries exceeded."}
 
             step.set_status(Status.WAITING)
             step.set_output_data(
@@ -207,7 +206,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
                 exc=Exception(error_msg), countdown=RETRY_INTERVAL_MINUTES * 60
             )
 
-        return bagit_result
+        return {"status": 1, "errormsg": error_msg}
 
     return
 
