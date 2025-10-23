@@ -952,18 +952,13 @@ def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")
 
+    source = "local"
     recid = hashlib.md5(
         (request.FILES["file"].name + request.user.username + str(time.time())).encode(
             "utf-8"
         )
     ).hexdigest()
 
-    tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
-    os.makedirs(tmp_dir, exist_ok=True)
-    file_path = request.FILES["file"].temporary_file_path()
-    shutil.move(file_path, tmp_dir)
-
-    source = "local"
     archive = Archive.objects.create(
         recid=recid,
         source=source,
@@ -975,8 +970,26 @@ def upload_file(request):
         archive=archive,
         step_name=StepName.FILE_UPLOAD,
         status=Status.NOT_RUN,
-        input_data=json.dumps({"tmp_dir": tmp_dir, "author": request.user.username}),
     )
+
+    try:
+        tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
+        os.makedirs(tmp_dir, exist_ok=True)
+        file_path = request.FILES["file"].temporary_file_path()
+        shutil.move(file_path, tmp_dir)
+    except Exception as e:
+        step.set_status(Status.FAILED)
+        result = {
+            "status": 1,
+            "msg": f"Error occurred while processing file: {e}",
+            "archive": archive.id,
+        }
+        step.set_output_data(result)
+        archive.set_last_step(step.id)
+        return Response(result)
+
+    step.set_input_data({"tmp_dir": tmp_dir, "author": request.user.username})
+
     run_step(step, archive.id)
 
     return Response(

@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from celery.exceptions import Retry
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -157,4 +156,35 @@ class UploadFileEndpointTest(APITestCase):
         data = {"file": self.uploaded_file}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_run_step.assert_not_called()
+
+    @patch("shutil.move")
+    def test_upload_failed_processing(self, mock_move, mock_run_step, mock_recid):
+        error_message = "Failed to move file"
+        mock_move.side_effect = RuntimeError(error_message)
+
+        data = {"file": self.uploaded_file}
+        response = self.client.post(self.url, data)
+
+        self.assertEqual(response.data["status"], 1)
+
+        archive = Archive.objects.get()
+        step = Step.objects.get()
+
+        self.assertEqual(archive.recid, "mock_recid")
+        self.assertEqual(archive.requester, self.user)
+        self.assertEqual(archive.source, "local")
+
+        self.assertEqual(step.archive, archive)
+        self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
+        self.assertEqual(step.status, Status.FAILED)
+        self.assertEqual(
+            json.loads(step.output_data),
+            {
+                "status": 1,
+                "msg": f"Error occurred while processing file: {error_message}",
+                "archive": archive.id,
+            },
+        )
+
         mock_run_step.assert_not_called()

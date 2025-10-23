@@ -434,6 +434,10 @@ class Step(models.Model):
         self.input_step = input_step
         self.save()
 
+    def set_input_data(self, data):
+        self.input_data = json.dumps(data)
+        self.save()
+
     def set_output_data(self, data):
         self.output_data = json.dumps(data)
         self.save()
