@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import shutil
 
 import bagit_create
 from celery import shared_task
@@ -18,6 +20,8 @@ from oais_platform.settings import (
 )
 
 logger = get_task_logger(__name__)
+
+RETRY_INTERVAL_MINUTES = 2
 
 
 @shared_task(
@@ -44,7 +48,6 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         step.set_status(Status.IN_PROGRESS)
     else:
         retry = False
-        retry_interval_minutes = 2
         with transaction.atomic():
             if size > AGGREGATED_FILE_SIZE_LIMIT:
                 logger.warning(
@@ -73,7 +76,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 step.set_status(Status.WAITING)
                 step.set_output_data(
                     {
-                        "message": f"Retrying in {retry_interval_minutes} minutes (aggregated file size limit exceeded)",
+                        "message": f"Retrying in {RETRY_INTERVAL_MINUTES} minutes (aggregated file size limit exceeded)",
                     }
                 )
                 retry = True
@@ -83,9 +86,9 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
         if retry:
             raise self.retry(
                 exc=Exception(
-                    f"Retrying in {retry_interval_minutes} minutes (aggregated file size limit exceeded)"
+                    f"Retrying in {RETRY_INTERVAL_MINUTES} minutes (aggregated file size limit exceeded)"
                 ),
-                countdown=retry_interval_minutes * 60,
+                countdown=RETRY_INTERVAL_MINUTES * 60,
             )
 
     if not api_key:
@@ -107,7 +110,66 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(bagit_result)
 
-    # If bagit returns an error return the error message
+    if error_response := _handle_bagit_error(self, archive_id, step, bagit_result):
+        return error_response
+
+    return _handle_successful_bagit(archive, bagit_result)
+
+
+@shared_task(
+    name="upload", bind=True, ignore_result=True, after_return=finalize, max_retries=5
+)
+def upload(self, archive_id, step_id, input_data=None, api_key=None):
+    """
+    Run BagIt-Create to prepare a Submission Package (SIP) from a locally uploaded file
+    """
+    bic_version = bagit_create.version.get_version()
+    logger.info(
+        f"Starting processing of Archive {archive_id} using BagIt Create {bic_version}"
+    )
+    archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
+
+    if not input_data:
+        return {"status": 1, "errormsg": "Missing input data for step"}
+    input_data = json.loads(input_data)
+
+    try:
+        bagit_result = bagit_create.main.process(
+            recid=archive.recid,
+            source=archive.source,
+            loglevel=logging.WARNING,
+            target=BIC_UPLOAD_PATH,
+            source_path=input_data.get("tmp_dir"),
+            author=input_data.get("author"),
+            workdir=BIC_WORKDIR,
+        )
+    except Exception as e:
+        return {
+            "status": 1,
+            "errormsg": str(e),
+            "tmp_dir": input_data.get("tmp_dir"),
+            "author": input_data.get("author"),
+        }
+
+    logger.info(bagit_result)
+
+    if bagit_result["status"] == 1:
+        bagit_result.update(input_data)
+        return bagit_result
+
+    _delete_local_upload(input_data.get("tmp_dir"))
+
+    return _handle_successful_bagit(archive, bagit_result)
+
+
+def _handle_bagit_error(task, archive_id, step, bagit_result):
+    """
+    Checks the bagit_result for errors and handles retries for specific HTTP error codes.
+    Raises task.retry if a retry is initiated.
+    Returns an error dict if max retries is hit or error is not retryable.
+    """
     if bagit_result["status"] == 1:
         error_msg = str(bagit_result["errormsg"])
         retry = False
@@ -130,20 +192,29 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             retry = True
 
         if retry:
-            if self.request.retries >= self.max_retries:
+            if task.request.retries >= task.max_retries:
                 return {"status": 1, "errormsg": "Max retries exceeded."}
+
             step.set_status(Status.WAITING)
             step.set_output_data(
                 {
                     "status": 0,
-                    "errormsg": f"Retrying in {retry_interval_minutes} minutes (bagit-create error)",
+                    "errormsg": f"Retrying in {RETRY_INTERVAL_MINUTES} minutes (bagit-create error)",
                 }
             )
-            raise self.retry(
-                exc=Exception(error_msg), countdown=retry_interval_minutes * 60
+            raise task.retry(
+                exc=Exception(error_msg), countdown=RETRY_INTERVAL_MINUTES * 60
             )
+
         return {"status": 1, "errormsg": error_msg}
 
+    return
+
+
+def _handle_successful_bagit(archive, bagit_result):
+    """
+    Update archive path and size and create the artifact.
+    """
     sip_folder_name = bagit_result["foldername"]
 
     if BIC_UPLOAD_PATH:
@@ -160,3 +231,16 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
     bagit_result["artifact"] = output_artifact
 
     return bagit_result
+
+
+def _delete_local_upload(upload_path):
+    """
+    Deletes the folder and its contents on the specified path.
+    """
+    if not os.path.exists(upload_path):
+        logger.warning(f"Attempted to delete non-existent folder: {upload_path}")
+        return
+    try:
+        shutil.rmtree(upload_path)
+    except OSError as e:
+        logger.error(f"Error deleting folder {upload_path}: {e}")

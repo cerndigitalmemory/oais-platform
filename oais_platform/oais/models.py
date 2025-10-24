@@ -274,6 +274,7 @@ class Archive(models.Model):
 
 
 class StepName(models.TextChoices):
+    FILE_UPLOAD = "FILE_UPLOAD"
     SIP_UPLOAD = "SIP_UPLOAD"
     HARVEST = "HARVEST"
     VALIDATION = "VALIDATION"
@@ -433,6 +434,10 @@ class Step(models.Model):
         self.input_step = input_step
         self.save()
 
+    def set_input_data(self, data):
+        self.input_data = json.dumps(data)
+        self.save()
+
     def set_output_data(self, data):
         self.output_data = json.dumps(data)
         self.save()
@@ -534,37 +539,6 @@ class Collection(models.Model):
     def remove_archive(self, archive):
         self.archives.remove(archive)
         self.save()
-
-
-class UploadJob(models.Model):
-    """
-    An upload job with a unique ID and a set of associated files
-    """
-
-    id = models.AutoField(primary_key=True)
-    creator = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, related_name="uploadjobs"
-    )
-    timestamp = models.DateTimeField(default=timezone.now)
-    tmp_dir = models.CharField(max_length=1000)
-    sip_dir = models.CharField(max_length=1000)
-    files = models.JSONField()
-
-    class Meta:
-        ordering = ["-id"]
-
-    def get_files(self):
-        return json.loads(self.files)
-
-    def add_file(self, local_path, sip_path):
-        files = json.loads(self.files)
-        files[local_path] = sip_path
-        self.files = json.dumps(files)
-        self.save(update_fields=["files"])
-
-    def set_sip_dir(self, sip_dir):
-        self.sip_dir = sip_dir
-        self.save(update_fields=["sip_dir"])
 
 
 def get_source_classnames():

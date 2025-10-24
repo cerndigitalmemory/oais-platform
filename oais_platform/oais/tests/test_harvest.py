@@ -6,7 +6,7 @@ from celery.exceptions import Retry
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tasks.harvest import harvest
+from oais_platform.oais.tasks.create_sip import harvest
 from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, BIC_UPLOAD_PATH
 
 
