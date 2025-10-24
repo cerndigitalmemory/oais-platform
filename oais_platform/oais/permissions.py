@@ -122,6 +122,8 @@ class TagPermission(permissions.BasePermission):
         if user.is_superuser:
             return True
         if view.action in ["create_tag", "add_arch", "remove_arch"]:
+            if user.has_perm("oais.can_edit_all"):
+                return True
             if not user.id == obj.creator.id:
                 return False
             if request.data["archives"]:
