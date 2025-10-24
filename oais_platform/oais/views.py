@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from oais_platform.oais.exceptions import BadRequest
+from oais_platform.oais.exceptions import BadRequest, InternalServerError
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     ApiKey,
@@ -978,27 +978,23 @@ def upload_file(request):
         file_path = request.FILES["file"].temporary_file_path()
         shutil.move(file_path, tmp_dir)
     except Exception as e:
+        error_msg = f"Error occurred while processing file: {e}"
         step.set_status(Status.FAILED)
-        result = {
-            "status": 1,
-            "msg": f"Error occurred while processing file: {e}",
-            "archive": archive.id,
-        }
-        step.set_output_data(result)
+        step.set_output_data(
+            {
+                "status": 1,
+                "errormsg": error_msg,
+                "archive": archive.id,
+            }
+        )
         archive.set_last_step(step.id)
-        return Response(result)
+        raise InternalServerError(error_msg)
 
     step.set_input_data({"tmp_dir": tmp_dir, "author": request.user.username})
 
     run_step(step, archive.id)
 
-    return Response(
-        {
-            "status": 0,
-            "archive": archive.id,
-            "msg": "File uploaded, see Archives page",
-        }
-    )
+    return Response({"status": 0, "archive": archive.id})
 
 
 @extend_schema_view(
