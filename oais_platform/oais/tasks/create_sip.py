@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import time
 
 import bagit_create
 from celery import shared_task
@@ -16,6 +17,7 @@ from oais_platform.settings import (
     AGGREGATED_FILE_SIZE_LIMIT,
     BIC_UPLOAD_PATH,
     BIC_WORKDIR,
+    LOCAL_UPLOAD_PATH,
     SIP_UPSTREAM_BASEPATH,
 )
 
@@ -162,6 +164,32 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
     _delete_local_upload(input_data.get("tmp_dir"))
 
     return _handle_successful_bagit(archive, bagit_result)
+
+
+@shared_task(name="upload_cleanup", bind=True, ignore_result=True)
+def upload_cleanup(self):
+    if not os.path.exists(LOCAL_UPLOAD_PATH):
+        return
+
+    cutoff_time = time.time() - (14 * 24 * 60 * 60)  # 14 days
+    for dir_path, _, filenames in os.walk(LOCAL_UPLOAD_PATH, topdown=False):
+        for filename in filenames:
+            file_path = os.path.join(dir_path, filename)
+
+            try:
+                last_modified = os.path.getmtime(file_path)
+                if last_modified < cutoff_time:
+                    os.remove(file_path)
+
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path}: {e}")
+
+        try:
+            dir_last_modified = os.path.getmtime(dir_path)
+            if dir_last_modified < cutoff_time or not os.listdir(dir_path):
+                os.rmdir(dir_path)
+        except Exception as e:
+            logger.error(f"Error deleting directory {dir_path}: {e}")
 
 
 def _handle_bagit_error(task, archive_id, step, bagit_result):
