@@ -13,6 +13,12 @@ class DoesNotExist(APIException):
     default_code = "does_not_exist"
 
 
+class InternalServerError(APIException):
+    status_code = 500
+    default_detail = "Internal server error"
+    default_code = "internal_server_error"
+
+
 class ServiceUnavailable(APIException):
     status_code = 503
     default_detail = "Service temporarily unavailable"
