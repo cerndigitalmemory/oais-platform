@@ -76,6 +76,10 @@ CELERY_BEAT_SCHEDULE = {
             "expires": 21600.0,
         },
     },
+    "upload-cleanup": {
+        "task": "upload_cleanup",
+        "schedule": crontab(minute=0, hour=2, day_of_month=1),
+    },
 }
 
 ## Authentication
