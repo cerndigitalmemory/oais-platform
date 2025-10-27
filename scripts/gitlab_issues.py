@@ -5,10 +5,11 @@ import gitlab
 
 # === CONFIG ===
 GITLAB_URL = "https://gitlab.cern.ch"
-GITLAB_TOKEN = os.environ.get("PRIVATE_TOKEN", os.environ.get("GITLAB_TOKEN"))
+GITLAB_TOKEN = os.environ.get("PRIVATE_TOKEN")  # , os.environ.get("GITLAB_TOKEN"))
 GROUP_NAME = "digitalmemory"
 LABEL_NAME = "recently-updated"
 DAYS = 3
+print("USING HTE PRIVATE_TOKEN")
 
 
 # === LOGIC ===
