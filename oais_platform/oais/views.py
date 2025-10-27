@@ -42,6 +42,7 @@ from oais_platform.oais.models import (
 from oais_platform.oais.pagination import StepTypePagination
 from oais_platform.oais.permissions import (
     ArchivePermission,
+    FileUploadPermission,
     StepPermission,
     SuperUserPermission,
     TagPermission,
@@ -948,7 +949,7 @@ def step_statistics(request):
 
 
 @api_view(["POST"])
-@permission_classes([SuperUserPermission])
+@permission_classes([FileUploadPermission])
 def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")

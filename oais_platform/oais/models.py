@@ -27,6 +27,7 @@ class Profile(models.Model):
     class Meta:
         permissions = [
             ("can_execute_step", "Can execute steps"),
+            ("can_upload_file", "Can upload files"),
         ]
 
         constraints = [

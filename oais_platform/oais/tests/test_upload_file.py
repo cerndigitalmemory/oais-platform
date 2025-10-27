@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
@@ -101,7 +101,10 @@ class UploadTaskTest(APITestCase):
 @patch("oais_platform.oais.views.run_step")
 class UploadFileEndpointTest(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_superuser("user", "", "pw")
+        self.permission = Permission.objects.get(codename="can_upload_file")
+        self.user = User.objects.create_user("user", "", "pw")
+        self.user.user_permissions.add(self.permission)
+        self.user.save()
         self.client.force_authenticate(user=self.user)
         self.url = reverse("upload-file")
 

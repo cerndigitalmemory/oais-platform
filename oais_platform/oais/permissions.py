@@ -136,6 +136,14 @@ class TagPermission(permissions.BasePermission):
         )
 
 
+class FileUploadPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.has_perm("oais.can_upload_file")
+
+
 class SuperUserPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_superuser
