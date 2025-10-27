@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import shutil
 import time
@@ -979,6 +980,7 @@ def upload_file(request):
         shutil.move(file_path, tmp_dir)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
+        logging.error(error_msg)
         step.set_status(Status.FAILED)
         step.set_output_data(
             {
@@ -988,7 +990,9 @@ def upload_file(request):
             }
         )
         archive.set_last_step(step.id)
-        raise InternalServerError(error_msg)
+        raise InternalServerError(
+            "Error occurred while processing the file, please try again or contact the admins."
+        )
 
     step.set_input_data({"tmp_dir": tmp_dir, "author": request.user.username})
 
