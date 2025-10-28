@@ -166,7 +166,7 @@ class UploadFileEndpointTest(APITestCase):
         data = {"file": self.uploaded_file}
         response = self.client.post(self.url, data)
 
-        self.assertEqual(response.data["status"], 1)
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         archive = Archive.objects.get()
         step = Step.objects.get()
@@ -182,7 +182,7 @@ class UploadFileEndpointTest(APITestCase):
             json.loads(step.output_data),
             {
                 "status": 1,
-                "msg": f"Error occurred while processing file: {error_message}",
+                "errormsg": f"Error occurred while processing file: {error_message}",
                 "archive": archive.id,
             },
         )
