@@ -7,7 +7,7 @@ from unittest.mock import patch
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.tasks.create_sip import (
-    UPLOAD_DELETION_CUTOFF_SECONDS,
+    UPLOAD_DELETION_CUTOFF_DAYS,
     upload_cleanup,
 )
 
@@ -18,7 +18,9 @@ class UploadCleanupTaskTest(APITestCase):
         self.temp_dir = tempfile.mkdtemp()
 
         self.current_time = time.time()
-        self.cutoff_time = self.current_time - UPLOAD_DELETION_CUTOFF_SECONDS
+        self.cutoff_time = self.current_time - (
+            UPLOAD_DELETION_CUTOFF_DAYS * 24 * 60 * 60
+        )
 
         self.old_upload = os.path.join(self.temp_dir, "old_upload")
         self.new_upload = os.path.join(self.temp_dir, "new_upload")

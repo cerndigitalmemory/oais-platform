@@ -19,12 +19,12 @@ from oais_platform.settings import (
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
     SIP_UPSTREAM_BASEPATH,
+    UPLOAD_DELETION_CUTOFF_DAYS,
 )
 
 logger = get_task_logger(__name__)
 
 RETRY_INTERVAL_MINUTES = 2
-UPLOAD_DELETION_CUTOFF_SECONDS = 14 * 24 * 60 * 60  # 14 days
 
 
 @shared_task(
@@ -172,7 +172,7 @@ def upload_cleanup(self):
     if not os.path.exists(LOCAL_UPLOAD_PATH):
         return
 
-    cutoff_time = time.time() - UPLOAD_DELETION_CUTOFF_SECONDS
+    cutoff_time = time.time() - (UPLOAD_DELETION_CUTOFF_DAYS * 24 * 60 * 60)
     for dir_path, _, filenames in os.walk(LOCAL_UPLOAD_PATH, topdown=False):
         for filename in filenames:
             file_path = os.path.join(dir_path, filename)
