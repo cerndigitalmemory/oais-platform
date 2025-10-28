@@ -3,7 +3,7 @@ create-release:
   stage: tag
   needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
   only:
-    - auto-create-tags
+    - main
   image: registry.cern.ch/docker.io/library/python:3.11
   variables:
     PRIVATE_TOKEN: "$PRIVATE_TOKEN"

@@ -113,9 +113,7 @@ get-version:
 
 # Add deploy and trigger jobs for all envs
 include:
-  - project: digital-memory/oais-platform
-    ref: auto-create-tags
-    file: .gitlab-ci-common.yml
+  - local: .gitlab-ci-common.yml
 
 update_recently_updated_labels:
   stage: maintenance
