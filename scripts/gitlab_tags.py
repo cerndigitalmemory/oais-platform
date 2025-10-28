@@ -34,7 +34,6 @@ Then run: python scripts/gitlab_tags.py
 import os
 import re
 import sys
-
 import gitlab
 from gitlab.exceptions import GitlabGetError
 
