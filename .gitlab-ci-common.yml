@@ -1,33 +1,18 @@
-# spec:
-#   inputs:
-#     project:
-#       description: "oais-platform|oais-web"
-# ---
 # Pipeline stages that are common for oais-platform and oais-web
-# create-release:
-#   stage: tag
-#   needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
-#   only:
-#     - main
-#   script: 
-#     - |
-#       if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-#         echo "Invalid VERSION '$VERSION' (expected X.Y.Z)"
-#         exit 1
-#       fi
-#       TAG="v$VERSION"
-#       TAG_EXISTS=$(git tag --list $TAG)
-#       if [ -n "$TAG_EXISTS" ]; then
-#         echo "Tag $TAG already exists, skipping release creation"
-#         exit 0
-#       fi
-#     - |
-#       # Make sure we have tags and a clean repo view
-#       git fetch --tags --quiet
-#     - echo "Tag $TAG does not exist, creating tag"
-#     - git remote add gitlab_origin https://oauth2:$CREATE_NEW_TAG_TOKEN@gitlab.cern.ch/digitalmemory/$[[ inputs.project ]].git
-#     - git tag $TAG 
-#     - git push gitlab_origin $TAG    
+create-release:
+  stage: tag
+  needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
+  only:
+    - auto-create-tags
+  image: registry.cern.ch/docker.io/library/python:3.11
+  variables:
+    PRIVATE_TOKEN: "$PRIVATE_TOKEN"
+    BRANCH: "main"
+    PROJECT_ID: "$CI_PROJECT_ID"
+  script:
+    - pip install python-gitlab
+    - python scripts/gitlab_tags.py
+
 
 build-image:
   stage: build
