@@ -76,6 +76,10 @@ CELERY_BEAT_SCHEDULE = {
             "expires": 21600.0,
         },
     },
+    "upload-cleanup": {
+        "task": "upload_cleanup",
+        "schedule": crontab(minute=0, hour=2, day_of_month=1),
+    },
 }
 
 ## Authentication
@@ -316,6 +320,8 @@ BIC_UPLOAD_PATH = "oais-data"
 BIC_WORKDIR = "/tmp"
 # Path where uploaded files are temporarily stored to be picked up by bagit-create
 LOCAL_UPLOAD_PATH = "oais-data/uploads"
+# Grace period before uploaded files can get deleted by the upload_cleanup task
+UPLOAD_DELETION_CUTOFF_DAYS = 14
 
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
