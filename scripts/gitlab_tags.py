@@ -1,36 +1,40 @@
 """
 Automated Git Tag Creation Script
 
-This script automates the creation and pushing of semantic version tags for the OAIS platform projects.
-It was converted from a GitLab CI pipeline job that handles release tagging across multiple repositories.
+This script automates the creation and pushing of semantic version tags for GitLab projects.
+It provides a standalone Python solution for release tagging that can be integrated into CI/CD pipelines
+or run manually for version management.
 
 PURPOSE:
 --------
-- Automatically creates git tags based on version numbers extracted from project files
-- Ensures consistent release tagging across oais-platform (Django backend) and oais-web (React frontend)
-- Prevents duplicate tag creation and maintains semantic versioning standards
-- Integrates with GitLab's release management workflow
+- Automatically creates git tags based on version numbers provided via environment variables
+- Prevents duplicate tag creation by checking existing tags in the remote repository
+- Integrates with GitLab API for secure tag creation and management
 
 WORKFLOW:
 ---------
-1. Validates that the VERSION follows semantic versioning format (X.Y.Z)
-2. Constructs a git tag name by prefixing version with 'v' (e.g., v1.2.3)
-3. Checks if the tag already exists to prevent duplicates
-4. Fetches latest tags from remote repository for accurate comparison
-5. Creates and pushes the new tag using authenticated GitLab access
+1. Validates required environment variables (PRIVATE_TOKEN, PROJECT_ID, VERSION, BRANCH)
+2. Validates that VERSION follows semantic versioning format (X.Y.Z)
+3. Constructs a git tag name by prefixing version with 'v' (e.g., v1.2.3)
+4. Connects to GitLab instance using API token authentication
+5. Fetches project details and checks if tag already exists
+6. Creates and pushes new tag to specified branch if it doesn't exist
 
-BUSINESS CONTEXT:
------------------
-This script is part of the CERN Digital Memory platform's CI/CD pipeline. It ensures that:
-- Each version bump in the codebase automatically creates a corresponding git tag
-- Release management is consistent between backend (Python/Django) and frontend (React) projects
-- Tags serve as reference points for deployments and release notes
-- Version history is properly tracked in git for audit and rollback purposes
+USAGE:
+------
+Set required environment variables:
+- PRIVATE_TOKEN: GitLab group token https://gitlab.cern.ch/groups/digitalmemory/-/settings/access_tokens?page=1
+- PROJECT_ID: GitLab project ID (numeric)
+- VERSION: Semantic version number (e.g., "1.2.3")
+- BRANCH: Target branch for tag creation (e.g., "main", "master")
+
+Then run: python scripts/gitlab_tags.py
 """
 
 import os
 import re
 import sys
+
 import gitlab
 from gitlab.exceptions import GitlabGetError
 
