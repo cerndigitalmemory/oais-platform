@@ -58,3 +58,18 @@ class UploadCleanupTaskTest(APITestCase):
         self.assertTrue(os.path.exists(self.new_file_path))
         self.assertTrue(os.path.exists(self.new_upload))
         self.assertTrue(os.path.exists(self.temp_dir))
+
+    @patch("oais_platform.oais.tasks.create_sip.time.time")
+    def test_upload_cleanup_no_path(self, mock_time):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+        with self.assertLogs(
+            "oais_platform.oais.tasks.create_sip", level="WARNING"
+        ) as logs:
+            upload_cleanup.apply()
+
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn(
+            "Cannot clean up uploads: local upload path does not exist", logs.output[0]
+        )

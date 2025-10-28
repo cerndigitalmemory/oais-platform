@@ -170,6 +170,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
 @shared_task(name="upload_cleanup", bind=True, ignore_result=True)
 def upload_cleanup(self):
     if not os.path.exists(LOCAL_UPLOAD_PATH):
+        logger.warning("Cannot clean up uploads: local upload path does not exist")
         return
 
     cutoff_time = time.time() - (UPLOAD_DELETION_CUTOFF_DAYS * 24 * 60 * 60)
