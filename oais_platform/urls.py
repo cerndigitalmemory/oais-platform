@@ -101,6 +101,7 @@ urlpatterns = [
                 path(
                     "token/refresh/", TokenRefreshView.as_view(), name="token_refresh"
                 ),
+                path("am-callback/", views.am_callback, name="am_callback"),
             ]
         ),
     ),

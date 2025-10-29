@@ -1326,3 +1326,12 @@ def check_for_tag_name_duplicate(title, creator, tag_id=None):
         .exclude(id=tag_id)
         .exists()
     )
+
+
+@api_view(["POST"])
+def am_callback(request):
+    package_uuid = request.GET.get("package_uuid")
+    package_name = request.GET.get("package_name")
+    logging.info(f"Callback for package {package_uuid} with name {package_name}")
+
+    return Response("Callback received.")
