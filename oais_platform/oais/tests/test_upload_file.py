@@ -121,6 +121,36 @@ class UploadFileEndpointTest(APITestCase):
             shutil.rmtree(self.expected_tmp_dir)
 
     def test_upload_success(self, mock_run_step, mock_recid):
+        title = "Test title"
+        author = "Test author"
+        data = {"file": self.uploaded_file, "title": title, "author": author}
+        response = self.client.post(self.url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], 0)
+
+        archive = Archive.objects.get()
+        step = Step.objects.get()
+
+        self.assertEqual(archive.recid, "mock_recid")
+        self.assertEqual(archive.requester, self.user)
+        self.assertEqual(archive.source, "local")
+        self.assertEqual(archive.title, title)
+
+        self.assertEqual(step.archive, archive)
+        self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
+        self.assertEqual(step.status, Status.NOT_RUN)
+        self.assertEqual(
+            json.loads(step.input_data),
+            {
+                "tmp_dir": self.expected_tmp_dir,
+                "author": author,
+            },
+        )
+
+        mock_run_step.assert_called_once_with(step, archive.id)
+
+    def test_upload_no_title_no_author(self, mock_run_step, mock_recid):
         data = {"file": self.uploaded_file}
         response = self.client.post(self.url, data)
 
@@ -133,6 +163,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(archive.recid, "mock_recid")
         self.assertEqual(archive.requester, self.user)
         self.assertEqual(archive.source, "local")
+        self.assertEqual(archive.title, "local - mock_recid")
 
         self.assertEqual(step.archive, archive)
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
