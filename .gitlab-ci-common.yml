@@ -1,14 +1,23 @@
+spec:
+  inputs:
+    trigger_file:
+      description: "File to watch for changes to trigger release"
+
+---
+
 # Pipeline stages that are common for oais-platform and oais-web
 create-release:
   stage: tag
   needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
-  only:
-    - main
   image: registry.cern.ch/docker.io/library/python:3.11
   variables:
     PRIVATE_TOKEN: "$PRIVATE_TOKEN"
     BRANCH: "main"
     PROJECT_ID: "$CI_PROJECT_ID"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+      - $[[inputs.trigger_file]]
   script:
     - pip install python-gitlab
     - python scripts/gitlab_tags.py
