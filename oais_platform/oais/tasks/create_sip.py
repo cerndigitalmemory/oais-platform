@@ -159,8 +159,12 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
     logger.info(bagit_result)
 
     if bagit_result["status"] == 1:
-        bagit_result.update(input_data)
-        return bagit_result
+        return {
+            "status": 1,
+            "errormsg": str(bagit_result["errormsg"]),
+            "tmp_dir": input_data.get("tmp_dir"),
+            "author": input_data.get("author"),
+        }
 
     _delete_local_upload(input_data.get("tmp_dir"))
 
