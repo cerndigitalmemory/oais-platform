@@ -114,6 +114,8 @@ get-version:
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
+    inputs:
+      trigger_file: "oais_platform/__init__.py"
 
 update_recently_updated_labels:
   stage: maintenance
