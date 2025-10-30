@@ -1330,8 +1330,8 @@ def check_for_tag_name_duplicate(title, creator, tag_id=None):
 
 @api_view(["POST"])
 def am_callback(request):
-    package_uuid = request.GET.get("package_uuid")
-    package_name = request.GET.get("package_name")
+    package_uuid = request.data.get("package_uuid")
+    package_name = request.data.get("package_name")
     logging.info(f"Callback for package {package_uuid} with name {package_name}")
 
     return Response("Callback received.")
