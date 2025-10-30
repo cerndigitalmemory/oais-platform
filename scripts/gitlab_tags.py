@@ -60,7 +60,7 @@ def validate_environment_vars():
     return missing_vars
 
 
-def validate_version(version):
+def validate_version(version, branch):
     """
     Validate that version follows semantic versioning format (X.Y.Z).
 
@@ -70,7 +70,10 @@ def validate_version(version):
     Returns:
         True if valid, False otherwise
     """
-    pattern = r"^[0-9]+\.[0-9]+\.[0-9]+.*$"
+    if branch != "main":
+        pattern = r"^[0-9]+\.[0-9]+\.[0-9]+-RC[0-9]*$"
+    else:
+        pattern = r"^[0-9]+\.[0-9]+\.[0-9]+.*$"
     return bool(re.match(pattern, version))
 
 
@@ -114,8 +117,12 @@ def main():
         print(f"❌ Invalid environment variables: {', '.join(invalid_vars)}")
         sys.exit(1)
     # Validate version format
-    if not validate_version(VERSION):
-        print(f"❌ Invalid VERSION '{VERSION}' (expected X.Y.Z format)")
+    if not validate_version(VERSION, BRANCH):
+        print(
+            f"❌ Invalid VERSION '{VERSION}' for branch '{BRANCH}' (expected X.Y.Z for 'main' branch and 'X.Y.Z-RC[0-9]' for feature branches)"
+        )
+        if BRANCH != "main":
+            sys.exit(0)
         sys.exit(1)
 
     gl = gitlab.Gitlab(GITLAB_URL, private_token=TOKEN)
