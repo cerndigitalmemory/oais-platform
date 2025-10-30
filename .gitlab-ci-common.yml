@@ -1,10 +1,3 @@
-spec:
-  inputs:
-    trigger_file:
-      description: "File to watch for changes to trigger release"
-
----
-
 # Pipeline stages that are common for oais-platform and oais-web
 create-release:
   stage: tag
@@ -12,13 +5,18 @@ create-release:
   image: registry.cern.ch/docker.io/library/python:3.11
   variables:
     PRIVATE_TOKEN: "$PRIVATE_TOKEN"
-    BRANCH: "main"
+    BRANCH: "$CI_COMMIT_BRANCH"
     PROJECT_ID: "$CI_PROJECT_ID"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-      - $[[inputs.trigger_file]]
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
   script:
+    - |
+      if [ "$CI_PROJECT_NAME" != "oais-platform" ]; then
+        mkdir scripts
+        git clone https://gitlab.cern.ch/digitalmemory/oais-platform.git
+        cp oais-platform/scripts/gitlab_tags.py scripts/gitlab_tags.py
+        rm -rf oais-platform
+      fi
     - pip install python-gitlab
     - python scripts/gitlab_tags.py
 
