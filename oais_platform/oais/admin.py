@@ -50,6 +50,8 @@ class ArchiveAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "resource_link",
     )
 
+    raw_id_fields = ["resource", "last_step", "last_completed_step"]
+
     def last_step_link(self, obj):
         related_obj = obj.last_step
         if related_obj:
@@ -96,6 +98,13 @@ class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "start_date",
         "finish_date",
     )
+
+    raw_id_fields = [
+        "archive",
+        "initiated_by_harvest_batch",
+        "input_step",
+        "initiated_by_user",
+    ]
 
     def archive_link(self, obj):
         related_obj = obj.archive
@@ -153,6 +162,8 @@ class CollectionAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "internal",
         "archive_count",
     )
+
+    raw_id_fields = ["archives"]
 
     def archive_count(self, obj):
         return obj.archive_count
@@ -253,6 +264,8 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "batch_size",
         "batch_delay_minutes",
     )
+
+    raw_id_fields = ["collection"]
 
     def source_name(self, obj):
         if obj.source:
