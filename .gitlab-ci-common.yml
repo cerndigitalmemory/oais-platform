@@ -23,7 +23,7 @@ create-release:
     - |
       if [ ! -f scripts/gitlab_tags.py ]; then
         mkdir scripts
-        curl "https://gitlab.cern.ch/digitalmemory/oais-platform/-/raw/main/scripts/gitlab_tags.py" > scripts/gitlab_tags
+        curl "https://gitlab.cern.ch/digitalmemory/oais-platform/-/raw/main/scripts/gitlab_tags.py" > scripts/gitlab_tags.py
       fi
     - pip install python-gitlab
     - python scripts/gitlab_tags.py
