@@ -966,7 +966,7 @@ def upload_file(request):
         source=source,
         source_url="",
         requester=request.user,
-        title=f"{source} - {recid}",
+        title=request.POST.get("title") or f"{source} - {recid}",
     )
     step = Step.objects.create(
         archive=archive,
@@ -995,7 +995,12 @@ def upload_file(request):
             "Error occurred while processing the file, please try again or contact the admins."
         )
 
-    step.set_input_data({"tmp_dir": tmp_dir, "author": request.user.username})
+    step.set_input_data(
+        {
+            "tmp_dir": tmp_dir,
+            "author": request.POST.get("author") or request.user.username,
+        }
+    )
 
     run_step(step, archive.id)
 
