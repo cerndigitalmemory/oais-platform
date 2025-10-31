@@ -11,11 +11,9 @@ create-release:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
   script:
     - |
-      if [ "$CI_PROJECT_NAME" != "oais-platform" ]; then
+      if [ ! -f scripts/gitlab_tags.py ]; then
         mkdir scripts
-        git clone https://gitlab.cern.ch/digitalmemory/oais-platform.git
-        cp oais-platform/scripts/gitlab_tags.py scripts/gitlab_tags.py
-        rm -rf oais-platform
+        curl "https://gitlab.cern.ch/digitalmemory/oais-platform/-/raw/main/scripts/gitlab_tags.py" > scripts/gitlab_tags
       fi
     - pip install python-gitlab
     - python scripts/gitlab_tags.py
