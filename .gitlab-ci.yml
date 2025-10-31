@@ -98,8 +98,6 @@ build-scripts-image:
 
 get-version:
   stage: tag
-  only:
-  - main
   script:
   - |
       VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
@@ -108,12 +106,14 @@ get-version:
   artifacts:
     reports:
       dotenv: build.env
-  except:
-    - schedules
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
 
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
+    inputs:
+      version_file: "oais_platform/__init__.py"
 
 update_recently_updated_labels:
   stage: maintenance
