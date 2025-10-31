@@ -14,8 +14,8 @@ PURPOSE:
 WORKFLOW:
 ---------
 1. Validates required environment variables (PRIVATE_TOKEN, PROJECT_ID, VERSION, BRANCH)
-2. Validates that VERSION follows semantic versioning format (X.Y.Z)
-3. Constructs a git tag name by prefixing version with 'v' (e.g., v1.2.3)
+2. Validates that VERSION follows semantic versioning format (X.Y.Z(-rcD)?)
+3. Constructs a git tag name by prefixing version with 'v' (e.g., v1.2.3, or v1.2.3-rc1 for feature branches)s
 4. Connects to GitLab instance using API token authentication
 5. Fetches project details and checks if tag already exists
 6. Creates and pushes new tag to specified branch if it doesn't exist
@@ -71,9 +71,9 @@ def validate_version(version, branch):
         True if valid, False otherwise
     """
     if branch != "main":
-        pattern = r"^[0-9]+\.[0-9]+\.[0-9]+-RC[0-9]*$"
+        pattern = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-RC(0|[1-9]\d*)$"
     else:
-        pattern = r"^[0-9]+\.[0-9]+\.[0-9]+.*$"
+        pattern = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
     return bool(re.match(pattern, version))
 
 
@@ -84,7 +84,7 @@ def fetch_project(gitlab, project_id):
         return project
     except GitlabGetError as e:
         print(f"❌ Failed to fetch project {project_id}: {e}")
-        sys.exit(1)
+        return False
 
 
 def tag_exist(project, tag):
@@ -104,9 +104,10 @@ def create_and_push_tag(project, tag, branch):
         tag = project.tags.create({"tag_name": tag, "ref": branch})
         # Configure git to use the token for authentication
         print(f"✅ Successfully created and pushed tag {tag}")
+        return True
     except:
         print(f"❌ Failed to create tag {tag}: {e}")
-        sys.exit(1)
+        return False
 
 
 def main():
@@ -128,6 +129,8 @@ def main():
     gl = gitlab.Gitlab(GITLAB_URL, private_token=TOKEN)
 
     project = fetch_project(gl, PROJECT_ID)
+    if not project:
+        sys.exit(1)
 
     tag = f"v{VERSION}"
     print(f"🚀 Starting release tag creation for {tag}")
@@ -140,7 +143,8 @@ def main():
     print(f"✨ Tag {tag} does not exist, creating tag...")
 
     # Create and push the tag
-    create_and_push_tag(project, tag, BRANCH)
+    if not create_and_push_tag(project, tag, BRANCH):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
