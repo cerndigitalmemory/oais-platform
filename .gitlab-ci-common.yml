@@ -1,3 +1,11 @@
+spec:
+  inputs:
+    version_file:
+      type: string
+      description: 'Path to the file where the version is stored'  
+
+
+---
 # Pipeline stages that are common for oais-platform and oais-web
 create-release:
   stage: tag
@@ -9,6 +17,8 @@ create-release:
     PROJECT_ID: "$CI_PROJECT_ID"
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
+      changes:
+        - $[[ inputs.version_file ]]
   script:
     - |
       if [ ! -f scripts/gitlab_tags.py ]; then
