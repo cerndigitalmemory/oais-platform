@@ -66,6 +66,7 @@ from oais_platform.oais.statistics import (
     count_excluded_archives,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
+from oais_platform.oais.tasks.archivematica import callback_package
 from oais_platform.oais.tasks.pipeline_actions import (
     create_retry_step,
     execute_pipeline,
@@ -1308,6 +1309,24 @@ def batch_announce(request):
 def sources(request):
     sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
     return Response(sources)
+
+
+@permission_classes([SuperUserPermission])
+@api_view(["POST"])
+def am_callback(request):
+    package_uuid = request.data.get("package_uuid")
+    package_name = request.data.get("package_name")
+
+    if not package_uuid:
+        raise BadRequest("package_uuid is missing")
+
+    logging.info(
+        f"Archivematica callback for package {package_uuid} with name {package_name}"
+    )
+
+    callback_package.delay(package_uuid)
+
+    return Response("Callback received.")
 
 
 def check_allowed_path(path, username):

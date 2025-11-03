@@ -7,7 +7,7 @@ from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tasks.archivematica import archivematica
+from oais_platform.oais.tasks.archivematica import archivematica, get_task_name
 from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, AM_CONCURRENCY_LIMT
 
 
@@ -37,7 +37,7 @@ class ArchivematicaCreateTests(APITestCase):
 
         self.assertEqual(self.step.status, Status.WAITING)
         self.assertEqual(
-            periodic_task.name, f"Archivematica status for step: {self.step.id}"
+            periodic_task.name, get_task_name(self.step.id, "test_package_id")
         )
         self.assertEqual(periodic_task.task, "check_am_status")
         self.assertEqual(
