@@ -171,7 +171,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
             )
             result["retrying"] = True
             create_retry_step.apply_async(
-                args=(archive_id, True, StepName.PUSH_TO_CTA, api_key),
+                args=(archive_id, None, True, StepName.PUSH_TO_CTA, api_key),
                 eta=timezone.now() + timedelta(hours=1),
             )
         else:

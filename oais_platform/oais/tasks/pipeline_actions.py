@@ -5,6 +5,7 @@ import os
 from celery import shared_task
 from celery import states as celery_states
 from celery.utils.log import get_task_logger
+from django.contrib.auth.models import User
 from django.db import transaction
 
 from oais_platform.celery import app
@@ -87,13 +88,17 @@ def execute_pipeline(
             # No available step in the pipeline
             else:
                 # Automatically run next step ONLY if the automatic_next_step is set
-                next_step = archive.last_completed_step.step_type.automatic_next_step
+                last_step = archive.last_completed_step
+
+                next_step = last_step.step_type.automatic_next_step
 
                 if next_step:
                     step = create_step(
                         step_name=next_step.name,
                         archive=archive,
-                        input_step_id=archive.last_completed_step.id,
+                        input_step_id=last_step.id,
+                        user=last_step.initiated_by_user,
+                        harvest_batch=last_step.initiated_by_harvest_batch,
                     )
                 else:
                     return None, None
@@ -105,7 +110,9 @@ def execute_pipeline(
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
-def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=None):
+def create_retry_step(
+    self, archive_id, user_id=None, execute=False, step_name=None, api_key=None
+):
     archive = Archive.objects.get(pk=archive_id)
     last_step = Step.objects.get(pk=archive.last_step.id)
     if last_step and last_step.status != Status.FAILED:
@@ -119,6 +126,7 @@ def create_retry_step(self, archive_id, execute=False, step_name=None, api_key=N
         archive=archive,
         input_step_id=last_step.id,
         input_data=last_step.output_data,
+        user=User.objects.get(pk=user_id) if user_id else None,
         harvest_batch=last_step.initiated_by_harvest_batch,  # Keep tracking the batch to update batch status
     )
 

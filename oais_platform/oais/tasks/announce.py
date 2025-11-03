@@ -80,7 +80,7 @@ def announce_sip(announce_path, user):
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
     step = create_step(
-        StepName.ANNOUNCE, archive, input_step_id=None, input_data=input_data
+        StepName.ANNOUNCE, archive, input_step_id=None, input_data=input_data, user=user
     )
 
     # Let's copy the SIP to our storage

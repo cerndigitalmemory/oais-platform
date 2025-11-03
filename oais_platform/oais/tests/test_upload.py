@@ -118,3 +118,5 @@ class UploadTests(APITestCase):
                     None,
                     False,
                 )
+                self.assertEqual(latest_step.initiated_by_user, self.user)
+                self.assertEqual(latest_step.initiated_by_harvest_batch, None)

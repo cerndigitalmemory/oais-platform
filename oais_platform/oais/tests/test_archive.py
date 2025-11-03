@@ -368,6 +368,9 @@ class ArchiveTests(APITestCase):
             None,
             False,
         )
+        step = Step.objects.last()
+        self.assertEqual(step.initiated_by_user, self.requester)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_archive_unstage_superuser(self, mock_dispatch):
@@ -386,6 +389,9 @@ class ArchiveTests(APITestCase):
             None,
             False,
         )
+        step = Step.objects.last()
+        self.assertEqual(step.initiated_by_user, self.superuser)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
     def test_archive_mlt_unstage_forbidden(self):
         self.client.force_authenticate(user=self.requester)
@@ -432,6 +438,9 @@ class ArchiveTests(APITestCase):
             None,
             False,
         )
+        step = Step.objects.last()
+        self.assertEqual(step.initiated_by_user, self.requester)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_archive_mlt_unstage_superuser(self, mock_dispatch):
@@ -478,6 +487,9 @@ class ArchiveTests(APITestCase):
                 False,
             ),
         )
+        step = Step.objects.last()
+        self.assertEqual(step.initiated_by_user, self.superuser)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
     def test_archive_delete_staged_other_user(self):
         self.client.force_authenticate(user=self.other_user)

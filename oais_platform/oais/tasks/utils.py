@@ -10,7 +10,12 @@ logger = get_task_logger(__name__)
 
 
 def create_step(
-    step_name, archive, input_step_id=None, input_data=None, harvest_batch=None
+    step_name,
+    archive,
+    input_step_id=None,
+    input_data=None,
+    user=None,
+    harvest_batch=None,
 ):
     """
     Create a new Step of the desired type
@@ -26,6 +31,7 @@ def create_step(
         input_step_id=input_step_id,
         input_data=input_data,
         status=Status.WAITING,
+        initiated_by_user=user,
         initiated_by_harvest_batch=harvest_batch,
     )
 

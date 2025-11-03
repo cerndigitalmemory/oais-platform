@@ -1,5 +1,6 @@
 import json
 
+from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
@@ -16,9 +17,10 @@ class CreateRetryStepTests(APITestCase):
             output_data=json.dumps({"test": True}),
         )
         self.archive.set_last_step(self.step.id)
+        self.user = User.objects.create_superuser("user", "", "pw")
 
     def test_create_retry_step_success(self):
-        create_retry_step.apply(args=[self.archive.id])
+        create_retry_step.apply(args=[self.archive.id, self.user.id])
         retry_step = Step.objects.filter(
             step_type=self.step.step_type,
             archive=self.archive,
@@ -27,6 +29,8 @@ class CreateRetryStepTests(APITestCase):
         self.assertIsNotNone(retry_step)
         self.archive.refresh_from_db()
         self.assertEqual(self.archive.pipeline_steps, [retry_step.id])
+        self.assertEqual(retry_step.initiated_by_user, self.user)
+        self.assertEqual(retry_step.initiated_by_harvest_batch, None)
 
     def test_create_retry_step_not_failed(self):
         self.step.set_status(Status.COMPLETED)

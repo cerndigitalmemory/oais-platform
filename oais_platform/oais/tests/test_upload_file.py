@@ -147,6 +147,8 @@ class UploadFileEndpointTest(APITestCase):
                 "author": author,
             },
         )
+        self.assertEqual(step.initiated_by_user, self.user)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
         mock_run_step.assert_called_once_with(step, archive.id)
 
@@ -175,6 +177,8 @@ class UploadFileEndpointTest(APITestCase):
                 "author": self.user.username,
             },
         )
+        self.assertEqual(step.initiated_by_user, self.user)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
         mock_run_step.assert_called_once_with(step, archive.id)
 
@@ -220,5 +224,7 @@ class UploadFileEndpointTest(APITestCase):
                 "archive": archive.id,
             },
         )
+        self.assertEqual(step.initiated_by_user, self.user)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
 
         mock_run_step.assert_not_called()

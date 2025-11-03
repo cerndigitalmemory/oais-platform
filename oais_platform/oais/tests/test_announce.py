@@ -100,10 +100,11 @@ class AnnounceTests(APITestCase):
             status_code=302,
         )
         self.assertEqual(Archive.objects.count(), 1)
+        latest_step = Step.objects.latest("id")
         mock_dispatch.assert_called_once_with(
             StepType.get_by_stepname(StepName.ANNOUNCE),
             latest_archive_id,
-            Step.objects.latest("id").id,
+            latest_step.id,
             {
                 "foldername": ntpath.basename(path_to_sip),
                 "announce_path": path_to_sip,
@@ -111,6 +112,8 @@ class AnnounceTests(APITestCase):
             None,
             False,
         )
+        self.assertEqual(latest_step.initiated_by_user, self.user)
+        self.assertEqual(latest_step.initiated_by_harvest_batch, None)
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_announce_validation_failed(self, mock_dispatch):

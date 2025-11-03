@@ -463,6 +463,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 input_step=archive.last_completed_step,
                 status=Status.IN_PROGRESS,
                 input_data=archive.manifest,
+                initiated_by_user=request.user,
             )
 
             archive.set_archive_manifest(manifest)
@@ -485,7 +486,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.set_unstaged(approver=request.user)
 
         step = Step.objects.create(
-            archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
+            archive=archive,
+            step_name=StepName.HARVEST,
+            status=Status.NOT_RUN,
+            initiated_by_user=request.user,
         )
 
         try:
@@ -524,7 +528,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             job_tag.add_archive(archive)
 
             step = Step.objects.create(
-                archive=archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
+                archive=archive,
+                step_name=StepName.HARVEST,
+                status=Status.NOT_RUN,
+                initiated_by_user=request.user,
             )
             # Step is auto-approved and harvest step runs
             try:
@@ -591,7 +598,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest(e)
                 case "retry":
                     force_continue = True
-                    result = create_retry_step.apply(args=[archive_id])
+                    result = create_retry_step.apply(args=[archive_id, request.user.id])
                     result = result.get()
                     if result["errormsg"]:
                         raise BadRequest(result["errormsg"])
@@ -972,6 +979,7 @@ def upload_file(request):
         archive=archive,
         step_name=StepName.FILE_UPLOAD,
         status=Status.NOT_RUN,
+        initiated_by_user=request.user,
     )
 
     try:
@@ -1056,7 +1064,10 @@ def upload_sip(request):
         )
 
         step = Step.objects.create(
-            archive=archive, step_name=StepName.SIP_UPLOAD, status=Status.IN_PROGRESS
+            archive=archive,
+            step_name=StepName.SIP_UPLOAD,
+            status=Status.IN_PROGRESS,
+            initiated_by_user=request.user,
         )
         step.set_start_date()
 
