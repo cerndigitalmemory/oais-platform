@@ -86,7 +86,7 @@ deploy-prod:
 
 trigger-dev:
   extends: .trigger_template
-  stage: trigger-dev
+  stage: deploy-dev
   variables:
     ENV: "dev"
   needs:
@@ -96,7 +96,7 @@ trigger-dev:
 
 trigger-qa:
   extends: .trigger_template
-  stage: trigger-qa
+  stage: deploy-qa
   variables:
     ENV: "qa"
   needs:
@@ -106,7 +106,7 @@ trigger-qa:
 
 trigger-prod:
   extends: .trigger_template
-  stage: trigger-prod
+  stage: deploy-prod
   variables:
     ENV: "prod"
   needs:
