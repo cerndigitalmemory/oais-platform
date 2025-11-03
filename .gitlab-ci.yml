@@ -96,24 +96,32 @@ build-scripts-image:
     - buildah build -t $FQ_IMAGE_NAME --file "$CI_PROJECT_DIR/scripts/Dockerfile" "$CI_PROJECT_DIR"
     - buildah push $FQ_IMAGE_NAME
 
-get-version:
+create-tag:
   stage: tag
+  image: registry.cern.ch/docker.io/library/python:3.11
+  variables:
+    PRIVATE_TOKEN: "$PRIVATE_TOKEN"
+    BRANCH: "$CI_COMMIT_REF_NAME"
+    PROJECT_ID: "$CI_PROJECT_ID"
   script:
-  - |
-      VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
-      echo Version: $VERSION
-      echo "VERSION=$VERSION" >> build.env
-  artifacts:
-    reports:
-      dotenv: build.env
+    - |
+        export VERSION=$(grep "__version__" oais_platform/__init__.py | cut -d'"' -f2)
+        echo Version: $VERSION
+        pip install python-gitlab
+        python scripts/gitlab_tags.py
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
+     # When pushed to main and it's not a tag and the __init__.py file has changed
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null
+      changes:
+        - oais_platform/__init__.py
+    # When it is a merge request and the __init__.py has changed - for RC tags
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      changes:
+        - oais_platform/__init__.py
 
 # Add deploy and trigger jobs for all envs
 include:
   - local: .gitlab-ci-common.yml
-    inputs:
-      version_file: "oais_platform/__init__.py"
 
 update_recently_updated_labels:
   stage: maintenance

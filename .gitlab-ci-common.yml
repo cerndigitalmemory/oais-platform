@@ -1,34 +1,5 @@
-spec:
-  inputs:
-    version_file:
-      type: string
-      description: 'Path to the file where the version is stored'  
-
-
 ---
 # Pipeline stages that are common for oais-platform and oais-web
-create-release:
-  stage: tag
-  needs: ["get-version"]   # ensures artifacts (and the dotenv) are fetched
-  image: registry.cern.ch/docker.io/library/python:3.11
-  variables:
-    PRIVATE_TOKEN: "$PRIVATE_TOKEN"
-    BRANCH: "$CI_COMMIT_BRANCH"
-    PROJECT_ID: "$CI_PROJECT_ID"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null  
-      changes:
-        - $[[ inputs.version_file ]]
-  script:
-    - |
-      if [ ! -f scripts/gitlab_tags.py ]; then
-        mkdir scripts
-        curl "https://gitlab.cern.ch/digitalmemory/oais-platform/-/raw/main/scripts/gitlab_tags.py" > scripts/gitlab_tags.py
-      fi
-    - pip install python-gitlab
-    - python scripts/gitlab_tags.py
-
-
 build-image:
   stage: build
   image:
