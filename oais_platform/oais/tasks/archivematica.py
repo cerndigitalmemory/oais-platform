@@ -138,7 +138,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    task_name = f"Archivematica status for step: {step_id}"
+    task_name = get_task_name(step_id, message["id"])
 
     am = get_am_client()
 
@@ -227,6 +227,11 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
             )
 
     elif status == "FAILED":
+        remove_periodic_task_on_failure(task_name, step, am_status)
+
+    elif status == "USER_INPUT":
+        # this should not be possible with the automated pipeline but it happens sometimes
+        logger.error(f"Package requires user input for step {step.id}")
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
@@ -325,11 +330,50 @@ def create_check_am_status(package, step, archive_id, api_key):
     # Spawn a periodic task to check for the status of the package on AM
     PeriodicTask.objects.create(
         interval=schedule,
-        name=f"Archivematica status for step: {step.id}",
+        name=get_task_name(step.id, package["id"]),
         task="check_am_status",
         args=json.dumps([package, step.id, archive_id, api_key]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
     )
+
+
+def get_task_name(self, step_id, package_id):
+    return f"AM Status for step: {step_id} - {package_id}"
+
+
+@shared_task(
+    name="callback_package",
+    bind=True,
+    ignore_result=True,
+)
+def callback_package(self, package_uuid):
+    periodic_task = PeriodicTask.objects.filter(name__contains=package_uuid)
+    if periodic_task.count() > 1:
+        logger.error(f"Ambiguous package UUID found: {periodic_task.count()}")
+    elif not periodic_task.exists():
+        logger.error("Package with UUID not found")
+
+    periodic_task = periodic_task.get()
+    periodic_task.enabled = False
+    periodic_task.save()
+
+    check_am_status.apply(args=periodic_task.args)
+
+    step = Step.objects.get(pk=periodic_task.args[1])
+    if step.status == Status.COMPLETED:
+        logger.info(
+            f"Archivematica callback successful for step {step.id}, package uuid {package_uuid}."
+        )
+    elif step.status == Status.FAILED:
+        logger.warning(
+            f"Archivematica callback failed for step {step.id}, package uuid {package_uuid}."
+        )
+    else:
+        periodic_task.enabled = True
+        periodic_task.save()
+        logger.warning(
+            f"Archivematica callback incomplete for step {step.id}, package uuid {package_uuid} - periodic task enabled."
+        )
 
 
 def handle_completed_am_package(
