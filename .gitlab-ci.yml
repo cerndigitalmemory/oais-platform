@@ -4,11 +4,8 @@ stages:
   - tag
   - build
   - deploy-dev
-  - trigger-dev
   - deploy-qa
-  - trigger-qa
   - deploy-prod
-  - trigger-prod
   - maintenance
 
 check-isort:
