@@ -191,6 +191,7 @@ DATABASES = {
 ## File Uploads
 # set to 0 to avoid files being uploaded in memory
 FILE_UPLOAD_MAX_MEMORY_SIZE = 0
+FILE_UPLOAD_MAX_SIZE = 1073741824  # 1 GB
 
 ##  Password validation
 

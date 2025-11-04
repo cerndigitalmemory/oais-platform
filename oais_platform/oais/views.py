@@ -74,6 +74,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
 from oais_platform.oais.upload import sanitize_filename
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
+    FILE_UPLOAD_MAX_SIZE,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
 )
@@ -961,6 +962,9 @@ def step_statistics(request):
 def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")
+
+    if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE:
+        raise BadRequest("File is too big")
 
     source = "local"
     recid = hashlib.md5(
