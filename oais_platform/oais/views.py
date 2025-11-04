@@ -986,7 +986,8 @@ def upload_file(request):
         tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
         os.makedirs(tmp_dir, exist_ok=True)
         file_path = request.FILES["file"].temporary_file_path()
-        shutil.move(file_path, tmp_dir)
+        destination_path = os.path.join(tmp_dir, request.FILES["file"].name)
+        shutil.move(file_path, destination_path)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
         logging.error(error_msg)
