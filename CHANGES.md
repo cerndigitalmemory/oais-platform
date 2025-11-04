@@ -1,5 +1,9 @@
 # Changes
 
+## Version 2.3.1 (released 2025-11-04)
+- Step: set missing initiated_by_user
+- Pipeline: fix auto tag creation
+
 ## Version 2.3.0 (released 2025-10-31)
 - Pipeline: create GitLab tag for new version
 - Adding version to response header
