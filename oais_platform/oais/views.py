@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import json
 import logging
@@ -996,18 +997,20 @@ def upload_file(request):
         file_path = request.FILES["file"].temporary_file_path()
         destination_path = os.path.join(tmp_dir, original_filename)
         shutil.move(file_path, destination_path)
+    except OSError as e:
+        if e.errno == errno.ENOSPC:
+            error_msg = f"Upload storage is full. Cannot complete file move: {e}"
+            user_message = "Upload storage is full. Please contact the admins."
+        else:
+            error_msg = (
+                f"An operating system error occurred while processing the file: {e}"
+            )
+            user_message = "Error occurred while processing the file, please try again or contact the admins."
+        _handle_failed_upload(archive, step, error_msg)
+        raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        logging.error(error_msg)
-        step.set_status(Status.FAILED)
-        step.set_output_data(
-            {
-                "status": 1,
-                "errormsg": error_msg,
-                "archive": archive.id,
-            }
-        )
-        archive.set_last_step(step.id)
+        _handle_failed_upload(archive, step, error_msg)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
         )
@@ -1022,6 +1025,19 @@ def upload_file(request):
     run_step(step, archive.id)
 
     return Response({"status": 0, "archive": archive.id})
+
+
+def _handle_failed_upload(archive, step, error_msg):
+    logging.error(error_msg)
+    step.set_status(Status.FAILED)
+    step.set_output_data(
+        {
+            "status": 1,
+            "errormsg": error_msg,
+            "archive": archive.id,
+        }
+    )
+    archive.set_last_step(step.id)
 
 
 @extend_schema_view(
