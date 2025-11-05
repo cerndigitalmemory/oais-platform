@@ -137,6 +137,11 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(archive.source, "local")
         self.assertEqual(archive.title, title)
 
+        expected_file_path = os.path.join(
+            self.expected_tmp_dir, self.uploaded_file_name
+        )
+        self.assertTrue(os.path.exists(expected_file_path))
+
         self.assertEqual(step.archive, archive)
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.NOT_RUN)
