@@ -104,7 +104,17 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
             )
         else:
+            current_step.set_output_data(
+                {
+                    "status": 0,
+                    "details": "Uploaded to Archivematica - waiting for processing",
+                    "errormsg": None,
+                    "transfer_name": transfer_name,
+                }
+            )
+
             create_check_am_status(package, current_step, archive_id, api_key)
+            return current_step.output_data
     except requests.HTTPError as e:
         return set_and_return_error(
             current_step,
@@ -115,15 +125,6 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
         return set_and_return_error(
             current_step, f"Error while archiving {current_step.id}: {str(e)}"
         )
-
-    current_step.set_output_data(
-        {
-            "status": 0,
-            "details": "Uploaded to Archivematica - waiting for processing",
-            "errormsg": None,
-        }
-    )
-    return current_step.output_data
 
 
 @shared_task(
@@ -138,7 +139,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    task_name = get_task_name(step_id, message["id"])
+    task_name = get_task_name(step)
 
     am = get_am_client()
 
@@ -209,6 +210,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
 
     status = am_status["status"]
     microservice = am_status["microservice"]
+    am_status["transfer_name"] = json.loads(step.output_data)["transfer_name"]
 
     logger.info(f"Status for {step_id} is: {status}")
 
@@ -323,6 +325,12 @@ def get_am_client():
 def create_check_am_status(package, step, archive_id, api_key):
     # overwrite the start date so the waiting limit is counted from here
     step.set_start_date()
+    task_name = get_task_name(step)
+    # Check for the existing task by name
+    if PeriodicTask.objects.filter(name=task_name).exists():
+        raise Exception(
+            f"Task '{task_name}' already exists, previous job is still in progress"
+        )
     # Create the scheduler
     schedule, _ = IntervalSchedule.objects.get_or_create(
         every=AM_POLLING_INTERVAL, period=IntervalSchedule.MINUTES
@@ -330,15 +338,20 @@ def create_check_am_status(package, step, archive_id, api_key):
     # Spawn a periodic task to check for the status of the package on AM
     PeriodicTask.objects.create(
         interval=schedule,
-        name=get_task_name(step.id, package["id"]),
+        name=task_name,
         task="check_am_status",
         args=json.dumps([package, step.id, archive_id, api_key]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
     )
 
 
-def get_task_name(step_id, package_id):
-    return f"AM Status for step: {step_id} - {package_id}"
+def get_task_name(step):
+    output_data = json.loads(step.output_data)
+    if not output_data or "transfer_name" not in output_data:
+        raise Exception(
+            f"Step {step.id} output data is missing the required 'transfer_name' field."
+        )
+    return f"AM Status for step: {step.id}, package: {output_data['transfer_name']}"
 
 
 @shared_task(
@@ -346,12 +359,14 @@ def get_task_name(step_id, package_id):
     bind=True,
     ignore_result=True,
 )
-def callback_package(self, package_uuid):
-    periodic_task = PeriodicTask.objects.filter(name__contains=package_uuid)
+def callback_package(self, package_name):
+    periodic_task = PeriodicTask.objects.filter(name__contains=package_name)
     if periodic_task.count() > 1:
-        logger.error(f"Ambiguous package UUID found: {periodic_task.count()}")
+        logger.error(f"Ambiguous package name found: {periodic_task.count()}")
+        return
     elif not periodic_task.exists():
-        logger.error("Package with UUID not found")
+        logger.error("Package with name not found")
+        return
 
     periodic_task = periodic_task.get()
     periodic_task.enabled = False
@@ -362,17 +377,17 @@ def callback_package(self, package_uuid):
     step = Step.objects.get(pk=periodic_task.args[1])
     if step.status == Status.COMPLETED:
         logger.info(
-            f"Archivematica callback successful for step {step.id}, package uuid {package_uuid}."
+            f"Archivematica callback successful for step {step.id}, package {package_name}."
         )
     elif step.status == Status.FAILED:
         logger.warning(
-            f"Archivematica callback failed for step {step.id}, package uuid {package_uuid}."
+            f"Archivematica callback failed for step {step.id}, package {package_name}."
         )
     else:
         periodic_task.enabled = True
         periodic_task.save()
         logger.warning(
-            f"Archivematica callback incomplete for step {step.id}, package uuid {package_uuid} - periodic task enabled."
+            f"Archivematica callback incomplete for step {step.id}, package {package_name} - periodic task enabled."
         )
 
 
