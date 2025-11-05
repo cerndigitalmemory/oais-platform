@@ -36,9 +36,7 @@ class ArchivematicaCreateTests(APITestCase):
         task_arg = json.loads(periodic_task.args)
 
         self.assertEqual(self.step.status, Status.WAITING)
-        self.assertEqual(
-            periodic_task.name, get_task_name(self.step.id, "test_package_id")
-        )
+        self.assertEqual(periodic_task.name, get_task_name(self.step))
         self.assertEqual(periodic_task.task, "check_am_status")
         self.assertEqual(
             task_arg,

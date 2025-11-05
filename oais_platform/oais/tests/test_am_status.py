@@ -22,6 +22,7 @@ class ArchivematicaStatusTests(APITestCase):
 
         # simulate archivematica step started
         self.step.set_start_date()
+        self.step.set_output_data({"transfer_name": "test_transfer_name"})
 
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
@@ -107,7 +108,9 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_completed_uuid_not_found_retry_limit(
         self, periodic_tasks, get_unit_status, get_package_details
     ):
-        self.step.set_output_data({"package_retry": 5})
+        self.step.set_output_data(
+            {"package_retry": 5, "transfer_name": "test_transfer_name"}
+        )
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Remove the processing directory",

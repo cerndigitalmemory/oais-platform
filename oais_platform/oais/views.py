@@ -1328,14 +1328,14 @@ def am_callback(request):
     package_uuid = request.data.get("package_uuid")
     package_name = request.data.get("package_name")
 
-    if not package_uuid:
-        raise BadRequest("package_uuid is missing")
+    if not package_name:
+        raise BadRequest("package_name is missing")
 
     logging.info(
         f"Archivematica callback for package {package_uuid} with name {package_name}"
     )
 
-    callback_package.delay(package_uuid)
+    callback_package.delay(package_name)
 
     return Response("Callback received.")
 
