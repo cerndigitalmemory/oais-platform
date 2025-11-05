@@ -964,7 +964,7 @@ def upload_file(request):
         raise BadRequest("File missing")
 
     if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE:
-        raise BadRequest("File is too big")
+        raise BadRequest("File is too large")
 
     source = "local"
     recid = hashlib.md5(

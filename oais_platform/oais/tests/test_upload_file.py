@@ -2,17 +2,21 @@ import json
 import os
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from django.contrib.auth.models import Permission, User
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import upload
-from oais_platform.settings import BIC_UPLOAD_PATH, LOCAL_UPLOAD_PATH
+from oais_platform.settings import (
+    BIC_UPLOAD_PATH,
+    FILE_UPLOAD_MAX_SIZE,
+    LOCAL_UPLOAD_PATH,
+)
 
 
 @patch("bagit_create.main.process")
@@ -274,4 +278,19 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(step.initiated_by_user, self.user)
         self.assertEqual(step.initiated_by_harvest_batch, None)
 
+        mock_run_step.assert_not_called()
+
+    def test_upload_file_too_large(self, mock_run_step, mock_recid):
+        data = {"file": self.uploaded_file}
+
+        with patch.object(
+            UploadedFile,
+            "size",
+            new_callable=PropertyMock,
+            return_value=FILE_UPLOAD_MAX_SIZE + 1,
+        ):
+            response = self.client.post(self.url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "File is too large")
         mock_run_step.assert_not_called()
