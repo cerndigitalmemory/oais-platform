@@ -1330,6 +1330,16 @@ def sources(request):
     return Response(sources)
 
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def get_app_config(request):
+    return Response(
+        {
+            "maxFileSize": FILE_UPLOAD_MAX_SIZE,
+        }
+    )
+
+
 def check_allowed_path(path, username):
     allowed_starting_paths = [
         f"/eos/home-{username[0]}/{username}/",
