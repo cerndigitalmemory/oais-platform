@@ -75,7 +75,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
 
     # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = (
-        archive.source + "__" + archive.recid + "::Archive_" + str(archive_id)
+        archive.source + "__" + archive.recid + "_Archive_" + str(archive_id)
     )
     if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
         transfer_name = "Archive_" + str(archive_id)
@@ -360,6 +360,7 @@ def get_task_name(step):
     ignore_result=True,
 )
 def callback_package(self, package_name):
+    logger.info(f"Callback for package {package_name} received.")
     periodic_task = PeriodicTask.objects.filter(name__contains=package_name)
     if periodic_task.count() > 1:
         logger.error(f"Ambiguous package name found: {periodic_task.count()}")
