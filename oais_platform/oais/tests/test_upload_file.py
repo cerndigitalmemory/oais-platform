@@ -157,6 +157,48 @@ class UploadFileEndpointTest(APITestCase):
 
         mock_run_step.assert_called_once_with(step, archive.id)
 
+    def test_upload_sanitized_filename(self, mock_run_step, mock_recid):
+        title = "Test title"
+        author = "Test author"
+        uploaded_file_name = "%20../file\x00_with𐍈_weird%2F_name.txt"
+        uploaded_file = SimpleUploadedFile(
+            uploaded_file_name, self.file_content, content_type="text/plain"
+        )
+
+        data = {"file": uploaded_file, "title": "Test title", "author": "Test author"}
+        response = self.client.post(self.url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], 0)
+
+        archive = Archive.objects.get()
+        step = Step.objects.get()
+
+        self.assertEqual(archive.recid, "mock_recid")
+        self.assertEqual(archive.requester, self.user)
+        self.assertEqual(archive.source, "local")
+        self.assertEqual(archive.title, title)
+
+        expected_file_path = os.path.join(
+            self.expected_tmp_dir, "file_with?_weird-_name.txt"
+        )
+        self.assertTrue(os.path.exists(expected_file_path))
+
+        self.assertEqual(step.archive, archive)
+        self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
+        self.assertEqual(step.status, Status.NOT_RUN)
+        self.assertEqual(
+            json.loads(step.input_data),
+            {
+                "tmp_dir": self.expected_tmp_dir,
+                "author": author,
+            },
+        )
+        self.assertEqual(step.initiated_by_user, self.user)
+        self.assertEqual(step.initiated_by_harvest_batch, None)
+
+        mock_run_step.assert_called_once_with(step, archive.id)
+
     def test_upload_no_title_no_author(self, mock_run_step, mock_recid):
         data = {"file": self.uploaded_file}
         response = self.client.post(self.url, data)
