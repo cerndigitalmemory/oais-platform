@@ -373,9 +373,10 @@ def callback_package(self, package_name):
     periodic_task.enabled = False
     periodic_task.save()
 
-    check_am_status.apply(args=periodic_task.args)
+    args = json.loads(periodic_task.args)
+    check_am_status.apply(args=args)
 
-    step = Step.objects.get(pk=periodic_task.args[1])
+    step = Step.objects.get(pk=args[1])
     if step.status == Status.COMPLETED:
         logger.info(
             f"Archivematica callback successful for step {step.id}, package {package_name}."
