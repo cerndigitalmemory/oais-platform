@@ -71,6 +71,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
+from oais_platform.oais.upload import sanitize_filename
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     LOCAL_UPLOAD_PATH,
@@ -983,10 +984,14 @@ def upload_file(request):
     )
 
     try:
+        original_filename = sanitize_filename(
+            os.path.basename(request.FILES["file"].name)
+        )
         tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
         os.makedirs(tmp_dir, exist_ok=True)
         file_path = request.FILES["file"].temporary_file_path()
-        shutil.move(file_path, tmp_dir)
+        destination_path = os.path.join(tmp_dir, original_filename)
+        shutil.move(file_path, destination_path)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
         logging.error(error_msg)
