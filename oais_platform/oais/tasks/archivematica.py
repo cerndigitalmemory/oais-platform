@@ -228,18 +228,31 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
                 task_name, step, {"status": "FAILED", "microservice": str(e)}
             )
 
-    elif status == "FAILED":
+    elif status == "FAILED" or status == "REJECTED":
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
-        logger.error(f"Package requires user input for step {step.id}")
+        logger.error(
+            f"Package requires user input for step {step.id} - automatic pipeline failed"
+        )
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
         step.set_output_data(am_status)
         step.set_status(Status.IN_PROGRESS)
+        try:
+            task = PeriodicTask.objects.get(name=task_name)
+            task.enabled = (
+                True  # If it was triggered by a callback but not completed re-enable it
+            )
+            task.save()
+        except PeriodicTask.DoesNotExist:
+            logger.warning(f"PeriodicTask {task_name} for step {step.id} not found.")
     else:
+        logger.warning(
+            f"Unknown status from Archivematica: {status}, for step {step.id}"
+        )
         step.set_output_data(am_status)
 
 
@@ -374,23 +387,8 @@ def callback_package(self, package_name):
     periodic_task.save()
 
     args = json.loads(periodic_task.args)
-    check_am_status.apply(args=args)
-
-    step = Step.objects.get(pk=args[1])
-    if step.status == Status.COMPLETED:
-        logger.info(
-            f"Archivematica callback successful for step {step.id}, package {package_name}."
-        )
-    elif step.status == Status.FAILED:
-        logger.warning(
-            f"Archivematica callback failed for step {step.id}, package {package_name}."
-        )
-    else:
-        periodic_task.enabled = True
-        periodic_task.save()
-        logger.warning(
-            f"Archivematica callback incomplete for step {step.id}, package {package_name} - periodic task enabled."
-        )
+    # Callback is triggered by post-store AIP but it's not the last step, need to query the result with a delay
+    check_am_status.apply_async(args=args, countdown=30)
 
 
 def handle_completed_am_package(
