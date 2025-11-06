@@ -2,10 +2,8 @@ import hashlib
 import json
 import logging
 import os
-import re
 import shutil
 import time
-import urllib
 import zipfile
 from pathlib import PurePosixPath
 from shutil import make_archive
@@ -73,6 +71,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
+from oais_platform.oais.upload import sanitize_filename
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     LOCAL_UPLOAD_PATH,
@@ -1348,15 +1347,3 @@ def check_for_tag_name_duplicate(title, creator, tag_id=None):
         .exclude(id=tag_id)
         .exists()
     )
-
-
-def sanitize_filename(filename):
-    """
-    Converts filename to be able to be safely processed in the pipeline (like Archivematica).
-    """
-    filename = urllib.parse.unquote(filename)
-    if re.search(r"[/\x00-\x1F\U00010000-\U0010FFFF]", filename):
-        logging.warning("Filename with invalid characters detected. Sanitizing.")
-        filename = re.sub(r"[/\x00-\x1F]", "-", filename)
-        filename = re.sub(r"[^\u0000-\uFFFF]", "?", filename)
-    return filename
