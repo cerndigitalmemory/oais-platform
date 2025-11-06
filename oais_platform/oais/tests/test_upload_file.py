@@ -14,7 +14,8 @@ from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
     BIC_UPLOAD_PATH,
-    FILE_UPLOAD_MAX_SIZE,
+    FILE_UPLOAD_MAX_SIZE_BYTE,
+    FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
 )
 
@@ -287,10 +288,13 @@ class UploadFileEndpointTest(APITestCase):
             UploadedFile,
             "size",
             new_callable=PropertyMock,
-            return_value=FILE_UPLOAD_MAX_SIZE + 1,
+            return_value=FILE_UPLOAD_MAX_SIZE_BYTE + 1,
         ):
             response = self.client.post(self.url, data)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], "File is too large")
+        self.assertEqual(response.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        self.assertEqual(
+            response.data["detail"],
+            f"File exceeds the maximum allowed size ({FILE_UPLOAD_MAX_SIZE_GB} GB).",
+        )
         mock_run_step.assert_not_called()

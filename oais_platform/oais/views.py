@@ -27,7 +27,11 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from oais_platform.oais.exceptions import BadRequest, InternalServerError
+from oais_platform.oais.exceptions import (
+    BadRequest,
+    InternalServerError,
+    PayloadTooLarge,
+)
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     ApiKey,
@@ -72,10 +76,11 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
-from oais_platform.oais.upload import sanitize_filename
+from oais_platform.oais.upload import handle_failed_upload, sanitize_filename
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
-    FILE_UPLOAD_MAX_SIZE,
+    FILE_UPLOAD_MAX_SIZE_BYTE,
+    FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
 )
@@ -964,8 +969,10 @@ def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")
 
-    if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE:
-        raise BadRequest("File is too large")
+    if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE_BYTE:
+        raise PayloadTooLarge(
+            f"File exceeds the maximum allowed size ({FILE_UPLOAD_MAX_SIZE_GB} GB)."
+        )
 
     source = "local"
     recid = hashlib.md5(
@@ -1006,11 +1013,11 @@ def upload_file(request):
                 f"An operating system error occurred while processing the file: {e}"
             )
             user_message = "Error occurred while processing the file, please try again or contact the admins."
-        _handle_failed_upload(archive, step, error_msg)
+        handle_failed_upload(archive, step, error_msg)
         raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        _handle_failed_upload(archive, step, error_msg)
+        handle_failed_upload(archive, step, error_msg)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
         )
@@ -1025,19 +1032,6 @@ def upload_file(request):
     run_step(step, archive.id)
 
     return Response({"status": 0, "archive": archive.id})
-
-
-def _handle_failed_upload(archive, step, error_msg):
-    logging.error(error_msg)
-    step.set_status(Status.FAILED)
-    step.set_output_data(
-        {
-            "status": 1,
-            "errormsg": error_msg,
-            "archive": archive.id,
-        }
-    )
-    archive.set_last_step(step.id)
 
 
 @extend_schema_view(
@@ -1351,7 +1345,7 @@ def sources(request):
 def get_app_config(request):
     return Response(
         {
-            "maxFileSize": FILE_UPLOAD_MAX_SIZE,
+            "maxFileSize": FILE_UPLOAD_MAX_SIZE_BYTE,
         }
     )
 
