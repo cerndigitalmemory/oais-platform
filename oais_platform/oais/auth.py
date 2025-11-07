@@ -2,7 +2,10 @@ import logging
 
 import requests
 from django.contrib.auth.models import User
+from django.utils import timezone
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 from oais_platform.settings import (
     AUTH_SERVICE_ENDPOINT,
@@ -10,6 +13,8 @@ from oais_platform.settings import (
     OIDC_RP_CLIENT_ID,
     OIDC_RP_CLIENT_SECRET,
 )
+
+from .models import PersonalAccessToken
 
 
 class CERNAuthenticationBackend(OIDCAuthenticationBackend):
@@ -71,4 +76,37 @@ class CERNAuthenticationBackend(OIDCAuthenticationBackend):
         except Exception as e:
             logging.error("Could not obtain authorization service api token.")
             logging.debug(str(e))
+            return None
+
+
+class PersonalAccessTokenAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        auth_header = request.META.get("HTTP_AUTHORIZATION")
+
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+
+        token = auth_header.split(" ")[1]
+
+        try:
+            pat = PersonalAccessToken.objects.select_related("user").get(
+                token_hash=PersonalAccessToken.hash(token)
+            )
+
+            if pat.revoked:
+                raise AuthenticationFailed("Token has been revoked")
+
+            if pat.expires_at and pat.expires_at < timezone.now():
+                raise AuthenticationFailed("Token has expired")
+
+            if not pat.user.is_active:
+                raise AuthenticationFailed("User account is disabled")
+
+            # Update last used timestamp
+            pat.last_used_at = timezone.now()
+            pat.save(update_fields=["last_used_at"])
+
+            return (pat.user, pat)
+
+        except PersonalAccessToken.DoesNotExist:
             return None

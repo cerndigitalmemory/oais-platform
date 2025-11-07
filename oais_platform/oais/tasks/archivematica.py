@@ -243,9 +243,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
         step.set_status(Status.IN_PROGRESS)
         try:
             task = PeriodicTask.objects.get(name=task_name)
-            task.enabled = (
-                True  # If it was triggered by a callback but not completed re-enable it
-            )
+            task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
             task.save()
         except PeriodicTask.DoesNotExist:
             logger.warning(f"PeriodicTask {task_name} for step {step.id} not found.")
@@ -376,10 +374,12 @@ def callback_package(self, package_name):
     logger.info(f"Callback for package {package_name} received.")
     periodic_task = PeriodicTask.objects.filter(name__contains=package_name)
     if periodic_task.count() > 1:
-        logger.error(f"Ambiguous package name found: {periodic_task.count()}")
+        logger.error(
+            f"Ambiguous package name ({package_name}) found: {periodic_task.count()}"
+        )
         return
     elif not periodic_task.exists():
-        logger.error("Package with name not found")
+        logger.error(f"Package with name {package_name} not found")
         return
 
     periodic_task = periodic_task.get()
@@ -387,7 +387,7 @@ def callback_package(self, package_name):
     periodic_task.save()
 
     args = json.loads(periodic_task.args)
-    # Callback is triggered by post-store AIP but it's not the last step, need to query the result with a delay
+    # Callback is triggered by post-store AIP but it's not the last step, need to start with a delay
     check_am_status.apply_async(args=args, countdown=30)
 
 
