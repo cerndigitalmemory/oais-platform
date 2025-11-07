@@ -1,5 +1,8 @@
 # Changes
 
+## Version 2.3.2 (released 2025-11-07)
+- Local upload: keep file name, add file size limit
+
 ## Version 2.3.1 (released 2025-11-04)
 - Step: set missing initiated_by_user
 - Pipeline: fix auto tag creation
