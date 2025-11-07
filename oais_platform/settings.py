@@ -191,6 +191,9 @@ DATABASES = {
 ## File Uploads
 # set to 0 to avoid files being uploaded in memory
 FILE_UPLOAD_MAX_MEMORY_SIZE = 0
+FILE_UPLOAD_MAX_SIZE_GB = 1
+FILE_UPLOAD_MAX_SIZE_BYTE = FILE_UPLOAD_MAX_SIZE_GB * 10**9
+# nginx config has to be changed too for changing it locally
 
 ##  Password validation
 

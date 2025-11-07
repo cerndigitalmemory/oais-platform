@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import json
 import logging
@@ -26,7 +27,11 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from oais_platform.oais.exceptions import BadRequest, InternalServerError
+from oais_platform.oais.exceptions import (
+    BadRequest,
+    InternalServerError,
+    PayloadTooLarge,
+)
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     ApiKey,
@@ -71,9 +76,11 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
-from oais_platform.oais.upload import sanitize_filename
+from oais_platform.oais.upload import handle_failed_upload, sanitize_filename
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
+    FILE_UPLOAD_MAX_SIZE_BYTE,
+    FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
 )
@@ -962,6 +969,11 @@ def upload_file(request):
     if "file" not in request.FILES:
         raise BadRequest("File missing")
 
+    if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE_BYTE:
+        raise PayloadTooLarge(
+            f"File exceeds the maximum allowed size ({FILE_UPLOAD_MAX_SIZE_GB} GB)."
+        )
+
     source = "local"
     recid = hashlib.md5(
         (request.FILES["file"].name + request.user.username + str(time.time())).encode(
@@ -992,18 +1004,20 @@ def upload_file(request):
         file_path = request.FILES["file"].temporary_file_path()
         destination_path = os.path.join(tmp_dir, original_filename)
         shutil.move(file_path, destination_path)
+    except OSError as e:
+        if e.errno == errno.ENOSPC:
+            error_msg = f"Upload storage is full. Cannot complete file move: {e}"
+            user_message = "Upload storage is full. Please contact the admins."
+        else:
+            error_msg = (
+                f"An operating system error occurred while processing the file: {e}"
+            )
+            user_message = "Error occurred while processing the file, please try again or contact the admins."
+        handle_failed_upload(archive, step, error_msg)
+        raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        logging.error(error_msg)
-        step.set_status(Status.FAILED)
-        step.set_output_data(
-            {
-                "status": 1,
-                "errormsg": error_msg,
-                "archive": archive.id,
-            }
-        )
-        archive.set_last_step(step.id)
+        handle_failed_upload(archive, step, error_msg)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
         )
@@ -1324,6 +1338,16 @@ def batch_announce(request):
 def sources(request):
     sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
     return Response(sources)
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def get_app_config(request):
+    return Response(
+        {
+            "maxFileSize": FILE_UPLOAD_MAX_SIZE_BYTE,
+        }
+    )
 
 
 def check_allowed_path(path, username):

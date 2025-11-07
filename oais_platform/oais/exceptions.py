@@ -13,6 +13,12 @@ class DoesNotExist(APIException):
     default_code = "does_not_exist"
 
 
+class PayloadTooLarge(APIException):
+    status_code = 413
+    default_detail = "Payload Too Large"
+    default_code = "payload_too_large"
+
+
 class InternalServerError(APIException):
     status_code = 500
     default_detail = "Internal server error"
