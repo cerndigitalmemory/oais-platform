@@ -602,7 +602,6 @@ class PersonalAccessTokenManager(models.Manager):
     def create(self, *, token: str, **kwargs):
         # Hash token
         kwargs["token_hash"] = PersonalAccessToken.hash(token)
-        # Create PersonalAccessToken
         return super().create(**kwargs)
 
 

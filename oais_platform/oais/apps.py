@@ -16,6 +16,7 @@ class OaisConfig(AppConfig):
         logging.basicConfig(level=logging.INFO)
         logging.getLogger("fts3.rest.client").setLevel(logging.DEBUG)
 
+        # Skip initialization for some management command
         skip_commands = ["migrate", "makemigrations", "collectstatic", "create_token"]
         if len(sys.argv) > 1 and sys.argv[1] in skip_commands:
             return

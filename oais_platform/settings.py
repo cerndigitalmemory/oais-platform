@@ -308,6 +308,8 @@ AM_SS_API_KEY = "test"
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 # Interval in minutes to poll Archivematica for status updates
 AM_POLLING_INTERVAL = 15  # minutes
+# After callback check status with delay
+AM_CALLBACK_DELAY = 10  # seconds
 
 # INVENIORDM integration
 

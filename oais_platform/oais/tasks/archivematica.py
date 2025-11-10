@@ -24,6 +24,7 @@ from oais_platform.settings import (
     AGGREGATED_FILE_SIZE_LIMIT,
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
+    AM_CALLBACK_DELAY,
     AM_CONCURRENCY_LIMT,
     AM_POLLING_INTERVAL,
     AM_SS_API_KEY,
@@ -388,7 +389,7 @@ def callback_package(self, package_name):
 
     args = json.loads(periodic_task.args)
     # Callback is triggered by post-store AIP but it's not the last step, need to start with a delay
-    check_am_status.apply_async(args=args, countdown=30)
+    check_am_status.apply_async(args=args, countdown=AM_CALLBACK_DELAY)
 
 
 def handle_completed_am_package(
