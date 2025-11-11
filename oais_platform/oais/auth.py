@@ -1,4 +1,5 @@
 import logging
+import re
 
 import requests
 from django.contrib.auth.models import User
@@ -83,7 +84,7 @@ class PersonalAccessTokenAuthentication(BaseAuthentication):
     def authenticate(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION")
 
-        if not auth_header or not auth_header.startswith("Bearer "):
+        if not auth_header or not re.match(r"^Bearer (\S+)$", auth_header):
             return None
 
         token = auth_header.split(" ")[1]
