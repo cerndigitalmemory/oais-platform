@@ -1351,8 +1351,8 @@ def get_app_config(request):
     )
 
 
-@permission_classes([SuperUserPermission])
 @api_view(["POST"])
+@permission_classes([SuperUserPermission])
 def am_callback(request):
     package_uuid = request.data.get("package_uuid")
     package_name = request.data.get("package_name")
