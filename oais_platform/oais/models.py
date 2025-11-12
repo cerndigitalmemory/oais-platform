@@ -115,6 +115,8 @@ class Archive(models.Model):
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
     sip_size = models.BigIntegerField(default=0)
     original_file_size = models.BigIntegerField(default=0)
+    # Timestamp from the upstream source
+    version_timestamp = models.DateTimeField(default=None, null=True)
 
     class Meta:
         ordering = ["-id"]
@@ -275,6 +277,24 @@ class Archive(models.Model):
             archive.pipeline_steps.append(step.id)
             archive.save()
 
+    @property
+    def is_pushed_to_tape(self):
+        return self.steps.filter(
+            step_type__name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
+        ).exists()
+
+    @property
+    def has_notified_source(self):
+        return self.steps.filter(
+            step_type__name=StepName.NOTIFY_SOURCE, status=Status.COMPLETED
+        ).exists()
+
+    @property
+    def is_pushed_to_registry(self):
+        return self.steps.filter(
+            step_type__name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
+        ).exists()
+
 
 class StepName(models.TextChoices):
     FILE_UPLOAD = "FILE_UPLOAD"
@@ -419,13 +439,13 @@ class Step(models.Model):
         if self.is_batch_initiated:
             # Check if the batch is finished
             batch = self.initiated_by_harvest_batch
-            if batch.size == batch.completed:
+            if batch.size - batch.skipped_count == batch.completed:
                 batch.set_status(BatchStatus.COMPLETED)
                 logging.info(f"Batch {batch.id} completed")
-            elif batch.size == batch.failed:
+            elif batch.size - batch.skipped_count == batch.failed:
                 batch.set_status(BatchStatus.FAILED)
                 logging.error(f"Batch {batch.id} failed")
-            elif batch.size == batch.completed + batch.failed:
+            elif batch.size - batch.skipped_count == batch.completed + batch.failed:
                 batch.set_status(BatchStatus.PARTIALLY_FAILED)
                 logging.warning(f"Batch {batch.id} partially failed")
 
@@ -648,13 +668,27 @@ class ScheduledHarvest(models.Model):
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
-    condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+    condition_unmodified_for_days = models.PositiveIntegerField(default=None, null=True)
+    condition_created_since_days = models.PositiveIntegerField(default=None, null=True)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
 
-    def set_condition_unmodified_for_days(self, days):
-        self.condition_unmodified_for_days = days
-        self.save()
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        condition_unmodified_for_days__isnull=False,
+                        condition_created_since_days__isnull=True,
+                    )
+                    | models.Q(
+                        condition_unmodified_for_days__isnull=True,
+                        condition_created_since_days__isnull=False,
+                    )
+                ),
+                name="only_one_condition_not_null",
+            )
+        ]
 
     def set_enabled(self, enabled):
         self.enabled = enabled
@@ -692,6 +726,7 @@ class HarvestRun(models.Model):
     query_start_time = models.DateTimeField(default=None, null=True)
     query_end_time = models.DateTimeField(default=None, null=True)
     condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
+    condition_created_since_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
 
@@ -715,6 +750,10 @@ class HarvestRun(models.Model):
     @property
     def size(self):
         return sum(batch.size for batch in self.batches.all())
+
+    @property
+    def skipped_count(self):
+        return sum(batch.skipped_count for batch in self.batches.all())
 
 
 class BatchStatus(models.TextChoices):
@@ -741,6 +780,7 @@ class HarvestBatch(models.Model):
     harvest_run = models.ForeignKey(
         HarvestRun, on_delete=models.CASCADE, related_name="batches"
     )
+    skipped_count = models.PositiveIntegerField(default=0)
 
     @property
     def size(self):
@@ -789,4 +829,8 @@ class HarvestBatch(models.Model):
 
     def set_status(self, status):
         self.status = status
+        self.save()
+
+    def increase_skipped_count(self):
+        self.skipped_count += 1
         self.save()

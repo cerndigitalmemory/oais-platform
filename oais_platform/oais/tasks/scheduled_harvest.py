@@ -14,6 +14,8 @@ from oais_platform.oais.models import (
     HarvestRun,
     Profile,
     ScheduledHarvest,
+    Status,
+    StepName,
 )
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import execute_pipeline
@@ -67,26 +69,39 @@ def scheduled_harvest(self, scheduled_harvest_id):
         )
         last_harvest_time = last_run.query_end_time
 
-    end = datetime.now(timezone.utc) - timedelta(
-        days=scheduled_harvest.condition_unmodified_for_days
-    )
+    condition_days = None
+    condition_field = {}
 
-    harvest_run = HarvestRun.objects.create(
-        source=source,
-        scheduled_harvest=scheduled_harvest,
-        pipeline=scheduled_harvest.pipeline,
-        query_start_time=last_harvest_time,
-        query_end_time=end,
-        condition_unmodified_for_days=scheduled_harvest.condition_unmodified_for_days,
-        batch_size=scheduled_harvest.batch_size,
-        batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
-    )
+    if scheduled_harvest.condition_unmodified_for_days:
+        created_filter = False
+        condition_days = scheduled_harvest.condition_unmodified_for_days
+        condition_field = {"condition_unmodified_for_days": condition_days}
+    elif scheduled_harvest.condition_created_since_days:
+        created_filter = True
+        condition_days = scheduled_harvest.condition_created_since_days
+        condition_field = {"condition_created_since_days": condition_days}
+
+    if condition_days:
+        end = datetime.now(timezone.utc) - timedelta(days=condition_days)
+        harvest_run = HarvestRun.objects.create(
+            source=source,
+            scheduled_harvest=scheduled_harvest,
+            pipeline=scheduled_harvest.pipeline,
+            query_start_time=last_harvest_time,
+            query_end_time=end,
+            batch_size=scheduled_harvest.batch_size,
+            batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
+            **condition_field,
+        )
+
     records_count = 0
     batch_number = 1
     try:
         for records_to_harvest, new_harvest_time in get_source(
             source.name, api_key
-        ).get_records_to_harvest(start=last_harvest_time, end=end):
+        ).get_records_to_harvest(
+            start=last_harvest_time, end=end, created_filter=created_filter
+        ):
             logger.info(
                 f"Number of IDs to harvest for source {source.name}: {len(records_to_harvest)} until {new_harvest_time.strftime('%Y-%m-%dT%H:%M:%S')}."
             )
@@ -98,7 +113,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 harvest_collection = Collection.objects.create(
                     internal=True,
                     creator=user,
-                    description=f"Starting automatic harvests for {source.name} is in progress.",
+                    description=f"Starting automatic harvests for {source.name} is in progress. Filter: {'created' if created_filter else 'updated'}",
                 )
                 harvest_collection.set_title(
                     f"{source.name} - automatic harvest({harvest_collection.id})"
@@ -172,22 +187,26 @@ def batch_harvest(self, batch_id):
     batch.set_status(BatchStatus.IN_PROGRESS)
     for record in batch.records:
         try:
-            archive = Archive.objects.create(
-                recid=record["recid"],
-                title=record["title"],
-                source=batch.harvest_run.source.name,
-                source_url=record["source_url"],
-                requester=user,
-                approver=user,
-                original_file_size=record.get("file_size") or 0,
-            )
-            batch.harvest_run.collection.add_archive(archive.id)
+            exists = _check_if_archive_exists(batch, record)
 
-            for step_name in batch.harvest_run.pipeline:
-                archive.add_step_to_pipeline(step_name, harvest_batch=batch)
+            if not exists:
+                archive = Archive.objects.create(
+                    recid=record["recid"],
+                    title=record["title"],
+                    source=batch.harvest_run.source.name,
+                    source_url=record["source_url"],
+                    requester=user,
+                    approver=user,
+                    original_file_size=record.get("file_size") or 0,
+                    version_timestamp=record.get("updated"),
+                )
+                batch.harvest_run.collection.add_archive(archive.id)
 
-            step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
-            sigs.append(sig)
+                for step_name in batch.harvest_run.pipeline:
+                    archive.add_step_to_pipeline(step_name, harvest_batch=batch)
+
+                step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
+                sigs.append(sig)
         except Exception as e:
             logger.error(
                 f"Error while processing {record['recid']} from {batch.harvest_run.source.name}: {str(e)}"
@@ -215,7 +234,7 @@ def finalize_batch(self, results, batch_id):
         none_state_archive = batch.archives.filter(
             Q(state=ArchiveState.NONE)
         )  # Count archives that did not progress, first step should always create an SIP
-        if none_state_archive.count() == batch.size:
+        if none_state_archive.count() == batch.size - batch.skipped_count:
             logger.error(
                 f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches."
             )
@@ -249,3 +268,27 @@ def finalize_batch(self, results, batch_id):
             logger.info(
                 f"All batches of harvest run({batch.harvest_run.id}) have been completed for {batch.harvest_run.source.name}."
             )
+
+
+def _check_if_archive_exists(batch, record):
+    # Check if Archive exists with the same recid, version_timestamp and completed pipeline
+    pipeline = batch.harvest_run.pipeline
+    expected_status = Status.AIP if StepName.ARCHIVE in pipeline else Status.SIP
+    same_version = Archive.objects.filter(
+        source=batch.harvest_run.source.name,
+        recid=record["recid"],
+        status=expected_status,
+        version_timestamp=record.get("updated"),
+    ).all()
+
+    for a in same_version:
+        if StepName.NOTIFY_SOURCE in pipeline and not a.has_notified_source:
+            continue
+        if StepName.PUSH_TO_CTA in pipeline and not a.has_pushed_to_cta:
+            continue
+        if StepName.INVENIO_RDM_PUSH in pipeline and not a.is_pushed_to_registry:
+            continue
+        batch.increase_skipped_count()
+        return True
+
+    return False
