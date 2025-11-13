@@ -170,7 +170,17 @@ class ArchiveWithDuplicatesSerializer(ArchiveSerializer):
         duplicates = self.context.get("duplicates").filter(resource__id=obj.resource.id)
         results = []
         for d in duplicates:
-            results.append({"id": d.id, "timestamp": d.timestamp})
+            timestamp_match = (
+                obj.version_timestamp == d.version_timestamp
+                and obj.version_timestamp is not None
+            )
+            results.append(
+                {
+                    "id": d.id,
+                    "timestamp": d.timestamp,
+                    "timestamp_match": timestamp_match,
+                }
+            )
         return results
 
 

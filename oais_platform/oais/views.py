@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import zipfile
+from datetime import datetime
 from pathlib import PurePosixPath
 from shutil import make_archive
 from urllib.parse import unquote, urlparse
@@ -397,20 +398,28 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             return Response(None)
 
         for record in records:
-            try:
-                duplicates = Archive.objects.filter(
-                    recid=record["recid"], source=record["source"]
-                ).exclude(state=ArchiveState.NONE)
-                serializer = ArchiveSerializer(
-                    filter_archives(
-                        duplicates,
-                        request.user,
-                    ),
-                    many=True,
-                )
-                record["archives"] = serializer.data
-            except Archive.DoesNotExist:
-                record["archives"] = None
+            duplicates = Archive.objects.filter(
+                recid=record["recid"], source=record["source"]
+            ).exclude(state=ArchiveState.NONE)
+
+            record_updated = (
+                datetime.fromisoformat(record["updated"])
+                if record.get("updated")
+                else None
+            )
+
+            record["duplicates"] = (
+                [
+                    {
+                        "id": d.id,
+                        "timestamp": d.timestamp,
+                        "timestamp_match": d.version_timestamp == record_updated,
+                    }
+                    for d in duplicates
+                ]
+                if duplicates.exists()
+                else []
+            )
 
         return Response(records)
 
