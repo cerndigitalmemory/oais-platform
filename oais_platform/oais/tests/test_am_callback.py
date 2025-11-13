@@ -100,7 +100,7 @@ class AmCallbackTest(TestCase):
         )
 
         self.periodic_task = PeriodicTask.objects.create(
-            name="test-package-name-task",
+            name="Archive 1 test-package-name",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["arg1", "arg2"]),
@@ -168,7 +168,7 @@ class AmCallbackTest(TestCase):
         """Test callback when multiple periodic tasks match package name"""
         # Create another task with similar name
         duplicate_task = PeriodicTask.objects.create(
-            name="test-package-name-another-task",
+            name="Archive 2 test-package-name",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["dup_arg"]),
