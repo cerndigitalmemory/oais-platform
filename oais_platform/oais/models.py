@@ -438,16 +438,22 @@ class Step(models.Model):
 
         if self.is_batch_initiated:
             # Check if the batch is finished
-            batch = self.initiated_by_harvest_batch
-            if batch.size - batch.skipped_count == batch.completed:
-                batch.set_status(BatchStatus.COMPLETED)
-                logging.info(f"Batch {batch.id} completed")
-            elif batch.size - batch.skipped_count == batch.failed:
-                batch.set_status(BatchStatus.FAILED)
-                logging.error(f"Batch {batch.id} failed")
-            elif batch.size - batch.skipped_count == batch.completed + batch.failed:
-                batch.set_status(BatchStatus.PARTIALLY_FAILED)
-                logging.warning(f"Batch {batch.id} partially failed")
+            with transaction.atomic():
+                batch = HarvestBatch.objects.select_for_update().get(
+                    pk=self.initiated_by_harvest_batch.id
+                )
+                if (
+                    batch.size - batch.skipped_count == batch.completed
+                    or batch.skipped_count == batch.size
+                ):
+                    batch.set_status(BatchStatus.COMPLETED)
+                    logging.info(f"Batch {batch.id} completed")
+                elif batch.size - batch.skipped_count == batch.failed:
+                    batch.set_status(BatchStatus.FAILED)
+                    logging.error(f"Batch {batch.id} failed")
+                elif batch.size - batch.skipped_count == batch.completed + batch.failed:
+                    batch.set_status(BatchStatus.PARTIALLY_FAILED)
+                    logging.warning(f"Batch {batch.id} partially failed")
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -650,6 +656,11 @@ class PersonalAccessToken(models.Model):
         return secrets.token_urlsafe(32)
 
 
+class FilterType(models.TextChoices):
+    CREATED = "created"
+    UPDATED = "updated"
+
+
 class ScheduledHarvest(models.Model):
     """
     This model represents a scheduled harvest job that can be periodically executed.
@@ -668,27 +679,12 @@ class ScheduledHarvest(models.Model):
     pipeline = ArrayField(
         models.CharField(choices=StepName.choices), blank=True, default=list
     )
-    condition_unmodified_for_days = models.PositiveIntegerField(default=None, null=True)
-    condition_created_since_days = models.PositiveIntegerField(default=None, null=True)
+    filter_type = models.CharField(
+        choices=FilterType.choices, default=FilterType.UPDATED
+    )
+    grace_period_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
-
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                check=(
-                    models.Q(
-                        condition_unmodified_for_days__isnull=False,
-                        condition_created_since_days__isnull=True,
-                    )
-                    | models.Q(
-                        condition_unmodified_for_days__isnull=True,
-                        condition_created_since_days__isnull=False,
-                    )
-                ),
-                name="only_one_condition_not_null",
-            )
-        ]
 
     def set_enabled(self, enabled):
         self.enabled = enabled
@@ -725,8 +721,10 @@ class HarvestRun(models.Model):
     )
     query_start_time = models.DateTimeField(default=None, null=True)
     query_end_time = models.DateTimeField(default=None, null=True)
-    condition_unmodified_for_days = models.PositiveIntegerField(default=0, null=False)
-    condition_created_since_days = models.PositiveIntegerField(default=0, null=False)
+    filter_type = models.CharField(
+        choices=FilterType.choices, default=FilterType.UPDATED
+    )
+    grace_period_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
 

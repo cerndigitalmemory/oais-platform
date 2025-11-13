@@ -251,7 +251,7 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(len(response.data[0]["archives"]), 0)
+        self.assertEqual(len(response.data[0]["duplicates"]), 0)
 
     def test_record_check(self):
         self.client.force_authenticate(user=self.requester)
@@ -275,9 +275,14 @@ class ArchiveTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(len(response.data[0]["archives"]), 2)
-        self.assertEqual(response.data[0]["archives"][0]["recid"], "1")
-        self.assertEqual(response.data[0]["archives"][0]["source"], "test")
+        self.assertEqual(len(response.data[0]["duplicates"]), 2)
+        dup_ids = list(
+            Resource.objects.filter(recid="1", source="test").values_list(
+                "archive__id", flat=True
+            )
+        )
+        for duplicate in response.data[0]["duplicates"]:
+            self.assertIn(duplicate["id"], dup_ids)
 
     def test_resource_created(self):
         self.assertEqual(Resource.objects.all().count(), 3)

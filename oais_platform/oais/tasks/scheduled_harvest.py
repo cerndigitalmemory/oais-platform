@@ -14,7 +14,6 @@ from oais_platform.oais.models import (
     HarvestRun,
     Profile,
     ScheduledHarvest,
-    Status,
     StepName,
 )
 from oais_platform.oais.sources.utils import get_source
@@ -69,30 +68,20 @@ def scheduled_harvest(self, scheduled_harvest_id):
         )
         last_harvest_time = last_run.query_end_time
 
-    condition_days = None
-    condition_field = {}
-
-    if scheduled_harvest.condition_unmodified_for_days:
-        created_filter = False
-        condition_days = scheduled_harvest.condition_unmodified_for_days
-        condition_field = {"condition_unmodified_for_days": condition_days}
-    elif scheduled_harvest.condition_created_since_days:
-        created_filter = True
-        condition_days = scheduled_harvest.condition_created_since_days
-        condition_field = {"condition_created_since_days": condition_days}
-
-    if condition_days:
-        end = datetime.now(timezone.utc) - timedelta(days=condition_days)
-        harvest_run = HarvestRun.objects.create(
-            source=source,
-            scheduled_harvest=scheduled_harvest,
-            pipeline=scheduled_harvest.pipeline,
-            query_start_time=last_harvest_time,
-            query_end_time=end,
-            batch_size=scheduled_harvest.batch_size,
-            batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
-            **condition_field,
-        )
+    end = datetime.now(timezone.utc) - timedelta(
+        days=scheduled_harvest.grace_period_days
+    )
+    harvest_run = HarvestRun.objects.create(
+        source=source,
+        scheduled_harvest=scheduled_harvest,
+        pipeline=scheduled_harvest.pipeline,
+        query_start_time=last_harvest_time,
+        query_end_time=end,
+        batch_size=scheduled_harvest.batch_size,
+        batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
+        grace_period_days=scheduled_harvest.grace_period_days,
+        filter_type=scheduled_harvest.filter_type,
+    )
 
     records_count = 0
     batch_number = 1
@@ -100,7 +89,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
         for records_to_harvest, new_harvest_time in get_source(
             source.name, api_key
         ).get_records_to_harvest(
-            start=last_harvest_time, end=end, created_filter=created_filter
+            start=last_harvest_time, end=end, filter_type=harvest_run.filter_type
         ):
             logger.info(
                 f"Number of IDs to harvest for source {source.name}: {len(records_to_harvest)} until {new_harvest_time.strftime('%Y-%m-%dT%H:%M:%S')}."
@@ -113,7 +102,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 harvest_collection = Collection.objects.create(
                     internal=True,
                     creator=user,
-                    description=f"Starting automatic harvests for {source.name} is in progress. Filter: {'created' if created_filter else 'updated'}",
+                    description=f"Starting automatic harvests for {source.name} is in progress. Filter type: {harvest_run.filter_type}",
                 )
                 harvest_collection.set_title(
                     f"{source.name} - automatic harvest({harvest_collection.id})"
@@ -207,6 +196,8 @@ def batch_harvest(self, batch_id):
 
                 step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
                 sigs.append(sig)
+            else:
+                record["skipped"] = True
         except Exception as e:
             logger.error(
                 f"Error while processing {record['recid']} from {batch.harvest_run.source.name}: {str(e)}"
@@ -234,27 +225,34 @@ def finalize_batch(self, results, batch_id):
         none_state_archive = batch.archives.filter(
             Q(state=ArchiveState.NONE)
         )  # Count archives that did not progress, first step should always create an SIP
-        if none_state_archive.count() == batch.size - batch.skipped_count:
-            logger.error(
-                f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches."
-            )
-            batch.set_status(BatchStatus.FAILED)
-            return
-        if none_state_archive.count() > 0:
-            logger.warning(
-                f"Batch {batch_id}: {none_state_archive.count()} archives had no SIP: {list(none_state_archive.values_list('recid', flat=True))}."
-            )
-        if batch.size != batch.archives.count():
-            recid_list = [
-                record["recid"]
-                for record in batch.records
-                if record.get("recid") is not None
-            ]
-            archived_recid_list = batch.archives.all().values_list("recid", flat=True)
-            missing_recid_list = set(recid_list) - set(archived_recid_list)
-            logger.warning(
-                f"Batch {batch_id} has {len(missing_recid_list)} missing archives: {missing_recid_list}"
-            )
+        if batch.skipped_count == batch.size:
+            logger.info(f"Batch {batch_id} had all archives skipped.")
+            batch.set_status(BatchStatus.COMPLETED)
+        else:
+            if none_state_archive.count() > 0:
+                if none_state_archive.count() == batch.archives.count():
+                    logger.error(
+                        f"Batch {batch_id} had all archives failed the SIP creation. Halting further batches. Skipped count: {batch.skipped_count}"
+                    )
+                    batch.set_status(BatchStatus.FAILED)
+                    return
+                logger.warning(
+                    f"Batch {batch_id}: {none_state_archive.count()} archives had no SIP: {list(none_state_archive.values_list('recid', flat=True))}."
+                )
+            if batch.size != batch.archives.count():
+                recid_list = [
+                    record["recid"]
+                    for record in batch.records
+                    if record.get("recid") is not None and not record.get("skipped")
+                ]
+                if len(recid_list) > 0:
+                    archived_recid_list = batch.archives.all().values_list(
+                        "recid", flat=True
+                    )
+                    missing_recid_list = set(recid_list) - set(archived_recid_list)
+                    logger.warning(
+                        f"Batch {batch_id} has {len(missing_recid_list)} missing archives: {missing_recid_list}"
+                    )
 
         next_batch = batch.harvest_run.get_next_pending_batch()
         if next_batch:
@@ -273,11 +271,13 @@ def finalize_batch(self, results, batch_id):
 def _check_if_archive_exists(batch, record):
     # Check if Archive exists with the same recid, version_timestamp and completed pipeline
     pipeline = batch.harvest_run.pipeline
-    expected_status = Status.AIP if StepName.ARCHIVE in pipeline else Status.SIP
+    expected_state = (
+        ArchiveState.AIP if StepName.ARCHIVE in pipeline else ArchiveState.SIP
+    )
     same_version = Archive.objects.filter(
         source=batch.harvest_run.source.name,
         recid=record["recid"],
-        status=expected_status,
+        state=expected_state,
         version_timestamp=record.get("updated"),
     ).all()
 
