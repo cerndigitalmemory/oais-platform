@@ -10,6 +10,7 @@ from oais_platform.oais.models import (
     Collection,
     HarvestBatch,
     HarvestRun,
+    PersonalAccessToken,
     Profile,
     Resource,
     ScheduledHarvest,
@@ -223,6 +224,29 @@ class APIKeyAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     source_name.short_description = "Source"
+
+
+@admin.register(PersonalAccessToken)
+class PersonalAccessTokenAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    # Can only be created from the command line
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    list_display = [
+        "name",
+        "user_name",
+        "created_at",
+        "last_used_at",
+        "expires_at",
+        "revoked",
+    ]
+
+    def user_name(self, obj):
+        if obj.user:
+            return obj.user.username
+        return None
+
+    user_name.short_description = "Username"
 
 
 @admin.register(ScheduledHarvest)

@@ -24,6 +24,7 @@ from oais_platform.settings import (
     AGGREGATED_FILE_SIZE_LIMIT,
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
+    AM_CALLBACK_DELAY,
     AM_CONCURRENCY_LIMT,
     AM_POLLING_INTERVAL,
     AM_SS_API_KEY,
@@ -75,7 +76,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
 
     # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = (
-        archive.source + "__" + archive.recid + "::Archive_" + str(archive_id)
+        archive.source + "__" + archive.recid + "_Archive_" + str(archive_id)
     )
     if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
         transfer_name = "Archive_" + str(archive_id)
@@ -104,7 +105,17 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
             )
         else:
+            current_step.set_output_data(
+                {
+                    "status": 0,
+                    "details": "Uploaded to Archivematica - waiting for processing",
+                    "errormsg": None,
+                    "transfer_name": transfer_name,
+                }
+            )
+
             create_check_am_status(package, current_step, archive_id, api_key)
+            return current_step.output_data
     except requests.HTTPError as e:
         return set_and_return_error(
             current_step,
@@ -115,15 +126,6 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
         return set_and_return_error(
             current_step, f"Error while archiving {current_step.id}: {str(e)}"
         )
-
-    current_step.set_output_data(
-        {
-            "status": 0,
-            "details": "Uploaded to Archivematica - waiting for processing",
-            "errormsg": None,
-        }
-    )
-    return current_step.output_data
 
 
 @shared_task(
@@ -138,7 +140,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    task_name = f"Archivematica status for step: {step_id}"
+    task_name = get_task_name(step)
 
     am = get_am_client()
 
@@ -209,6 +211,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
 
     status = am_status["status"]
     microservice = am_status["microservice"]
+    am_status["transfer_name"] = json.loads(step.output_data)["transfer_name"]
 
     logger.info(f"Status for {step_id} is: {status}")
 
@@ -226,13 +229,29 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
                 task_name, step, {"status": "FAILED", "microservice": str(e)}
             )
 
-    elif status == "FAILED":
+    elif status == "FAILED" or status == "REJECTED":
+        remove_periodic_task_on_failure(task_name, step, am_status)
+
+    elif status == "USER_INPUT":
+        # this should not be possible with the automated pipeline but it happens sometimes
+        logger.error(
+            f"Package requires user input for step {step.id} - automatic pipeline failed"
+        )
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
         step.set_output_data(am_status)
         step.set_status(Status.IN_PROGRESS)
+        try:
+            task = PeriodicTask.objects.get(name=task_name)
+            task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
+            task.save()
+        except PeriodicTask.DoesNotExist:
+            logger.warning(f"PeriodicTask {task_name} for step {step.id} not found.")
     else:
+        logger.warning(
+            f"Unknown status from Archivematica: {status}, for step {step.id}"
+        )
         step.set_output_data(am_status)
 
 
@@ -318,6 +337,12 @@ def get_am_client():
 def create_check_am_status(package, step, archive_id, api_key):
     # overwrite the start date so the waiting limit is counted from here
     step.set_start_date()
+    task_name = get_task_name(step)
+    # Check for the existing task by name
+    if PeriodicTask.objects.filter(name=task_name).exists():
+        raise Exception(
+            f"Task '{task_name}' already exists, previous job is still in progress"
+        )
     # Create the scheduler
     schedule, _ = IntervalSchedule.objects.get_or_create(
         every=AM_POLLING_INTERVAL, period=IntervalSchedule.MINUTES
@@ -325,11 +350,46 @@ def create_check_am_status(package, step, archive_id, api_key):
     # Spawn a periodic task to check for the status of the package on AM
     PeriodicTask.objects.create(
         interval=schedule,
-        name=f"Archivematica status for step: {step.id}",
+        name=task_name,
         task="check_am_status",
         args=json.dumps([package, step.id, archive_id, api_key]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
     )
+
+
+def get_task_name(step):
+    output_data = json.loads(step.output_data)
+    if not output_data or "transfer_name" not in output_data:
+        raise Exception(
+            f"Step {step.id} output data is missing the required 'transfer_name' field."
+        )
+    return f"AM Status for step: {step.id}, package: {output_data['transfer_name']}"
+
+
+@shared_task(
+    name="callback_package",
+    bind=True,
+    ignore_result=True,
+)
+def callback_package(self, package_name):
+    logger.info(f"Callback for package {package_name} received.")
+    periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
+    if periodic_task.count() > 1:
+        logger.error(
+            f"Ambiguous package name ({package_name}) found: {periodic_task.count()}"
+        )
+        return
+    elif not periodic_task.exists():
+        logger.error(f"Package with name {package_name} not found")
+        return
+
+    periodic_task = periodic_task.get()
+    periodic_task.enabled = False
+    periodic_task.save()
+
+    args = json.loads(periodic_task.args)
+    # Callback is triggered by post-store AIP but it's not the last step, need to start with a delay
+    check_am_status.apply_async(args=args, countdown=AM_CALLBACK_DELAY)
 
 
 def handle_completed_am_package(

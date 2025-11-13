@@ -22,6 +22,8 @@ class ArchivematicaStatusTests(APITestCase):
 
         # simulate archivematica step started
         self.step.set_start_date()
+        self.transfer_name = "test_transfer_name"
+        self.step.set_output_data({"transfer_name": self.transfer_name})
 
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
@@ -45,6 +47,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.COMPLETED)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
             step_output["microservice"], get_unit_status.return_value["microservice"]
@@ -67,6 +70,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
             step_output["microservice"], get_unit_status.return_value["microservice"]
@@ -93,6 +97,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
             step_output["microservice"], get_unit_status.return_value["microservice"]
@@ -107,7 +112,9 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_completed_uuid_not_found_retry_limit(
         self, periodic_tasks, get_unit_status, get_package_details
     ):
-        self.step.set_output_data({"package_retry": 5})
+        self.step.set_output_data(
+            {"package_retry": 5, "transfer_name": "test_transfer_name"}
+        )
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Remove the processing directory",
@@ -138,6 +145,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
             step_output["microservice"], get_unit_status.return_value["microservice"]
@@ -195,6 +203,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], "WAITING")
         self.assertEqual(
             step_output["microservice"], "Waiting for archivematica to respond"
@@ -258,6 +267,7 @@ class ArchivematicaStatusTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertEqual(step_output["transfer_name"], self.transfer_name)
         self.assertEqual(step_output["status"], "PROCESSING")
         self.assertEqual(
             step_output["microservice"],

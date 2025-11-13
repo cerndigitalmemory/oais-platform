@@ -1,5 +1,7 @@
+import hashlib
 import json
 import logging
+import secrets
 from pathlib import Path
 
 from celery import current_app
@@ -594,6 +596,38 @@ class ApiKey(models.Model):
         self._key = self.encrypt(val)
 
     key = property(get_key, set_key)
+
+
+class PersonalAccessTokenManager(models.Manager):
+    def create(self, *, token: str, **kwargs):
+        # Hash token
+        kwargs["token_hash"] = PersonalAccessToken.hash(token)
+        return super().create(**kwargs)
+
+
+class PersonalAccessToken(models.Model):
+    name = models.CharField(max_length=100)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="personal_access_tokens"
+    )
+    token_hash = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField(null=True)
+    revoked = models.BooleanField(default=False)
+
+    objects = PersonalAccessTokenManager()
+
+    class Meta:
+        unique_together = [("user", "name")]
+
+    @classmethod
+    def hash(cls, token):
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    @classmethod
+    def generate_token(cls):
+        return secrets.token_urlsafe(32)
 
 
 class ScheduledHarvest(models.Model):

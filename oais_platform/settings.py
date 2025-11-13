@@ -243,6 +243,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "oais_platform.oais.auth.PersonalAccessTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
@@ -306,7 +307,9 @@ AM_SS_API_KEY = "test"
 # add the UUID of the transfer source
 AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
 # Interval in minutes to poll Archivematica for status updates
-AM_POLLING_INTERVAL = 3  # minutes
+AM_POLLING_INTERVAL = 15  # minutes
+# After callback check status with delay
+AM_CALLBACK_DELAY = 10  # seconds
 
 # INVENIORDM integration
 

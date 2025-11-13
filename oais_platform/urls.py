@@ -102,6 +102,7 @@ urlpatterns = [
                     "token/refresh/", TokenRefreshView.as_view(), name="token_refresh"
                 ),
                 path("config/", views.get_app_config, name="app_config"),
+                path("am-callback/", views.am_callback, name="am_callback"),
             ]
         ),
     ),
