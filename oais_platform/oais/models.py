@@ -277,22 +277,9 @@ class Archive(models.Model):
             archive.pipeline_steps.append(step.id)
             archive.save()
 
-    @property
-    def is_pushed_to_tape(self):
+    def has_completed_step(self, step_name):
         return self.steps.filter(
-            step_type__name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
-        ).exists()
-
-    @property
-    def has_notified_source(self):
-        return self.steps.filter(
-            step_type__name=StepName.NOTIFY_SOURCE, status=Status.COMPLETED
-        ).exists()
-
-    @property
-    def is_pushed_to_registry(self):
-        return self.steps.filter(
-            step_type__name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
+            step_type__name=step_name, status=Status.COMPLETED
         ).exists()
 
 

@@ -197,12 +197,19 @@ def batch_harvest(self, batch_id):
                 step, sig = execute_pipeline(archive.id, api_key, return_signature=True)
                 sigs.append(sig)
             else:
+                logger.info(
+                    f"Archive with recid {record['recid']} already exists, skipping."
+                )
+                batch.increase_skipped_count()
                 record["skipped"] = True
         except Exception as e:
             logger.error(
                 f"Error while processing {record['recid']} from {batch.harvest_run.source.name}: {str(e)}"
             )
-    chord(sigs)(finalize_batch.s(batch_id=batch_id))
+    if len(sigs) > 0:
+        chord(sigs)(finalize_batch.s(batch_id=batch_id))
+    else:
+        finalize_batch.apply(args=[None, batch_id])
     logger.info(
         f"Batch {batch_id} of harvest run({batch.harvest_run.id}) has been started for {batch.harvest_run.source.name}."
     )
@@ -281,14 +288,8 @@ def _check_if_archive_exists(batch, record):
         version_timestamp=record.get("updated"),
     ).all()
 
-    for a in same_version:
-        if StepName.NOTIFY_SOURCE in pipeline and not a.has_notified_source:
-            continue
-        if StepName.PUSH_TO_CTA in pipeline and not a.has_pushed_to_cta:
-            continue
-        if StepName.INVENIO_RDM_PUSH in pipeline and not a.is_pushed_to_registry:
-            continue
-        batch.increase_skipped_count()
-        return True
+    for archive in same_version:
+        if all(archive.has_completed_step(step) for step in pipeline):
+            return True
 
     return False
