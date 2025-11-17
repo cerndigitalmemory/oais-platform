@@ -196,13 +196,10 @@ def fts_delegate(self):
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
+        logger.info("FTS transfer succeded, removing periodic task")
+        periodic_task.delete()
     except Exception as e:
         logger.warning(e)
-        step.set_status(Status.FAILED)
-        return
-
-    logger.info("FTS transfer succeded, removing periodic task")
-    periodic_task.delete()
 
     cta_folder_name = f"aip-{archive_id}"
     cta_artifact = {
