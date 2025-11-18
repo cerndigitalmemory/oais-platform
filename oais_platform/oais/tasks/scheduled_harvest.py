@@ -82,6 +82,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
         batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
     )
     records_count = 0
+    batch_number = 1
     try:
         for records_to_harvest, new_harvest_time in get_source(
             source.name, api_key
@@ -105,7 +106,6 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 harvest_run.set_collection(harvest_collection)
 
             batch_size = scheduled_harvest.batch_size
-            batch_number = 1
             for i in range(0, len(records_to_harvest), batch_size):
                 batch = records_to_harvest[i : i + batch_size]
 
