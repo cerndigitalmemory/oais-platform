@@ -1,5 +1,8 @@
 # Changes
 
+## Version 2.3.3 (released 2025-11-18)
+- Harvest batch: fix batch numbering
+
 ## Version 2.3.2 (released 2025-11-07)
 - Local upload: keep file name, add file size limit
 
