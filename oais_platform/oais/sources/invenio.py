@@ -197,7 +197,7 @@ class Invenio(AbstractSource):
             )
 
     def get_records_to_harvest(
-        self, start=None, end=None, size=500, filter_type=FilterType.UPDATED
+        self, start=None, end=None, size=200, filter_type=FilterType.UPDATED
     ):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
