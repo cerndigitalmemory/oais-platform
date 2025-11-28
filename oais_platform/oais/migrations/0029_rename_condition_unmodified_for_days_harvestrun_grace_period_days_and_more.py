@@ -4,13 +4,16 @@ from django.db import migrations, models
 from django.utils.dateparse import parse_datetime
 import os
 import json
+import logging
 
 
 def populate_version_timestamp(apps, schema_editor):
     Archive = apps.get_model("oais", "Archive")
+    batch_size = 500
+    batch_number = 1
     archives_to_update = []
 
-    for archive in Archive.objects.all():
+    for archive in Archive.objects.filter(path_to_sip__isnull=False).all():
         try:
             path = os.path.join(archive.path_to_sip, "data/content/metadata.json")
             with open(path, "r") as file:
@@ -22,13 +25,18 @@ def populate_version_timestamp(apps, schema_editor):
                     if version_timestamp:
                         archive.version_timestamp = version_timestamp
                         archives_to_update.append(archive)
+
+                        if len(archives_to_update) >= batch_size:
+                            Archive.objects.bulk_update(archives_to_update, ['version_timestamp'])
+                            logging.info(f"Progress: updated {batch_number * batch_size} archives.")
+                            batch_number += 1
+                            archives_to_update = []
         except Exception:
             continue
 
     if len(archives_to_update) > 0:
-        Archive.objects.bulk_update(
-            archives_to_update, ["version_timestamp"], batch_size=500
-        )
+        Archive.objects.bulk_update(archives_to_update, ['version_timestamp'])
+        logging.info(f"Progress: updated {((batch_number - 1) * batch_size) + len(archives_to_update)} archives.")
 
 
 def backward_migration(apps, schema_editor):
