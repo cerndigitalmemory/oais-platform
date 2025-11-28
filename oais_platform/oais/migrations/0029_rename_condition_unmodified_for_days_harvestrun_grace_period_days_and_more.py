@@ -7,21 +7,28 @@ import json
 
 
 def populate_version_timestamp(apps, schema_editor):
-    Archive = apps.get_model('oais', 'Archive')
+    Archive = apps.get_model("oais", "Archive")
+    archives_to_update = []
+
     for archive in Archive.objects.all():
         try:
             path = os.path.join(archive.path_to_sip, "data/content/metadata.json")
-            with open(path, 'r') as file:
+            with open(path, "r") as file:
                 data = json.load(file)
-                version_timestamp_str = data.get('updated')
+                version_timestamp_str = data.get("updated")
 
                 if version_timestamp_str:
                     version_timestamp = parse_datetime(version_timestamp_str)
                     if version_timestamp:
                         archive.version_timestamp = version_timestamp
-                        archive.save(update_fields=['version_timestamp'])
+                        archives_to_update.append(archive)
         except Exception:
             continue
+
+    if len(archives_to_update) > 0:
+        Archive.objects.bulk_update(
+            archives_to_update, ["version_timestamp"], batch_size=500
+        )
 
 
 def backward_migration(apps, schema_editor):
@@ -31,39 +38,45 @@ def backward_migration(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('oais', '0028_personalaccesstoken'),
+        ("oais", "0028_personalaccesstoken"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='harvestrun',
-            old_name='condition_unmodified_for_days',
-            new_name='grace_period_days',
+            model_name="harvestrun",
+            old_name="condition_unmodified_for_days",
+            new_name="grace_period_days",
         ),
         migrations.RenameField(
-            model_name='scheduledharvest',
-            old_name='condition_unmodified_for_days',
-            new_name='grace_period_days',
+            model_name="scheduledharvest",
+            old_name="condition_unmodified_for_days",
+            new_name="grace_period_days",
         ),
         migrations.AddField(
-            model_name='archive',
-            name='version_timestamp',
+            model_name="archive",
+            name="version_timestamp",
             field=models.DateTimeField(default=None, null=True),
         ),
         migrations.AddField(
-            model_name='harvestbatch',
-            name='skipped_count',
+            model_name="harvestbatch",
+            name="skipped_count",
             field=models.PositiveIntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='harvestrun',
-            name='filter_type',
-            field=models.CharField(choices=[('created', 'Created'), ('updated', 'Updated')], default='updated'),
+            model_name="harvestrun",
+            name="filter_type",
+            field=models.CharField(
+                choices=[("created", "Created"), ("updated", "Updated")],
+                default="updated",
+            ),
         ),
         migrations.AddField(
-            model_name='scheduledharvest',
-            name='filter_type',
-            field=models.CharField(choices=[('created', 'Created'), ('updated', 'Updated')], default='updated'),
+            model_name="scheduledharvest",
+            name="filter_type",
+            field=models.CharField(
+                choices=[("created", "Created"), ("updated", "Updated")],
+                default="updated",
+            ),
         ),
         migrations.RunPython(populate_version_timestamp, backward_migration),
     ]
