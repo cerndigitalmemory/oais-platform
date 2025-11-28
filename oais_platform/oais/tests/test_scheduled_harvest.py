@@ -302,7 +302,8 @@ class ScheduledHarvestTests(APITestCase):
                 status=Status.COMPLETED,
             )
         self.batch_setup()
-        self.batch.pipeline = pipeline.append(StepName.NOTIFY_SOURCE)
+        self.batch.pipeline = pipeline + [StepName.NOTIFY_SOURCE]
+        self.batch.save()
         with patch(
             "oais_platform.oais.tasks.scheduled_harvest.chord"
         ) as mock_chord, patch(
