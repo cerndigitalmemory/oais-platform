@@ -790,3 +790,68 @@ class HarvestBatch(models.Model):
     def set_status(self, status):
         self.status = status
         self.save()
+
+
+class RequestStatus(models.IntegerChoices):
+    PENDING = 1, "Pending"
+    APPROVED = 2, "Approved"
+    REJECTED = 3, "Rejected"
+
+
+class Request(models.Model):
+    """
+    A request by a user to approve a set of staged records
+    """
+
+    id = models.AutoField(primary_key=True)
+    requester = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="made_requests",
+    )
+    approver = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="approved_requests",
+    )
+    request_reason = models.TextField()
+    archives = models.ManyToManyField("Archive", related_name="requests")
+    status = models.IntegerField(
+        choices=RequestStatus.choices, default=RequestStatus.PENDING
+    )
+
+    decision_reason = models.TextField(null=True, blank=True)
+    requested_at = models.DateTimeField(default=timezone.now)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        permissions = (
+            ("can_approve_requests", "Can approve or reject archive requests"),
+        )
+
+    def approve(self, approver, decision_reason=None):
+        """Marks the request as approved and updates all associated archives"""
+        if self.status != self.RequestStatus.PENDING:
+            raise Exception("Cannot approve a request that is not pending.")
+
+        self.status = self.RequestStatus.APPROVED
+        self.approver = approver
+        self.decision_reason = decision_reason
+        self.approved_at = timezone.now()
+        self.save()
+
+    def reject(self, approver, decision_reason):
+        """Marks the request as rejected"""
+        if self.status != self.RequestStatus.PENDING:
+            raise Exception("Cannot reject a request that is not pending.")
+
+        if not decision_reason:
+            raise ValueError("A rejection reason is required.")
+
+        self.status = self.RequestStatus.REJECTED
+        self.approver = approver
+        self.decision_reason = decision_reason
+        self.approved_at = timezone.now()
+        self.save()
