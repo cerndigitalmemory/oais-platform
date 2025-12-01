@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from oais_platform.oais.models import FilterType
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -34,7 +35,9 @@ class TestSource(AbstractSource):
             ]
         }
 
-    def get_records_to_harvest(self, start=None, end=None, size=500):
+    def get_records_to_harvest(
+        self, start=None, end=None, size=500, filter_type=FilterType.UPDATED
+    ):
         yield [
             {
                 "source_url": self.get_record_url("1"),

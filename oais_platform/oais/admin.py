@@ -257,7 +257,8 @@ class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "source_name",
         "enabled",
         "pipeline",
-        "condition_unmodified_for_days",
+        "filter_type",
+        "grace_period_days",
         "scheduling_task",
         "batch_size",
         "batch_delay_minutes",
@@ -281,9 +282,11 @@ class HarvestRunAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "pipeline",
         "size",
         "archive_count",
+        "skipped_count",
         "query_start_time",
         "query_end_time",
-        "condition_unmodified_for_days",
+        "filter_type",
+        "grace_period_days",
         "created_at",
         "batch_size",
         "batch_delay_minutes",
@@ -342,6 +345,7 @@ class HarvestBatchAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "completed",
         "failed",
         "archive_count",
+        "skipped_count",
     )
 
     def harvest_run_link(self, obj):

@@ -13,7 +13,7 @@ from oais_platform.oais.exceptions import (
     RetryableException,
     ServiceUnavailable,
 )
-from oais_platform.oais.models import Status, StepName
+from oais_platform.oais.models import FilterType, Status, StepName
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -127,6 +127,7 @@ class Invenio(AbstractSource):
             "status": self._get_config_value(record, "status"),
             "file_size": self._get_config_value(record, "file_size"),
             "updated": self._get_config_value(record, "updated"),
+            "created": self._get_config_value(record, "created"),
         }
 
     def _get_config_value(self, record, config_key, mandatory=False):
@@ -195,22 +196,25 @@ class Invenio(AbstractSource):
                 f"Notifying the upstream source failed with status code {req.status_code}, message: {req.text}"
             )
 
-    def get_records_to_harvest(self, start=None, end=None, size=500):
+    def get_records_to_harvest(
+        self, start=None, end=None, size=200, filter_type=FilterType.UPDATED
+    ):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
         logging.info(f"Starting fetching records from {start} to {end}.")
-        yield from self.fetch_records_in_chunks(start, end, size)
+        yield from self.fetch_records_in_chunks(start, end, size, filter_type)
 
-    def get_records_in_range(self, start, end, page, size):
+    def get_records_in_range(self, start, end, page, size, filter_type):
         if start:
-            query = f"updated:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+            query = f"{filter_type}:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         else:
-            query = f"updated:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+            query = f"{filter_type}:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         query = urllib.parse.quote_plus(query)
-        return self.search(query, page, size, sort="updated-asc")
+        sort = "oldest" if filter_type == FilterType.CREATED else "updated-asc"
+        return self.search(query, page, size, sort=sort)
 
-    def fetch_records_in_chunks(self, start, end, size):
-        result = self.get_records_in_range(start, end, 1, 1)
+    def fetch_records_in_chunks(self, start, end, size, filter_type):
+        result = self.get_records_in_range(start, end, 1, 1, filter_type)
         total = result["total_num_hits"]
         if total <= 0:
             yield [], end
@@ -226,7 +230,9 @@ class Invenio(AbstractSource):
                 page = 0
                 while len(records_to_add) < initial_total:
                     page += 1
-                    result = self.get_records_in_range(start, end, page, size)
+                    result = self.get_records_in_range(
+                        start, end, page, size, filter_type
+                    )
                     current_total = result["total_num_hits"]
                     if current_total != initial_total:
                         logging.warning(
@@ -249,12 +255,16 @@ class Invenio(AbstractSource):
                     f"Cannot get consistent ids for {start}–{end}..."
                 )
         else:
-            result = self.get_records_in_range(start, end, self.max_results, 1)
+            result = self.get_records_in_range(
+                start, end, self.max_results, 1, filter_type
+            )
             last_record = result["results"][0]
-            last_record_update_time = datetime.datetime.fromisoformat(
-                last_record["updated"]
+            last_record_timestamp = datetime.datetime.fromisoformat(
+                last_record.get(filter_type)
             )
             yield from self.fetch_records_in_chunks(
-                start, last_record_update_time, size
+                start, last_record_timestamp, size, filter_type
             )
-            yield from self.fetch_records_in_chunks(last_record_update_time, end, size)
+            yield from self.fetch_records_in_chunks(
+                last_record_timestamp, end, size, filter_type
+            )

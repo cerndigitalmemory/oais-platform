@@ -16,9 +16,12 @@ from oais_platform.oais.models import (
     Status,
     Step,
     StepName,
-    StepType,
 )
-from oais_platform.oais.tasks.scheduled_harvest import batch_harvest, scheduled_harvest
+from oais_platform.oais.tasks.scheduled_harvest import (
+    batch_harvest,
+    finalize_batch,
+    scheduled_harvest,
+)
 from oais_platform.oais.tests.utils import TestSource
 
 
@@ -34,7 +37,9 @@ class ScheduledHarvestTests(APITestCase):
             source=self.source,
             enabled=True,
             pipeline=self.pipeline,
+            grace_period_days=10,
         )
+        self.updated_time = datetime.now(timezone.utc).replace(microsecond=0)
 
     def batch_setup(self):
         self.collection = Collection.objects.create(title="Test Collection")
@@ -56,6 +61,7 @@ class ScheduledHarvestTests(APITestCase):
                     "title": "test",
                     "authors": [],
                     "source": "test",
+                    "updated": str(self.updated_time),
                 }
             ],
             batch_number=1,
@@ -249,6 +255,141 @@ class ScheduledHarvestTests(APITestCase):
                 )
                 mock_chord.assert_called_once_with([fake_sig])
 
+    def test_batch_harvest_skip(self):
+        a = Archive.objects.create(
+            source=self.source.name,
+            recid="1",
+            version_timestamp=self.updated_time,
+        )
+        Step.objects.create(
+            archive=a,
+            step_name=StepName.HARVEST,
+            status=Status.COMPLETED,
+        )
+        self.batch_setup()
+        with self.assertLogs(level="INFO") as log:
+            batch_harvest.apply(args=[self.batch.id])
+            self.assertIn(
+                "does not have API key set for the given source",
+                log.output[0],
+            )
+            self.assertIn(
+                "already exists, skipping",
+                log.output[1],
+            )
+            self.batch.refresh_from_db()
+            self.assertEqual(self.batch.status, BatchStatus.COMPLETED)
+            archives = self.batch.archives
+            self.assertEqual(archives.count(), 0)
+            self.assertEqual(self.batch.skipped_count, 1)
+
+    def test_batch_harvest_not_skipped(self):
+        a = Archive.objects.create(
+            source=self.source.name,
+            recid="1",
+            version_timestamp=self.updated_time,
+        )
+        pipeline = [
+            StepName.HARVEST,
+            StepName.VALIDATION,
+            StepName.CHECKSUM,
+            StepName.ARCHIVE,
+        ]
+        for step in pipeline:
+            Step.objects.create(
+                archive=a,
+                step_name=step,
+                status=Status.COMPLETED,
+            )
+        self.batch_setup()
+        self.batch.pipeline = pipeline + [StepName.NOTIFY_SOURCE]
+        self.batch.save()
+        with patch(
+            "oais_platform.oais.tasks.scheduled_harvest.chord"
+        ) as mock_chord, patch(
+            "oais_platform.oais.tasks.scheduled_harvest.execute_pipeline"
+        ) as mock_execute_pipeline:
+            mock_chord.return_value = MagicMock()
+            fake_step = MagicMock(name="step")
+            fake_sig = MagicMock(name="sig")
+            mock_execute_pipeline.return_value = (fake_step, fake_sig)
+
+            batch_harvest.apply(args=[self.batch.id])
+            self.batch.refresh_from_db()
+            self.assertEqual(self.batch.status, BatchStatus.IN_PROGRESS)
+            archives = self.batch.archives
+            self.assertEqual(archives.count(), 1)
+            archive = archives.first()
+            self.assertIn(
+                archive.id, self.collection.archives.values_list("id", flat=True)
+            )
+            self.assertEqual(archive.source, self.source.name)
+            step_names = [
+                Step.objects.get(id=step_id).step_type.name
+                for step_id in archive.pipeline_steps
+            ]
+            self.assertEqual(step_names, self.pipeline)
+            mock_execute_pipeline.assert_called_once_with(
+                archive.id, None, return_signature=True
+            )
+            mock_chord.assert_called_once_with([fake_sig])
+
+    def test_finalize_batch_does_not_exist(self):
+        with self.assertLogs(level="ERROR") as log:
+            result = finalize_batch.apply(args=[None, 999])
+            self.assertIn("HarvestBatch with id 999 does not exist.", log.output[0])
+            self.assertIsNone(result.result)
+
+    def test_finalize_batch_blocked(self):
+        self.batch_setup()
+        self.batch.status = BatchStatus.BLOCKED
+        self.batch.save()
+        with self.assertLogs(level="ERROR") as log:
+            result = finalize_batch.apply(args=[None, self.batch.id])
+            self.assertIn(
+                "had a blocking error, further batches will not be processed.",
+                log.output[0],
+            )
+            self.assertIsNone(result.result)
+
+    def test_finalize_batch_all_archives_failed(self):
+        self.batch_setup()
+        a = self.create_batch_archive()
+        self.create_batch_step(a, StepName.HARVEST, Status.FAILED)
+        with self.assertLogs(level="ERROR") as log:
+            finalize_batch.apply(args=[None, self.batch.id])
+            self.assertIn("had all archives failed the SIP creation", log.output[0])
+            self.batch.refresh_from_db()
+            self.assertEqual(self.batch.status, BatchStatus.FAILED)
+
+    def test_finalize_batch_mixed_results(self):
+        self.batch_setup()
+        self.batch.records.extend(
+            [
+                {
+                    "source_url": "https://example.com/record/2",
+                    "recid": "2",
+                    "title": "test2",
+                    "source": "test",
+                },
+                {
+                    "source_url": "https://example.com/record/3",
+                    "recid": "3",
+                    "title": "test3",
+                    "source": "test",
+                },
+            ]
+        )
+        self.batch.save()
+        a = self.create_batch_archive()
+        self.create_batch_step(a, StepName.HARVEST, Status.FAILED)
+        b = self.create_batch_archive(recid="3")
+        self.create_batch_step(b, StepName.HARVEST, Status.COMPLETED)
+        with self.assertLogs(level="WARNING") as log:
+            finalize_batch.apply(args=[None, self.batch.id])
+            self.assertIn("1 archives had no SIP", log.output[0])
+            self.assertIn("1 missing archives: {'2'}", log.output[1])
+
     def test_batch_archive_counts(self):
         self.batch_setup()
         archive = self.create_batch_archive()
@@ -273,14 +414,15 @@ class ScheduledHarvestTests(APITestCase):
         self.assertEqual(self.batch.failed, 1)
         self.assertEqual(self.batch.archives.count(), 4)
 
-    def create_batch_archive(self):
+    def create_batch_archive(self, recid="1", updated_time=None):
         archive = Archive.objects.create(
-            recid="1",
+            recid=recid,
             title="test",
             source="test",
             source_url="https://example.com/record/1",
             requester=self.system_user,
             approver=self.system_user,
+            version_timestamp=updated_time,
         )
         self.collection.add_archive(archive)
         return archive
