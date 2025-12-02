@@ -1,5 +1,21 @@
 version: "3"
 
+x-common-variables: &common-variables
+  # Point to the postgres service
+  DB_HOST: db
+  DB_USER: postgres
+  DB_PASS: overwritethisinprod!
+  DB_NAME: oais_platform
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  INVENIO_API_TOKEN: <YOUR_INVENIO_API_TOKEN_HERE>
+  INVENIO_SERVER_URL: <YOUR_INVENIO_SERVER_URL_HERE>
+  # If we leave this one empty, the system will attempt to get it from the local archivematica installation
+  # Since there is no archivematica deployment in the pipelines, it fails
+  AM_TRANSFER_SOURCE_UUID: my_uuid
+
+
+
 services:
   nginx:
     container_name: oais_test_nginx
@@ -62,16 +78,7 @@ services:
              coverage run --source='oais_platform' manage.py test &&
              coverage report &&
              coverage xml"
-    environment:
-      # Point to the postgres service
-      - DB_HOST=db
-      - DB_USER=postgres
-      - DB_PASS=overwritethisinprod!
-      - DB_NAME=oais_platform
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
-      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
+    environment: *common-variables
     depends_on:
       - db
     env_file:
@@ -97,16 +104,8 @@ services:
       - redis
       - django
     environment:
-      # Point to the redis service
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgres://postgres:postgres@db:5433/web_dev
-      - DB_HOST=db
-      - DB_NAME=oais_platform
-      - DB_USER=postgres
-      - DB_PASS=overwritethisinprod!
-      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
-      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
+      <<: *common-variables
+      DATABASE_URL: postgres://postgres:postgres@db:5433/web_dev
 
 volumes:
   postgres:

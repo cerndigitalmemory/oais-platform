@@ -1,4 +1,18 @@
 version: "3"
+x-common-variables: &common-variables
+  # If we leave this one empty, the system will attempt to get it from the local archivematica installation
+  # Since there is no archivemeatica deployment in the pipelines, it fails
+  AM_TRANSFER_SOURCE_UUID: my_uuid
+  ALLOW_LOCAL_LOGIN: True
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  # Point to the postgres service
+  DB_HOST: db
+  DB_USER: postgres
+  DB_NAME: oais_platform
+  DB_PASS: overwritethisinprod!
+  INVENIO_API_TOKEN: <YOUR_INVENIO_API_TOKEN_HERE>
+  INVENIO_SERVER_URL: <YOUR_INVENIO_SERVER_URL_HERE>
 
 services:
   nginx:
@@ -60,18 +74,9 @@ services:
              python3 manage.py spectacular --file schema.yml &&
              python3 manage.py runserver 0.0.0.0:8000"
     environment:
-      # Point to the postgres service
-      - DB_HOST=db
-      - DB_USER=postgres
-      - DB_PASS=overwritethisinprod!
-      - DB_NAME=oais_platform
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
-      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
-      - ALLOW_LOCAL_LOGIN=True
-      - OIDC_RP_CLIENT_ID=<YOUR_OIDC_CLIENT>
-      - OIDC_RP_CLIENT_SECRET=<YOUR_OIDC_SECRET>
+      <<: *common-variables
+      OIDC_RP_CLIENT_ID: <YOUR_OIDC_CLIENT>
+      OIDC_RP_CLIENT_SECRET: <YOUR_OIDC_SECRET>
     env_file:
       - ./.env.dev
     depends_on:
@@ -98,17 +103,8 @@ services:
       - redis
       - django
     environment:
-      # Point to the redis service
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgres://postgres:postgres@db:5433/web_dev
-      - DB_HOST=db
-      - DB_NAME=oais_platform
-      - DB_USER=postgres
-      - DB_PASS=overwritethisinprod!
-      - INVENIO_API_TOKEN=<YOUR_INVENIO_API_TOKEN_HERE>
-      - INVENIO_SERVER_URL=<YOUR_INVENIO_SERVER_URL_HERE>
-
+      <<: *common-variables
+      DATABASE_URL: postgres://postgres:postgres@db:5433/web_dev
   scripts:
     container_name: oais_scripts
     build:
