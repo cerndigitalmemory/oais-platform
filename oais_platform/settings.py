@@ -28,10 +28,42 @@ from os import environ
 from pathlib import Path
 
 import sentry_sdk
+from amclient import AMClient
 from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 
 from oais_platform import __version__
+
+
+def get_default_transfer_source():
+    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
+    try:
+        am = AMClient()
+        am.ss_url = AM_SS_URL
+        am.ss_user_name = AM_SS_USERNAME
+        am.ss_api_key = AM_SS_API_KEY
+
+        locations = am.list_storage_locations()
+
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            f"Failed to connect to Archivematica Storage Service: {exc}"
+        ) from exc
+
+    objects = locations.get("objects") or []
+
+    for loc in objects:
+        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
+            "enabled"
+        ):
+            return loc.get("uuid")
+
+    raise ImproperlyConfigured(
+        "AM_SS_TRANSFER_SOURCE is not defined, and no enabled location with "
+        "description 'Default transfer source' was found."
+    )
+
 
 ## General Django settings
 
@@ -296,16 +328,19 @@ SIMPLE_JWT = {
 # ARCHIVEMATICA integration
 
 # add the URL where archivematica is exposed, username and password
-AM_URL = "http://umbrinus.cern.ch:62080"
+AM_URL = "http://host.docker.internal:62080"
 AM_USERNAME = "test"
 AM_API_KEY = "test"
 # Archivematica Storage Server
-AM_SS_URL = "http://umbrinus.cern.ch:62081"
+AM_SS_URL = "http://host.docker.internal:62081"
 AM_SS_USERNAME = "test"
 AM_SS_API_KEY = "test"
 
 # add the UUID of the transfer source
-AM_TRANSFER_SOURCE = "42e55273-87cb-4724-9748-1e6d5a1affa6"
+AM_TRANSFER_SOURCE = (
+    environ.get("AM_TRANSFER_SOURCE_UUID") or get_default_transfer_source()
+)
+
 # Interval in minutes to poll Archivematica for status updates
 AM_POLLING_INTERVAL = 15  # minutes
 # After callback check status with delay
@@ -321,11 +356,11 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 # Bagit Create Settings
 
 # Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
-BIC_UPLOAD_PATH = "oais-data"
+BIC_UPLOAD_PATH = "/oais_platform/oais-data"
 # Path where the bags are processed, but not stored
 BIC_WORKDIR = "/tmp"
 # Path where uploaded files are temporarily stored to be picked up by bagit-create
-LOCAL_UPLOAD_PATH = "oais-data/uploads"
+LOCAL_UPLOAD_PATH = "/oais_platform/oais-data/uploads"
 # Grace period before uploaded files can get deleted by the upload_cleanup task
 UPLOAD_DELETION_CUTOFF_DAYS = 14
 
