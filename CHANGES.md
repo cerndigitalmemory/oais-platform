@@ -1,5 +1,8 @@
 # Changes
 
+## Version 2.4.1 (released 2025-12-03)
+- Dependencies: pin kombu 5.6.1, bump redis to 5.x for compatibility
+
 ## Version 2.4.0 (released 2025-12-03)
 - Archivematica: add callback endpoint
 - Added Personal Access Token
