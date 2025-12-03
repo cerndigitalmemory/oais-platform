@@ -8,7 +8,7 @@ from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
 from celery.exceptions import Retry
 from celery.utils.log import get_task_logger
-from django.db import OperationalError, transaction
+from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -265,7 +265,7 @@ def resource_check(task, current_step, archive):
         )
     try:
         with transaction.atomic():
-            current_am_steps = Step.objects.select_for_update().filter(
+            current_am_steps = Step.objects.select_for_update(nowait=True).filter(
                 step_name=StepName.ARCHIVE,
                 status__in=[Status.WAITING, Status.IN_PROGRESS],
                 celery_task_id__isnull=False,
@@ -273,7 +273,7 @@ def resource_check(task, current_step, archive):
             current_am_steps_count = current_am_steps.count()
 
             total_sip_size = (
-                Archive.objects.select_for_update()
+                Archive.objects.select_for_update(nowait=True)
                 .filter(last_step__in=current_am_steps)
                 .aggregate(total=Sum("sip_size"))["total"]
                 or 0
@@ -283,37 +283,34 @@ def resource_check(task, current_step, archive):
                 current_am_steps_count >= AM_CONCURRENCY_LIMT
                 or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
             ):
-                if task.request.retries >= task.max_retries:
-                    return set_and_return_error(
-                        current_step,
-                        "Archivematica max retries exceeded. Try again later.",
-                    )
-
-                retry_interval = 10 * (task.request.retries + 1)
-
                 exc_message = (
                     "Archivematica concurrency limit reached."
                     if current_am_steps_count >= AM_CONCURRENCY_LIMT
                     else "Archivematica aggregated file size limit reached."
                 )
-                raise task.retry(
-                    countdown=60 * retry_interval,
-                    exc=Exception(exc_message),
+                logger.warning(exc_message)
+                current_step.set_status(Status.WAITING)
+                current_step.set_output_data(
+                    {
+                        "status": 0,
+                        "details": "Archivematica is busy, waiting to start processing",
+                    }
                 )
+                return 1
             current_step.set_status(Status.WAITING)
             current_step.set_task(task.request.id)
             return 0
-    except OperationalError as e:
-        if "deadlock detected" in str(e):
+    except (OperationalError, DatabaseError) as e:
+        if "deadlock detected" in str(e) or "could not obtain lock on row" in str(e):
             if task.request.retries >= task.max_retries:
                 return set_and_return_error(
                     current_step, "Archivematica max retries exceeded. Try again later."
                 )
 
-            retry_interval = 2 * (task.request.retries + 1)
+            retry_interval = 5 * (task.request.retries + 1)
             logger.warning(f"Deadlock detected, retrying in {retry_interval} seconds")
             raise task.retry(
-                countdown=60 * retry_interval,
+                countdown=retry_interval,
                 exc=e,
             )
         else:

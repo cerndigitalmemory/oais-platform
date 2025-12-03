@@ -126,6 +126,7 @@ class StepAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
 @admin.register(StepType)
 class StepTypeAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+    actions = ["unblock_step_type"]
     list_display = (
         "id",
         "name",
@@ -146,6 +147,20 @@ class StepTypeAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         return None
 
     automatic_next_step_name.short_description = "Automatic Next Step"
+
+    def unblock_step_type(modeladmin, request, queryset):
+        """
+        Unblock selected StepTypes
+        """
+        for step_type in queryset:
+            step_type.unblock()
+        modeladmin.message_user(
+            request,
+            "Successfully unblocked StepType(s)",
+            level=messages.SUCCESS,
+        )
+
+    unblock_step_type.short_description = "Unblock selected StepTypes"
 
 
 @admin.register(Resource)

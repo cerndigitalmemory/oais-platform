@@ -212,3 +212,19 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
             step.set_output_data(retval)
     else:
         step.set_status(Status.FAILED)
+
+    manage_steps(step.status)
+
+
+def manage_steps(step):
+    if step.status == Status.FAILED:
+        step_type = StepType.get_by_stepname(step.step_name)
+        step_type.increment_failed_count()
+    elif step.status == Status.COMPLETED and step.step_type.name == StepName.ARCHIVE:
+        waiting_step = Step.objects.filter(
+            status=Status.WAITING,
+            step_name=StepType.ARCHIVE,
+            celery_task_id__isnull=True,
+        )
+        if waiting_step.exists():
+            step, _ = run_step(waiting_step.first(), waiting_step.first().archive.id)

@@ -338,6 +338,9 @@ class StepType(models.Model):
             and self.failed_count >= self.failed_blocking_limit
         ):
             self.enabled = False
+            logging.error(
+                f"StepType {self.name} disabled due to exceeding failed limit."
+            )
         self.save()
 
     def unblock(self):

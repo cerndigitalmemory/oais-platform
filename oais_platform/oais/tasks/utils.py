@@ -61,6 +61,7 @@ def set_and_return_error(step, errormsg, extra_log=None):
     Set the step as failed and return the error message
     """
     step.set_status(Status.FAILED)
+    step.set_finish_date()
     if type(errormsg) is dict:
         step.set_output_data(errormsg)
         return errormsg
