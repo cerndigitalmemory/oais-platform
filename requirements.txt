@@ -2,7 +2,7 @@ bagit-create>=1.1.0,<2.0.0
 Django==5.0.6
 djangorestframework==3.14.0
 pymarc==4.2.2
-redis==3.5.3
+redis>=5.0.0,<6.0.0
 django-cors-headers==4.0.0
 mozilla-django-oidc==3.0.0
 psycopg2==2.9.6
