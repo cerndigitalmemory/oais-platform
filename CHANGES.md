@@ -1,5 +1,15 @@
 # Changes
 
+## Version 2.4.0 (released 2025-12-03)
+- Archivematica: add callback endpoint
+- Added Personal Access Token
+- Invenio scheduled harvest updates (created, updated)
+- Archive: added version timestamp
+- Fix: FTS job PeriodicTask deletion idempotent
+
+## Version 2.3.3 (released 2025-11-18)
+- Harvest batch: fix batch numbering
+
 ## Version 2.3.2 (released 2025-11-07)
 - Local upload: keep file name, add file size limit
 
