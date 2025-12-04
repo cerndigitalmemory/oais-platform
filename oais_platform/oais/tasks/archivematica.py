@@ -6,14 +6,12 @@ import requests
 from amclient import AMClient
 from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
-from celery.exceptions import Retry
 from celery.utils.log import get_task_logger
-from django.db import DatabaseError, OperationalError, transaction
-from django.db.models import Sum
+from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
@@ -21,11 +19,9 @@ from oais_platform.oais.tasks.utils import (
     set_and_return_error,
 )
 from oais_platform.settings import (
-    AGGREGATED_FILE_SIZE_LIMIT,
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
     AM_CALLBACK_DELAY,
-    AM_CONCURRENCY_LIMT,
     AM_POLLING_INTERVAL,
     AM_SS_API_KEY,
     AM_SS_URL,
@@ -43,7 +39,6 @@ logger = get_task_logger(__name__)
     name="archivematica",
     bind=True,
     ignore_result=True,
-    max_retries=10,
 )
 def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     """
@@ -53,15 +48,8 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     """
     current_step = Step.objects.get(pk=step_id)
     archive = Archive.objects.get(pk=archive_id)
-    try:
-        if (res := resource_check(self, current_step, archive)) != 0:
-            return res
-    except Retry as e:
-        current_step.set_status(Status.WAITING)
-        current_step.set_output_data(
-            {"message": "Archivematica is busy, retrying soon..."}
-        )
-        raise e
+    if (res := resource_check(self, current_step, archive)) != 0:
+        return res
 
     path_to_sip = archive.path_to_sip
 
@@ -258,63 +246,42 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
 def resource_check(task, current_step, archive):
     if archive.sip_size == 0:
         archive.update_sip_size()
-    if archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT:
+    archive_step_type = StepType.get_by_stepname(StepName.ARCHIVE)
+    if archive.sip_size > archive_step_type.size_limit_bytes:
         return set_and_return_error(
             current_step,
-            f"SIP exceeds the Archivematica file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB).",
+            f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
         )
-    try:
-        with transaction.atomic():
-            current_am_steps = Step.objects.select_for_update(nowait=True).filter(
-                step_name=StepName.ARCHIVE,
-                status__in=[Status.WAITING, Status.IN_PROGRESS],
-                celery_task_id__isnull=False,
-            )
-            current_am_steps_count = current_am_steps.count()
-
-            total_sip_size = (
-                Archive.objects.select_for_update(nowait=True)
-                .filter(last_step__in=current_am_steps)
-                .aggregate(total=Sum("sip_size"))["total"]
-                or 0
-            )
-
-            if (
-                current_am_steps_count >= AM_CONCURRENCY_LIMT
-                or total_sip_size + archive.sip_size > AGGREGATED_FILE_SIZE_LIMIT
-            ):
-                exc_message = (
-                    "Archivematica concurrency limit reached."
-                    if current_am_steps_count >= AM_CONCURRENCY_LIMT
-                    else "Archivematica aggregated file size limit reached."
-                )
-                logger.warning(exc_message)
-                current_step.set_status(Status.WAITING)
-                current_step.set_output_data(
-                    {
-                        "status": 0,
-                        "details": "Archivematica is busy, waiting to start processing",
-                    }
-                )
-                return 1
+    with transaction.atomic():
+        locked_archive_step_type = StepType.objects.select_for_update().get(
+            pk=archive_step_type.id
+        )
+        if (
+            locked_archive_step_type.current_count + 1
+            > locked_archive_step_type.concurrency_limit
+        ):
+            exc_message = "Archivematica concurrency limit reached."
+        elif (
+            locked_archive_step_type.current_size_bytes + archive.sip_size
+            > locked_archive_step_type.size_limit_bytes
+        ):
+            exc_message = "Archivematica aggregated file size limit reached."
+        else:
             current_step.set_status(Status.WAITING)
             current_step.set_task(task.request.id)
+            locked_archive_step_type.increment_current_count()
+            locked_archive_step_type.increment_current_size(archive.sip_size)
             return 0
-    except (OperationalError, DatabaseError) as e:
-        if "deadlock detected" in str(e) or "could not obtain lock on row" in str(e):
-            if task.request.retries >= task.max_retries:
-                return set_and_return_error(
-                    current_step, "Archivematica max retries exceeded. Try again later."
-                )
 
-            retry_interval = 5 * (task.request.retries + 1)
-            logger.warning(f"Deadlock detected, retrying in {retry_interval} seconds")
-            raise task.retry(
-                countdown=retry_interval,
-                exc=e,
-            )
-        else:
-            raise
+        logger.warning(exc_message)
+        current_step.set_status(Status.WAITING)
+        current_step.set_output_data(
+            {
+                "status": 0,
+                "message": "Archivematica is busy, waiting to start processing",
+            }
+        )
+        return 1
 
 
 def get_am_client():

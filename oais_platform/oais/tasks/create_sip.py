@@ -8,13 +8,11 @@ import bagit_create
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
-from django.db.models import Sum
 
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
-from oais_platform.oais.tasks.utils import create_path_artifact, set_and_return_error
+from oais_platform.oais.tasks.utils import create_path_artifact
 from oais_platform.settings import (
-    AGGREGATED_FILE_SIZE_LIMIT,
     BIC_UPLOAD_PATH,
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
@@ -52,27 +50,22 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
     else:
         retry = False
         with transaction.atomic():
-            if size > AGGREGATED_FILE_SIZE_LIMIT:
-                logger.warning(
-                    f"Archive {archive.id} exceeds file size limit ({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
-                )
-                return set_and_return_error(
-                    step, "Record is too large to be harvested."
-                )
-
-            total_size = (
-                Step.objects.select_for_update()
-                .filter(step_name=StepName.HARVEST, status=Status.IN_PROGRESS)
-                .aggregate(total_original_size=Sum("archive__original_file_size"))[
-                    "total_original_size"
-                ]
-                or 0
+            harvest_step_type = StepType.objects.select_for_update().get(
+                name=StepName.HARVEST
             )
+            if size > harvest_step_type.size_limit_bytes:
+                logger.warning(
+                    f"Archive {archive.id} exceeds file size limit ({harvest_step_type.size_limit_bytes // (1024**3)}GB)."
+                )
+                return {"status": 1, "errormsg": "Record is too large to be harvested."}
 
-            if size + total_size > AGGREGATED_FILE_SIZE_LIMIT:
+            if (
+                size + harvest_step_type.current_size_bytes
+                > harvest_step_type.size_limit_bytes
+            ):
                 logger.warning(
                     f"Archive {archive.id} exceeds aggregated file size limit "
-                    f"({AGGREGATED_FILE_SIZE_LIMIT // (1024**3)}GB)."
+                    f"({harvest_step_type.size_limit_bytes // (1024**3)}GB)."
                 )
                 if self.request.retries >= self.max_retries:
                     return {"status": 1, "errormsg": "Max retries exceeded."}

@@ -322,6 +322,10 @@ class StepType(models.Model):
     automatic_next_step = models.ForeignKey(
         "self", null=True, on_delete=models.SET_NULL
     )
+    size_limit_bytes = models.BigIntegerField(default=None, null=True)
+    current_size_bytes = models.BigIntegerField(default=0)
+    concurrency_limit = models.IntegerField(default=None, null=True)
+    current_count = models.IntegerField(default=0)
 
     @classmethod
     def get_by_stepname(cls, stepname):
@@ -346,6 +350,14 @@ class StepType(models.Model):
     def unblock(self):
         self.failed_count = 0
         self.enabled = True
+        self.save()
+
+    def increment_current_count(self):
+        self.current_count += 1
+        self.save()
+
+    def increment_current_size(self, size):
+        self.current_size_bytes += size
         self.save()
 
 

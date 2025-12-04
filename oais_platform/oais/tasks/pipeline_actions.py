@@ -213,18 +213,20 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
     else:
         step.set_status(Status.FAILED)
 
-    manage_steps(step.status)
+    manage_steps(step)
 
 
 def manage_steps(step):
+    step_type = step.step_type
     if step.status == Status.FAILED:
-        step_type = StepType.get_by_stepname(step.step_name)
         step_type.increment_failed_count()
-    elif step.status == Status.COMPLETED and step.step_type.name == StepName.ARCHIVE:
+    if step_type.name == StepName.ARCHIVE and step_type.enabled:
         waiting_step = Step.objects.filter(
             status=Status.WAITING,
-            step_name=StepType.ARCHIVE,
+            step_type=step_type,
             celery_task_id__isnull=True,
-        )
+            archive__last_step=step.id,  # It is the last step of the archive, not in pipeline
+        ).order_by("create_date")
         if waiting_step.exists():
-            step, _ = run_step(waiting_step.first(), waiting_step.first().archive.id)
+            first_waiting_step = waiting_step.first()
+            step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)

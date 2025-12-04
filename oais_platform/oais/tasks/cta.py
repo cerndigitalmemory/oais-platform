@@ -12,7 +12,6 @@ from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finaliz
 from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
 from oais_platform.settings import (
     CTA_BASE_PATH,
-    FTS_CONCURRENCY_LIMIT,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
@@ -67,7 +66,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         fts = apps.get_app_config("oais").fts
 
         # If already maximum number of transfers ongoing, create a periodic task for trying again
-        if fts.number_of_transfers() >= FTS_CONCURRENCY_LIMIT:
+        if fts.number_of_transfers() >= step.step_type.concurrency_limit:
             logger.info(
                 f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
             )
