@@ -8,11 +8,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.settings import (
-    FTS_CONCURRENCY_LIMIT,
-    FTS_WAIT_IN_HOURS,
-    FTS_WAIT_LIMIT_IN_WEEKS,
-)
+from oais_platform.settings import FTS_WAIT_IN_HOURS, FTS_WAIT_LIMIT_IN_WEEKS
 
 
 class PushToCTATests(APITestCase):
@@ -27,6 +23,8 @@ class PushToCTATests(APITestCase):
             step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now(),
         )
+        self.step.step_type.concurrency_limit = 5
+        self.step.step_type.save()
 
         self.wait_limit_archive = Archive.objects.create(path_to_aip="test/path")
         self.wait_limit_step = Step.objects.create(
@@ -66,7 +64,9 @@ class PushToCTATests(APITestCase):
         )
 
     def test_push_to_cta_wait(self):
-        self.fts.number_of_transfers.return_value = FTS_CONCURRENCY_LIMIT
+        self.fts.number_of_transfers.return_value = (
+            self.step.step_type.concurrency_limit + 1
+        )
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.assertEqual(self.fts.number_of_transfers.call_count, 1)
         self.assertEqual(self.fts.push_to_cta.call_count, 0)

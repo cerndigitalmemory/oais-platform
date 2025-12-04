@@ -60,16 +60,21 @@ def set_and_return_error(step, errormsg, extra_log=None):
     """
     Set the step as failed and return the error message
     """
+    from oais_platform.oais.tasks.pipeline_actions import manage_end_of_step
+
     step.set_status(Status.FAILED)
     step.set_finish_date()
     if type(errormsg) is dict:
         step.set_output_data(errormsg)
-        return errormsg
+        return_value = errormsg
     else:
         return_value = {"status": 1, "errormsg": errormsg}
         step.set_output_data(return_value)
         logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-        return return_value
+
+    manage_end_of_step(step)
+
+    return return_value
 
 
 def remove_periodic_task_on_failure(task_name, step, output_data):

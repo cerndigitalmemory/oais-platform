@@ -6,7 +6,7 @@ from celery import shared_task
 from celery import states as celery_states
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import models, transaction
 
 from oais_platform.celery import app
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
@@ -213,18 +213,43 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
     else:
         step.set_status(Status.FAILED)
 
-    manage_steps(step.status)
+    manage_end_of_step(step)
 
 
-def manage_steps(step):
+def manage_end_of_step(step):
+    step_type = step.step_type
     if step.status == Status.FAILED:
-        step_type = StepType.get_by_stepname(step.step_name)
         step_type.increment_failed_count()
-    elif step.status == Status.COMPLETED and step.step_type.name == StepName.ARCHIVE:
+    output_data = json.loads(step.output_data) if step.output_data else {}
+    incremented = output_data.get("incremented", True)
+    if incremented:
+        with transaction.atomic():
+            step_type = StepType.objects.select_for_update().get(pk=step_type.id)
+            if step_type.concurrency_limit is not None:
+                step_type.decrement_current_count()
+            if step_type.size_limit_bytes is not None:
+                if (
+                    step_type.name == StepName.HARVEST
+                    and step.archive.original_file_size
+                ):
+                    step_type.decrement_current_size(step.archive.original_file_size)
+                elif step_type.name == StepName.ARCHIVE and step.archive.sip_size:
+                    step_type.decrement_current_size(step.archive.sip_size)
+    if step_type.name == StepName.ARCHIVE and step_type.enabled:
+        logging.info(
+            f"Checking for waiting ARCHIVE steps to run (concurrency limit: {step_type.concurrency_limit})"
+        )
         waiting_step = Step.objects.filter(
             status=Status.WAITING,
-            step_name=StepType.ARCHIVE,
+            step_type=step_type,
             celery_task_id__isnull=True,
-        )
+            archive__last_step=models.F(
+                "id"
+            ),  # It is the last step of the archive, not in pipeline
+        ).order_by("create_date")
         if waiting_step.exists():
-            step, _ = run_step(waiting_step.first(), waiting_step.first().archive.id)
+            first_waiting_step = waiting_step.first()
+            logging.info(
+                f"Found {waiting_step.count()} waiting ARCHIVE steps to run, running the oldest (id: {first_waiting_step.id})."
+            )
+            step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)
