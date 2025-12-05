@@ -832,6 +832,14 @@ class Request(models.Model):
             ("can_approve_requests", "Can approve or reject archive requests"),
         )
 
+    def add_archive(self, archive):
+        """Adds an archive to the request"""
+        if self.status != RequestStatus.DRAFT:
+            raise Exception(
+                "Cannot add archives to a request that is not in DRAFT status."
+            )
+        self.archives.add(archive)
+
     def approve(self, approver, decision_reason=None):
         """Marks the request as approved and updates all associated archives"""
         if self.status != RequestStatus.PENDING:

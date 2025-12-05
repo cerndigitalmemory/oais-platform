@@ -14,6 +14,7 @@ from wsgiref.util import FileWrapper
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
@@ -38,6 +39,8 @@ from oais_platform.oais.models import (
     Archive,
     ArchiveState,
     Collection,
+    Request,
+    RequestStatus,
     Source,
     Status,
     Step,
@@ -219,9 +222,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         records = request.data["records"]
         try:
+            archive_request = Request.objects.get(
+                requester=request.user, status=RequestStatus.DRAFT
+            )
+        except ObjectDoesNotExist:
+            archive_request = Request.objects.create(requester=request.user)
+        try:
             for record in records:
                 # Always create a new archive instance
-                Archive.objects.create(
+                archive = Archive.objects.create(
                     recid=record["recid"],
                     source=record["source"],
                     source_url=record["source_url"],
@@ -230,6 +239,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     staged=True,
                     original_file_size=record.get("file_size") or 0,
                 )
+                archive_request.add_archive(archive)
             return Response({"status": 0, "errormsg": None})
         except Exception as e:
             return Response({"status": 1, "errormsg": str(e)})
