@@ -793,6 +793,7 @@ class HarvestBatch(models.Model):
 
 
 class RequestStatus(models.IntegerChoices):
+    DRAFT = 0, "Draft"
     PENDING = 1, "Pending"
     APPROVED = 2, "Approved"
     REJECTED = 3, "Rejected"
@@ -818,7 +819,7 @@ class Request(models.Model):
     request_reason = models.TextField()
     archives = models.ManyToManyField("Archive", related_name="requests")
     status = models.IntegerField(
-        choices=RequestStatus.choices, default=RequestStatus.PENDING
+        choices=RequestStatus.choices, default=RequestStatus.DRAFT
     )
 
     decision_reason = models.TextField(null=True, blank=True)
@@ -833,10 +834,10 @@ class Request(models.Model):
 
     def approve(self, approver, decision_reason=None):
         """Marks the request as approved and updates all associated archives"""
-        if self.status != self.RequestStatus.PENDING:
+        if self.status != RequestStatus.PENDING:
             raise Exception("Cannot approve a request that is not pending.")
 
-        self.status = self.RequestStatus.APPROVED
+        self.status = RequestStatus.APPROVED
         self.approver = approver
         self.decision_reason = decision_reason
         self.approved_at = timezone.now()
@@ -844,13 +845,13 @@ class Request(models.Model):
 
     def reject(self, approver, decision_reason):
         """Marks the request as rejected"""
-        if self.status != self.RequestStatus.PENDING:
+        if self.status != RequestStatus.PENDING:
             raise Exception("Cannot reject a request that is not pending.")
 
         if not decision_reason:
             raise ValueError("A rejection reason is required.")
 
-        self.status = self.RequestStatus.REJECTED
+        self.status = RequestStatus.REJECTED
         self.approver = approver
         self.decision_reason = decision_reason
         self.approved_at = timezone.now()
