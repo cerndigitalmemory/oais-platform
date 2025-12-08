@@ -5,6 +5,7 @@ from rest_framework import serializers
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    ArchiveState,
     Collection,
     Profile,
     Resource,
@@ -211,6 +212,11 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
 
+    archives_summary = serializers.SerializerMethodField()
+    archives_sip_count = serializers.SerializerMethodField()
+    archives_aip_count = serializers.SerializerMethodField()
+    archives_no_package_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Collection
         fields = [
@@ -221,7 +227,44 @@ class CollectionSerializer(serializers.ModelSerializer):
             "timestamp",
             "last_modification_date",
             "archives_count",
+            "archives_summary",
+            "archives_sip_count",
+            "archives_aip_count",
+            "archives_no_package_count",
         ]
+
+    def get_archives_aip_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.AIP).count()
+
+    def get_archives_sip_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.SIP).count()
+
+    def get_archives_no_package_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.NONE).count()
+
+    def get_archives_summary(self, obj):
+        summary = {}
+        for archive in obj.archives.all():
+            if archive.last_step:
+                step_name = archive.last_step.step_type.name
+                status = archive.last_step.status
+                timestamp_str = archive.last_step.start_date
+            else:
+                step_name, status, timestamp_str = ("None", "None", "None")
+            if not step_name in summary:
+                summary[step_name] = {}
+            if not status in summary[step_name]:
+                summary[step_name][status] = {
+                    "count": 0,
+                    "min_last_update": timestamp_str,
+                    "max_last_update": timestamp_str,
+                }
+            summary[step_name][status]["count"] += 1
+            if timestamp_str < summary[step_name][status]["min_last_update"]:
+                summary[step_name][status]["min_last_update"] = timestamp_str
+            if timestamp_str > summary[step_name][status]["max_last_update"]:
+                summary[step_name][status]["max_last_update"] = timestamp_str
+        return summary
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):
