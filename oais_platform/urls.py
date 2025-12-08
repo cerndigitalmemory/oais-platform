@@ -26,6 +26,7 @@ router.register(r"archives", views.ArchiveViewSet, basename="archives")
 router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
 router.register(r"step-type", views.StepTypeViewSet, basename="step-type")
+router.register(r"requests", views.RequestViewSet, basename="requests")
 
 
 # Wire up our API using automatic URL routing.

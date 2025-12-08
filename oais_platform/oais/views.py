@@ -64,6 +64,7 @@ from oais_platform.oais.serializers import (
     CollectionNameSerializer,
     CollectionSerializer,
     LoginSerializer,
+    RequestSerializer,
     StepSerializer,
     StepTypeMinimalSerializer,
     UserSerializer,
@@ -899,6 +900,15 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return super().get_queryset().filter(enabled=True).order_by("name")
+
+
+class RequestViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
+    """
+    API endpoint that allows Requests to be viewed or edited
+    """
+
+    queryset = Request.objects.all()
+    serializer_class = RequestSerializer
 
 
 @api_view(["GET"])

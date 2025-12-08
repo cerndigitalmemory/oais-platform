@@ -7,6 +7,7 @@ from oais_platform.oais.models import (
     Archive,
     Collection,
     Profile,
+    Request,
     Resource,
     Source,
     Step,
@@ -172,6 +173,26 @@ class ArchiveWithDuplicatesSerializer(ArchiveSerializer):
         for d in duplicates:
             results.append({"id": d.id, "timestamp": d.timestamp})
         return results
+
+
+class RequestSerializer(serializers.Serializer):
+    requester = UserMinimalSerializer()
+    approver = UserMinimalSerializer()
+    archives = ArchiveSerializer(many=True)
+
+    class Meta:
+        model = Request
+        fields = [
+            "id",
+            "requester",
+            "approver",
+            "request_reason",
+            "archives",
+            "status",
+            "decision_reason",
+            "requested_at",
+            "approved_at",
+        ]
 
 
 class ArchiveMinimalSerializer(serializers.ModelSerializer):
