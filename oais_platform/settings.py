@@ -345,7 +345,6 @@ FTS_SOURCE_BASE_PATH = environ.get(
     "FTS_SOURCE_BASE_PATH", "https://eosproject-p.cern.ch:8444"
 )
 FTS_MAX_RETRY_COUNT = 1
-FTS_CONCURRENCY_LIMIT = 200
 FTS_WAIT_IN_HOURS = 1
 FTS_WAIT_LIMIT_IN_WEEKS = 2
 
@@ -366,16 +365,12 @@ BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
 AM_WAITING_TIME_LIMIT = 5
-AM_CONCURRENCY_LIMT = 100
 
 # Pipeline creation step limit
 PIPELINE_SIZE_LIMIT = 10
 
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
-
-# Based on available disk space for harvest and Archivematica (smallest of the two)
-AGGREGATED_FILE_SIZE_LIMIT = 50 * 1024**3  # 50 GB
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file

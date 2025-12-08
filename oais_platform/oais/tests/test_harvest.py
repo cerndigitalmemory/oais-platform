@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import harvest
-from oais_platform.settings import AGGREGATED_FILE_SIZE_LIMIT, BIC_UPLOAD_PATH
+from oais_platform.settings import BIC_UPLOAD_PATH
 
 
 class HarvestTest(APITestCase):
@@ -20,13 +20,17 @@ class HarvestTest(APITestCase):
         self.step = Step.objects.create(
             archive=self.archive, step_name=StepName.HARVEST, status=Status.NOT_RUN
         )
+        self.step.step_type.size_limit_bytes = 200
+        self.step.step_type.save()
 
     @patch("bagit_create.main.process")
     def test_harvest_success(self, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
         fake_file1 = MagicMock()
-        fake_file1.stat.return_value.st_size = AGGREGATED_FILE_SIZE_LIMIT - 100
+        fake_file1.stat.return_value.st_size = (
+            self.step.step_type.size_limit_bytes - 100
+        )
 
         with patch.object(Path, "rglob", return_value=[fake_file1]):
             result = harvest.apply(
@@ -41,43 +45,39 @@ class HarvestTest(APITestCase):
         )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_harvest_file_size_exceeded(self):
-        self.archive.set_original_file_size(AGGREGATED_FILE_SIZE_LIMIT + 100)
+        self.archive.set_original_file_size(self.step.step_type.size_limit_bytes + 100)
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], "Record is too large to be harvested.")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_harvest_aggr_file_size_exceeded(self):
-        for i in range(2):
-            archive = Archive.objects.create(
-                recid=f"r{i}",
-                source="test_source",
-                original_file_size=AGGREGATED_FILE_SIZE_LIMIT / 2,
-            )
-            Step.objects.create(
-                archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
-            )
+        self.step.step_type.current_size_bytes = (
+            self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
+        )
+        self.step.step_type.save()
 
         with self.assertRaises(Retry):
             harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(
+            self.step.step_type.current_size_bytes,
+            self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1,
+        )
 
     @patch("celery.app.task.Task.request")
     def test_harvest_aggr_file_size_retries_exceeded(self, task_request):
-        for i in range(2):
-            archive = Archive.objects.create(
-                recid=f"r{i}",
-                source="test_source",
-                original_file_size=AGGREGATED_FILE_SIZE_LIMIT / 2,
-            )
-            Step.objects.create(
-                archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
-            )
+        self.step.step_type.current_size_bytes = (
+            self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
+        )
+        self.step.step_type.save()
 
         task_request.id = "test_task_id"
         task_request.retries = 10
@@ -86,6 +86,10 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Max retries exceeded.")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(
+            self.step.step_type.current_size_bytes,
+            self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1,
+        )
 
     @patch("bagit_create.main.process")
     def test_harvest_bagit_exception(self, bagit_create):
@@ -97,6 +101,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], exc_msg)
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     @patch("bagit_create.main.process")
     def test_harvest_bagit_redirect(self, bagit_create):
@@ -108,6 +113,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], exc_msg)
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     @patch("bagit_create.main.process")
     def test_harvest_retry_failed(self, bagit_create):
@@ -117,6 +123,7 @@ class HarvestTest(APITestCase):
             harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     @patch("bagit_create.main.process")
     @patch("celery.app.task.Task.request")
@@ -130,9 +137,12 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Max retries exceeded.")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     @patch("bagit_create.main.process")
     def test_harvest_non_retriable_failed(self, bagit_create):
+        self.step.step_type.current_size_bytes = 50
+        self.step.step_type.save()
         bagit_create.return_value = {"status": 1, "errormsg": "Error"}
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -140,3 +150,4 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Error")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.step_type.current_size_bytes, 50)
