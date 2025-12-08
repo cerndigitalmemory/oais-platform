@@ -1,10 +1,21 @@
 from django.contrib.auth.models import Group, User
+from django.db.models import (
+    CharField,
+    Count,
+    DateTimeField,
+    IntegerField,
+    Max,
+    Min,
+    Value,
+)
+from django.db.models.functions import Coalesce
 from opensearch_dsl import utils
 from rest_framework import serializers
 
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    ArchiveState,
     Collection,
     Profile,
     Resource,
@@ -211,6 +222,11 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
 
+    archives_summary = serializers.SerializerMethodField()
+    archives_sip_count = serializers.SerializerMethodField()
+    archives_aip_count = serializers.SerializerMethodField()
+    archives_no_package_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Collection
         fields = [
@@ -221,7 +237,59 @@ class CollectionSerializer(serializers.ModelSerializer):
             "timestamp",
             "last_modification_date",
             "archives_count",
+            "archives_summary",
+            "archives_sip_count",
+            "archives_aip_count",
+            "archives_no_package_count",
         ]
+
+    def get_archives_aip_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.AIP).count()
+
+    def get_archives_sip_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.SIP).count()
+
+    def get_archives_no_package_count(self, obj):
+        return obj.archives.filter(state=ArchiveState.NONE).count()
+
+    def get_archives_summary(self, obj):
+        qs = (
+            obj.archives.annotate(
+                step_name=Coalesce(
+                    "last_step__step_type__name",
+                    Value(None),
+                    output_field=CharField(),
+                ),
+                step_status=Coalesce(
+                    "last_step__status",
+                    Value(None),
+                    output_field=IntegerField(),
+                ),
+                step_ts=Coalesce(
+                    "last_step__start_date",
+                    Value(None),
+                    output_field=DateTimeField(),
+                ),
+            )
+            .values("step_name", "step_status")
+            .annotate(
+                count=Count("id"),
+                min_last_update=Min("step_ts"),
+                max_last_update=Max("step_ts"),
+            )
+        )
+        summary = {}
+        for row in qs:
+            step = row["step_name"]
+            status = str(row["step_status"])  # JSON-friendly keys
+
+            summary.setdefault(step, {})[status] = {
+                "count": row["count"],
+                "min_last_update": row["min_last_update"],
+                "max_last_update": row["max_last_update"],
+            }
+
+        return summary
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):
