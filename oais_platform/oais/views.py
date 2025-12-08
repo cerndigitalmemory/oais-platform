@@ -57,6 +57,7 @@ from oais_platform.oais.permissions import (
     UserPermission,
     filter_archives,
     filter_collections,
+    filter_requests,
 )
 from oais_platform.oais.serializers import (
     ArchiveSerializer,
@@ -907,8 +908,34 @@ class RequestViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     API endpoint that allows Requests to be viewed or edited
     """
 
-    queryset = Request.objects.all()
     serializer_class = RequestSerializer
+
+    def get_queryset(self):
+        """
+        Returns a list of requests based on the filters
+        """
+        queryset = Request.objects.all()
+
+        visibility = self.request.query_params.get("access", "all")
+        if visibility in ["all", "owned"]:
+            queryset = filter_requests(queryset, self.request.user, visibility)
+        else:
+            raise BadRequest("Invalid access parameter")
+
+        statuses = self.request.query_params.get("status")
+        if statuses is not None:
+            try:
+                status_values = statuses.split(",")
+                status_values = [
+                    int(value)
+                    for value in status_values
+                    if int(value) in RequestStatus.values
+                ]
+                queryset = queryset.filter(status__in=status_values)
+            except ValueError:
+                pass
+
+        return queryset
 
 
 @api_view(["GET"])

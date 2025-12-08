@@ -172,6 +172,22 @@ def filter_archives(queryset, user=None, visibility="all"):
             return queryset.filter(restricted=False)
 
 
+def filter_requests(queryset, user=None, visibility="all"):
+    match visibility:
+        case "all":
+            if user.is_superuser or user.has_perm("oais.can_approve_all"):
+                return queryset
+            permission_granted_queryset = get_objects_for_user(
+                user, "oais.can_approve_all"
+            )
+            return (
+                queryset.filter(Q(approver=user) | Q(requester=user))
+                | permission_granted_queryset
+            )
+        case "owned":
+            return queryset.filter(requester=user)
+
+
 def filter_collections(queryset, user, internal=None):
     if not user.has_perm("oais.view_archive_all"):
         queryset = queryset.filter(creator=user)
