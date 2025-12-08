@@ -1,5 +1,9 @@
 # Changes
 
+## Version 2.5.0 (released 2025-12-08)
+- Moved step concurrency limits to the database
+- Archivematica: added step manager to pick up waiting tasks
+
 ## Version 2.4.1 (released 2025-12-03)
 - Dependencies: pin kombu 5.6.1, bump redis to 5.x for compatibility
 
