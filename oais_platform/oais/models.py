@@ -448,7 +448,7 @@ class Step(models.Model):
         self.status = status
         self.save()
 
-        if self.is_batch_initiated:
+        if self.is_batch_initiated and status in [Status.COMPLETED, Status.FAILED]:
             # Check if the batch is finished
             with transaction.atomic():
                 batch = HarvestBatch.objects.select_for_update().get(

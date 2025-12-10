@@ -239,17 +239,24 @@ def manage_end_of_step(step):
         logging.info(
             f"Checking for waiting ARCHIVE steps to run (concurrency limit: {step_type.concurrency_limit})"
         )
-        waiting_step = Step.objects.filter(
-            status=Status.WAITING,
-            step_type=step_type,
-            celery_task_id__isnull=True,
-            archive__last_step=models.F(
-                "id"
-            ),  # It is the last step of the archive, not in pipeline
-        ).order_by("create_date")
-        if waiting_step.exists():
-            first_waiting_step = waiting_step.first()
-            logging.info(
-                f"Found {waiting_step.count()} waiting ARCHIVE steps to run, running the oldest (id: {first_waiting_step.id})."
+        with transaction.atomic():
+            first_waiting_step = (
+                Step.objects.select_for_update(skip_locked=True)
+                .filter(
+                    status=Status.WAITING,
+                    step_type=step_type,
+                    celery_task_id__isnull=True,
+                    archive__last_step=models.F(
+                        "id"
+                    ),  # It is the last step of the archive, not in pipeline
+                )
+                .order_by("create_date")
+                .first()
             )
-            step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)
+            if first_waiting_step:
+                logging.info(
+                    f"Found oldest waiting {StepName.ARCHIVE} steps to run (id: {first_waiting_step.id})."
+                )
+                step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)
+            else:
+                logging.info(f"No waiting {StepName.ARCHIVE} step found to run.")
