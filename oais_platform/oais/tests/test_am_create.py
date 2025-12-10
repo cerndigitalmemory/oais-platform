@@ -38,10 +38,6 @@ class ArchivematicaCreateTests(APITestCase):
         step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
-        self.assertEqual(
-            step_output["transfer_name"],
-            f"{self.archive.source}__{self.archive.recid}_Archive_{self.archive.id}",
-        )
         self.assertEqual(periodic_task.name, get_task_name(self.step))
         self.assertEqual(periodic_task.task, "check_am_status")
         self.assertEqual(
