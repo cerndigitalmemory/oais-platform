@@ -62,17 +62,10 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
         sip_directory,
     )
 
-    # Adds an _ between Archive and the id because archivematica messes up with spaces
-    transfer_name = (
-        archive.source + "__" + archive.recid + "_Archive_" + str(archive_id)
-    )
-    if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
-        transfer_name = "Archive_" + str(archive_id)
-
     # Set up the AMClient to interact with the AM configuration provided in the settings
     am = get_am_client()
     am.transfer_directory = archivematica_dst
-    am.transfer_name = transfer_name
+    am.transfer_name = get_transfer_name(archive)
 
     # Create archivematica package
     logger.info(
@@ -98,7 +91,6 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                     "status": 0,
                     "details": "Uploaded to Archivematica - waiting for processing",
                     "errormsg": None,
-                    "transfer_name": transfer_name,
                 }
             )
 
@@ -199,7 +191,6 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
 
     status = am_status["status"]
     microservice = am_status["microservice"]
-    am_status["transfer_name"] = json.loads(step.output_data)["transfer_name"]
 
     logger.info(f"Status for {step_id} is: {status}")
 
@@ -322,16 +313,24 @@ def create_check_am_status(package, step, archive_id, api_key):
         task="check_am_status",
         args=json.dumps([package, step.id, archive_id, api_key]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
+        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
 
 
+def get_transfer_name(archive):
+    # Adds an _ between Archive and the id because archivematica messes up with spaces
+    transfer_name = (
+        archive.source + "__" + archive.recid + "_Archive_" + str(archive.id)
+    )
+    if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
+        transfer_name = "Archive_" + str(archive.id)
+
+    return transfer_name
+
+
 def get_task_name(step):
-    output_data = json.loads(step.output_data)
-    if not output_data or "transfer_name" not in output_data:
-        raise Exception(
-            f"Step {step.id} output data is missing the required 'transfer_name' field."
-        )
-    return f"AM Status for step: {step.id}, package: {output_data['transfer_name']}"
+    transfer_name = get_transfer_name(step.archive)
+    return f"AM Status for step: {step.id}, package: {transfer_name}"
 
 
 @shared_task(
