@@ -448,22 +448,20 @@ class Step(models.Model):
         self.status = status
         self.save()
 
-        if self.is_batch_initiated:
+        if self.is_batch_initiated and status in [Status.COMPLETED, Status.FAILED]:
             # Check if the batch is finished
             with transaction.atomic():
                 batch = HarvestBatch.objects.select_for_update().get(
                     pk=self.initiated_by_harvest_batch.id
                 )
-                if (
-                    batch.size - batch.skipped_count == batch.completed
-                    or batch.skipped_count == batch.size
-                ):
+                batch_archive_size = batch.size - batch.skipped_count
+                if batch_archive_size == batch.completed:
                     batch.set_status(BatchStatus.COMPLETED)
                     logging.info(f"Batch {batch.id} completed")
-                elif batch.size - batch.skipped_count == batch.failed:
+                elif batch_archive_size == batch.failed:
                     batch.set_status(BatchStatus.FAILED)
                     logging.error(f"Batch {batch.id} failed")
-                elif batch.size - batch.skipped_count == batch.completed + batch.failed:
+                elif batch_archive_size == batch.completed + batch.failed:
                     batch.set_status(BatchStatus.PARTIALLY_FAILED)
                     logging.warning(f"Batch {batch.id} partially failed")
 
@@ -487,8 +485,11 @@ class Step(models.Model):
         self.finish_date = timezone.now()
         self.save()
 
-    def set_start_date(self):
-        self.start_date = timezone.now()
+    def set_start_date(self, reset=False):
+        if reset:
+            self.start_date = None
+        else:
+            self.start_date = timezone.now()
         self.save()
 
     def save(self, *args, **kwargs):
@@ -802,7 +803,9 @@ class HarvestBatch(models.Model):
             Step.objects.filter(
                 archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
-            .exclude(status=Status.WAITING)
+            .exclude(
+                models.Q(status=Status.WAITING) & models.Q(celery_task_id__isnull=True)
+            )
             .order_by("-create_date")
             .values("status")[:1]
         )
