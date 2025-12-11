@@ -369,9 +369,9 @@ UPLOAD_DELETION_CUTOFF_DAYS = 14
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
 # Path where the AIPs will be served from
-AIP_UPSTREAM_BASEPATH = "/oais-data/aip/"
+AIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/aip/"
 # Path where the SIPs will be served from
-SIP_UPSTREAM_BASEPATH = "/oais-data/sip/"
+SIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/sip/"
 
 # FTS Settings
 FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-public.cern.ch:8446")

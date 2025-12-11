@@ -227,7 +227,7 @@ class ArchiveTests(APITestCase):
         self.assertEqual(len(response.data), 0)
 
         self.step1 = Step.objects.create(
-            archive=self.private_archive, step_name=StepName.CHECKSUM
+            archive=self.private_archive, step_name=StepName.VALIDATION
         )
         self.step2 = Step.objects.create(
             archive=self.private_archive, step_name=StepName.ARCHIVE
