@@ -292,7 +292,6 @@ class ScheduledHarvestTests(APITestCase):
         pipeline = [
             StepName.HARVEST,
             StepName.VALIDATION,
-            StepName.CHECKSUM,
             StepName.ARCHIVE,
         ]
         for step in pipeline:
@@ -395,19 +394,15 @@ class ScheduledHarvestTests(APITestCase):
         archive = self.create_batch_archive()
         self.create_batch_step(archive, StepName.HARVEST, Status.COMPLETED)
         self.create_batch_step(archive, StepName.VALIDATION, Status.COMPLETED)
-        self.create_batch_step(archive, StepName.CHECKSUM, Status.COMPLETED)
         archive2 = self.create_batch_archive()
         self.create_batch_step(archive2, StepName.HARVEST, Status.COMPLETED)
         self.create_batch_step(archive2, StepName.VALIDATION, Status.FAILED)
-        self.create_batch_step(archive2, StepName.CHECKSUM, Status.WAITING)
         archive3 = self.create_batch_archive()
         self.create_batch_step(archive3, StepName.HARVEST, Status.COMPLETED)
-        self.create_batch_step(archive3, StepName.VALIDATION, Status.COMPLETED)
-        self.create_batch_step(archive3, StepName.CHECKSUM, Status.IN_PROGRESS)
+        self.create_batch_step(archive3, StepName.VALIDATION, Status.IN_PROGRESS)
         archive4 = self.create_batch_archive()
         self.create_batch_step(archive4, StepName.HARVEST, Status.COMPLETED)
         self.create_batch_step(archive4, StepName.VALIDATION, Status.COMPLETED)
-        self.create_batch_step(archive4, StepName.CHECKSUM, Status.COMPLETED)
         self.create_batch_step(archive4, StepName.ARCHIVE, Status.WAITING)
 
         self.assertEqual(self.batch.completed, 1)

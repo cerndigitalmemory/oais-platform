@@ -171,6 +171,7 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
     step = Step.objects.get(pk=step_id)
 
     step.set_task(self.request.id)
+    step.set_finish_date()
 
     # If the Celery task succeded
     if current_status == celery_states.SUCCESS:
@@ -181,7 +182,6 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
 
             # Set step as completed and save finish date and output data
             step.set_status(Status.COMPLETED)
-            step.set_finish_date()
             if step.step_type != StepType.get_by_stepname(StepName.ARCHIVE):
                 step.set_output_data(retval)
 

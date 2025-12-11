@@ -59,8 +59,8 @@ class PipelineTests(APITestCase):
             archive=self.archive, step_name=StepName.HARVEST
         )
 
-        self.checksum_step = Step.objects.create(
-            archive=self.archive, step_name=StepName.CHECKSUM
+        self.validation_step = Step.objects.create(
+            archive=self.archive, step_name=StepName.VALIDATION
         )
 
         self.init_step_count = Step.objects.count()
@@ -95,9 +95,6 @@ class PipelineTests(APITestCase):
 
         pipeline = [StepName.ARCHIVE, StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH]
 
-        # simulate ongoing checksum step: last_completed_step != last_step
-        self.archive.set_last_step(self.checksum_step.id)
-
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
@@ -107,14 +104,14 @@ class PipelineTests(APITestCase):
 
         archive = Archive.objects.get(pk=self.archive.id)
 
-        self.assertEqual(len(archive.pipeline_steps), len(pipeline))
+        self.assertEqual(len(archive.pipeline_steps), len(pipeline) - 1)
         self.assertEqual(Step.objects.count(), self.init_step_count + len(pipeline))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_execute_pipeline_forbidden(self):
         self.client.force_authenticate(user=self.other_user)
 
-        pipeline = [StepName.VALIDATION, StepName.CHECKSUM]
+        pipeline = [StepName.VALIDATION]
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -131,7 +128,7 @@ class PipelineTests(APITestCase):
         self.other_user.save()
         self.client.force_authenticate(user=self.other_user)
 
-        pipeline = [StepName.VALIDATION, StepName.CHECKSUM]
+        pipeline = [StepName.VALIDATION]
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -168,29 +165,8 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "pipeline": [StepName.CHECKSUM],
-                    "prev_step": StepName.VALIDATION,
-                },
-                status.HTTP_200_OK,
-            ),
-            (
-                {
-                    "pipeline": [StepName.ARCHIVE],
-                    "prev_step": StepName.CHECKSUM,
-                },
-                status.HTTP_200_OK,
-            ),
-            (
-                {
                     "pipeline": [StepName.PUSH_TO_CTA],
                     "prev_step": StepName.ARCHIVE,
-                },
-                status.HTTP_200_OK,
-            ),
-            (
-                {
-                    "pipeline": [StepName.INVENIO_RDM_PUSH],
-                    "prev_step": StepName.CHECKSUM,
                 },
                 status.HTTP_200_OK,
             ),

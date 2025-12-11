@@ -13,7 +13,9 @@ def add_step_types(apps, schema_editor):
 
     harvest = StepType.objects.create(name=StepName.HARVEST, label="Harvest", description="Harvest from upstream source", task_name="harvest", has_sip=True)
     validate = StepType.objects.create(name=StepName.VALIDATION, label="Validation", description="Validate SIP structure and contents", task_name="validate")
-    checksum = StepType.objects.create(name=StepName.CHECKSUM, label="Checksum", description="Verify checksums", task_name="checksum")
+    # The step of checksum does not exist anymore. We can't get it from StepName
+    checksum = StepType.objects.create(name="CHECKSUM", label="Checksum", description="Verify checksums", task_name="checksum")
+
     archive = StepType.objects.create(name=StepName.ARCHIVE, label="Archive", description="Create the Preservation Bag", task_name="archivematica", has_aip=True)
     cta = StepType.objects.create(name=StepName.PUSH_TO_CTA, label="Push to CTA", description="Copy Preservation Bag to Long Term Storage", task_name="push_to_cta")
     registry = StepType.objects.create(name=StepName.INVENIO_RDM_PUSH, label="Push to Registry", description="Register bag in central registry", task_name="process_invenio")
