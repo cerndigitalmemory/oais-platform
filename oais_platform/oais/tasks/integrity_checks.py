@@ -3,7 +3,8 @@ import os
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from oais_utils.validate import validate_sip
+from fs.errors import ResourceNotFound
+from oais_utils.validate import compute_hash, validate_sip
 
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.pipeline_actions import finalize
@@ -14,7 +15,7 @@ logger = get_task_logger(__name__)
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
 def validate(self, archive_id, step_id, input_data=None, api_key=None):
     """
-    Validate the a folder against the CERN SIP specification,
+    Validate a folder against the CERN SIP specification,
     using the OAIS utils package
     """
     archive = Archive.objects.get(pk=archive_id)
@@ -60,20 +61,36 @@ def checksum(self, archive_id, step_id, input_data=None, api_key=None):
     if not sip_exists:
         return {"status": 1, "errormsg": "SIP does not exist"}
 
-    sip_json = os.path.join(path_to_sip, "data/meta/sip.json")
+    manifest = os.path.join(path_to_sip, "manifest-md5.txt")
+    err_msg = None
+    try:
+        with open(manifest) as manifest_file:
+            for line in manifest_file:
+                line = line.strip()
+                if not line:
+                    continue
 
-    with open(sip_json) as json_file:
-        data = json.load(json_file)
-        for file in data["contentFiles"]:
-            try:
-                checksum_list = []
-                for checksum in file["checksum"]:
-                    splited = checksum.split(":")
-                    checksum = splited[0] + ":" + "0"
-                    checksum_list.append(checksum)
-            except KeyError:
-                current_file = file["origin"]["filename"]
-                logger.info(f"Checksum not found for file {current_file}")
+                try:
+                    expected_md5, filename = line.split(maxsplit=1)
+                except ValueError:
+                    err_msg = f"Malformed manifest line: {line!r}"
+                    break
+                filename = f"{path_to_sip}/{filename}"
+                logger.info(f"Checking file: {filename}")
+                try:
+                    actual_md5 = compute_hash(filename, alg="md5")
+                except (FileNotFoundError, ResourceNotFound):
+                    err_msg = f"File not found: {filename}"
+                    break
+                if actual_md5.lower() != expected_md5.lower():
+                    err_msg = f"Checksum mismatch for {filename} expected {expected_md5}, got {actual_md5}"
+
+    except FileNotFoundError:
+        err_msg = "Manifest file does not exist"
+
+    if err_msg:
+        logger.error(err_msg)
+        return {"status": 1, "errormsg": err_msg}
 
     logger.info("Checksum completed!")
 
