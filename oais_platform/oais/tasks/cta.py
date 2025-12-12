@@ -1,6 +1,8 @@
 import json
 from datetime import timedelta
+from pathlib import Path
 
+import gfal2
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.apps import apps
@@ -54,6 +56,34 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
+    cta_folder_name = f"aip-{archive.id}"
+    overwrite = False
+
+    try:
+        gfal2.set_verbose(gfal2.verbose_level.warning)
+        ctx = gfal2.creat_context()
+        file_stat = ctx.stat(f"{CTA_BASE_PATH}{cta_folder_name}")
+        aip_size = Path(archive.path_to_aip).stat().st_size
+
+        if file_stat.st_size == aip_size:
+            logger.info("File already exists on tape")
+            step.set_status(
+                Status.REJECTED
+            )  # should it be completed or rejected or something else?
+            step.set_output_data(
+                {"status": 0, "details": "Archive already exists on tape"}
+            )
+            return
+        else:
+            logger.info("Overwriting existing file")
+            overwrite = True
+    except gfal2.GError:
+        logger.info(f"Archive {archive.id} does not exist on tape yet")
+        # if "404" in e:
+        #     logger.info(f"Archive {archive.id} does not exist on tape yet")
+        # else:
+        #     logger.error(f"Failed checking whether archive {archive.id} exists on tape")
+
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
         logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
@@ -91,10 +121,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         # And set the step as in progress
         step.set_status(Status.IN_PROGRESS)
 
-        cta_folder_name = f"aip-{archive.id}"
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
+            overwrite,
         )
     except Exception as e:
         if self.request.retries >= self.max_retries:
