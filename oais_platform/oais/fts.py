@@ -50,7 +50,7 @@ class FTS:
                 f"The certificate {self.cert_path} is going to expire in {ttl_days} (which is smaller than {self.cert_ttl_days_error} days)"
             )
 
-    def push_to_cta(self, source, dest):
+    def push_to_cta(self, source, dest, overwrite=False):
         logging.info(f"Starting FTS transfer from {source} to {dest}.")
         transfer = fts3.new_transfer(source, dest)
         job = fts3.new_job(
@@ -61,6 +61,7 @@ class FTS:
             priority=3,
             archive_timeout=self.archive_timeout,
             copy_pin_lifetime=self.copy_pin_lifetime,
+            overwrite=overwrite,
         )
         self.check_ttl()
         submitted_job = fts3.submit(job=job, context=self.context)
