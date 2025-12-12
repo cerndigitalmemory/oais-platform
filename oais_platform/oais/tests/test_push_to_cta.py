@@ -8,7 +8,12 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.settings import FTS_WAIT_IN_HOURS, FTS_WAIT_LIMIT_IN_WEEKS
+from oais_platform.settings import (
+    CTA_BASE_PATH,
+    FTS_SOURCE_BASE_PATH,
+    FTS_WAIT_IN_HOURS,
+    FTS_WAIT_LIMIT_IN_WEEKS,
+)
 
 
 class MockedGError(Exception):
@@ -27,7 +32,8 @@ class PushToCTATests(APITestCase):
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
-        self.archive = Archive.objects.create(path_to_aip="test/path")
+        path_to_aip = "test/path"
+        self.archive = Archive.objects.create(path_to_aip=path_to_aip)
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
@@ -36,7 +42,7 @@ class PushToCTATests(APITestCase):
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
 
-        self.wait_limit_archive = Archive.objects.create(path_to_aip="test/path")
+        self.wait_limit_archive = Archive.objects.create(path_to_aip=path_to_aip)
         self.wait_limit_step = Step.objects.create(
             archive=self.wait_limit_archive,
             step_name=StepName.PUSH_TO_CTA,
@@ -47,10 +53,16 @@ class PushToCTATests(APITestCase):
             every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
         )
 
-    def _setup_gfal2_mocks(self, mock_gfal2):
+        self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
+        self.expected_destination = f"{CTA_BASE_PATH}aip-{self.archive.id}"
+
+    def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()
-        mock_ctx.stat.side_effect = self.MockedGError("404 File not found", 404)
-        mock_gfal2.GError = self.MockedGError
+        if error:
+            mock_ctx.stat.side_effect = self.MockedGError("404 File not found", 404)
+            mock_gfal2.GError = self.MockedGError
+        else:
+            mock_ctx.stat.return_value = Mock(st_size=123456)
         mock_gfal2.creat_context.return_value = mock_ctx
 
     def test_push_to_cta_success(self, mock_gfal2):
@@ -60,6 +72,11 @@ class PushToCTATests(APITestCase):
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.fts.push_to_cta.assert_called_once_with(
+            self.expected_source,
+            self.expected_destination,
+            False,
+        )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
         self.assertTrue(
             PeriodicTask.objects.filter(
@@ -131,5 +148,40 @@ class PushToCTATests(APITestCase):
         self.assertFalse(
             PeriodicTask.objects.filter(
                 name=f"Push to CTA: {self.wait_limit_step.id}"
+            ).exists()
+        )
+
+    @patch("oais_platform.oais.tasks.cta.Path")
+    def test_push_to_cta_file_exists_on_tape(self, mock_path, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2, False)
+        mock_path.return_value.stat.return_value.st_size = 123456
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 0)
+        self.assertEqual(self.step.status, Status.REJECTED)
+        self.assertFalse(
+            PeriodicTask.objects.filter(
+                name=f"FTS job status for step: {self.step.id}"
+            ).exists()
+        )
+
+    @patch("oais_platform.oais.tasks.cta.Path")
+    def test_push_to_cta_file_exists_on_tape_overwrite(self, mock_path, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2, error=False)
+        mock_path.return_value.stat.return_value.st_size = 100
+        self.fts.number_of_transfers.return_value = 0
+        self.fts.push_to_cta.return_value = "test_job_id"
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.fts.push_to_cta.assert_called_once_with(
+            self.expected_source,
+            self.expected_destination,
+            True,
+        )
+        self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertTrue(
+            PeriodicTask.objects.filter(
+                name=f"FTS job status for step: {self.step.id}"
             ).exists()
         )
