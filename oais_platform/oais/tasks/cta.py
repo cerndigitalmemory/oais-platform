@@ -77,12 +77,13 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         else:
             logger.info("Overwriting existing file")
             overwrite = True
-    except gfal2.GError:
-        logger.info(f"Archive {archive.id} does not exist on tape yet")
-        # if "404" in e:
-        #     logger.info(f"Archive {archive.id} does not exist on tape yet")
-        # else:
-        #     logger.error(f"Failed checking whether archive {archive.id} exists on tape")
+    except gfal2.GError as e:
+        if "404" in e.message:
+            logger.info(f"Archive {archive.id} does not exist on tape yet")
+        else:
+            logger.error(
+                f"Failed checking whether archive {archive.id} exists on tape: {e}"
+            )
 
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
