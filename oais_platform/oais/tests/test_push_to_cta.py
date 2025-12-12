@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from django.apps import apps
 from django.utils import timezone
@@ -11,7 +11,17 @@ from oais_platform.oais.tasks.cta import push_to_cta
 from oais_platform.settings import FTS_WAIT_IN_HOURS, FTS_WAIT_LIMIT_IN_WEEKS
 
 
+class MockedGError(Exception):
+    def __init__(self, message, code):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+@patch("oais_platform.oais.tasks.cta.gfal2")
 class PushToCTATests(APITestCase):
+    MockedGError = MockedGError
+
     def setUp(self):
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
@@ -37,7 +47,14 @@ class PushToCTATests(APITestCase):
             every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
         )
 
-    def test_push_to_cta_success(self):
+    def _setup_gfal2_mocks(self, mock_gfal2):
+        mock_ctx = Mock()
+        mock_ctx.stat.side_effect = self.MockedGError("404 File not found", 404)
+        mock_gfal2.GError = self.MockedGError
+        mock_gfal2.creat_context.return_value = mock_ctx
+
+    def test_push_to_cta_success(self, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
@@ -50,7 +67,8 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    def test_push_to_cta_exception(self):
+    def test_push_to_cta_exception(self, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.side_effect = Exception()
         push_to_cta.apply(args=[self.archive.id, self.step.id])
@@ -63,7 +81,8 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    def test_push_to_cta_wait(self):
+    def test_push_to_cta_wait(self, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
         self.fts.number_of_transfers.return_value = (
             self.step.step_type.concurrency_limit + 1
         )
@@ -74,7 +93,8 @@ class PushToCTATests(APITestCase):
             PeriodicTask.objects.filter(name=f"Push to CTA: {self.step.id}")
         )
 
-    def test_push_to_cta_retry_after_wait(self):
+    def test_push_to_cta_retry_after_wait(self, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         PeriodicTask.objects.create(
@@ -95,7 +115,8 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    def test_push_to_cta_wait_limit(self):
+    def test_push_to_cta_wait_limit(self, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
         PeriodicTask.objects.create(
             interval=self.schedule,
             name=f"Push to CTA: {self.step.id}",
