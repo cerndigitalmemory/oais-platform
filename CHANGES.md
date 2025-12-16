@@ -1,5 +1,10 @@
 # Changes
 
+## Version 2.6.0 (released 2025-12-16)
+- Archivematica: add more failure details, automatically retry on some errors
+- Local dev: updated Archivematica local setup
+- Fix: Archivematica step manager concurrency
+
 ## Version 2.5.0 (released 2025-12-08)
 - Moved step concurrency limits to the database
 - Archivematica: added step manager to pick up waiting tasks
