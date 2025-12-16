@@ -345,6 +345,8 @@ AM_TRANSFER_SOURCE = (
 AM_POLLING_INTERVAL = 15  # minutes
 # After callback check status with delay
 AM_CALLBACK_DELAY = 10  # seconds
+# Maximum number of retries for Archivematica failed jobs
+AM_RETRY_LIMIT = 2
 
 # INVENIORDM integration
 

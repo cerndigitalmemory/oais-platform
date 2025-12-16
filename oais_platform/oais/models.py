@@ -61,6 +61,7 @@ class Status(models.IntegerChoices):
     WAITING_APPROVAL = 5, "WAITING_APPROVAL"
     REJECTED = 6, "REJECTED"
     WAITING = 7, "WAITING"
+    COMPLETED_WITH_WARNINGS = 8, "COMPLETED_WITH_WARNINGS"
 
 
 class ArchiveState(models.IntegerChoices):
@@ -219,7 +220,8 @@ class Archive(models.Model):
                 step_type__has_sip=True, status=Status.COMPLETED
             ).exists()
             is_aip = self.steps.filter(
-                step_type__has_aip=True, status=Status.COMPLETED
+                step_type__has_aip=True,
+                status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
             ).exists()
 
             if is_sip and is_aip:

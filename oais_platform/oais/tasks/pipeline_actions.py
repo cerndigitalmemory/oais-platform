@@ -114,9 +114,16 @@ def create_retry_step(
     self, archive_id, user_id=None, execute=False, step_name=None, api_key=None
 ):
     archive = Archive.objects.get(pk=archive_id)
-    last_step = Step.objects.get(pk=archive.last_step.id)
-    if last_step and last_step.status != Status.FAILED:
-        return {"errormsg": "Retry operation not permitted, last step is not failed."}
+    last_step = archive.last_step
+    if not last_step:
+        return {"errormsg": "Retry operation not permitted, no last step found."}
+    if last_step.status not in [
+        Status.FAILED,
+        Status.COMPLETED_WITH_WARNINGS,
+    ]:
+        return {
+            "errormsg": "Retry operation not permitted, last step is not failed or completed with warnings."
+        }
     if step_name and last_step.step_type.name != step_name:
         return {
             "errormsg": f"Retry operation not permitted, last step is not {step_name}."

@@ -13,7 +13,7 @@ from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
-from oais_platform.oais.tasks.pipeline_actions import finalize
+from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
     remove_periodic_task_on_failure,
@@ -24,6 +24,7 @@ from oais_platform.settings import (
     AM_API_KEY,
     AM_CALLBACK_DELAY,
     AM_POLLING_INTERVAL,
+    AM_RETRY_LIMIT,
     AM_SS_API_KEY,
     AM_SS_URL,
     AM_SS_USERNAME,
@@ -134,19 +135,15 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
             is_failed = True
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
-                am.unit_uuid = message["id"]
-                executed_jobs = am.get_jobs()
-                logger.debug(
-                    f"Executed jobs for given id({message['id']}): {executed_jobs}"
-                )
-                if executed_jobs != 1 and len(executed_jobs) > 0:
+                executed_jobs = get_executed_jobs(am, message["id"])
+                if executed_jobs > 0:
                     is_failed = False
                     am_status = {
                         "status": "PROCESSING",
                         "microservice": "Waiting for archivematica to continue the processing",
                     }
                     logger.info(
-                        f"Archivematica package has executed jobs ({len(executed_jobs)}) - waiting for the continuation of the processing"
+                        f"Archivematica package has executed jobs ({executed_jobs}) - waiting for the continuation of the processing"
                     )
                 else:
                     logger.info("No executed jobs for the given Archivematica package.")
@@ -176,40 +173,61 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
             if is_failed:
                 am_status = {
                     "status": "FAILED",
-                    "microservice": "Archivematica delayed to respond.",
+                    "errormsg": "Archivematica delayed to respond.",
                 }
         else:
             # If there is other type of error code then archivematica connection could not be established.
             am_status = {
                 "status": "FAILED",
-                "microservice": "Error: Could not connect to archivematica",
+                "errormsg": "Error: Could not connect to archivematica",
             }
     except Exception as e:
         """
         In any other case make task fail (Archivematica crashed or not responding)
         """
-        am_status = {"status": "FAILED", "microservice": str(e)}
+        am_status = {"status": "FAILED", "errormsg": str(e)}
 
     status = am_status["status"]
-    microservice = am_status["microservice"]
+    microservice = am_status.get("microservice", None)
 
     logger.info(f"Status for {step_id} is: {status}")
 
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
-            handle_completed_am_package(
+            result = handle_completed_am_package(
                 self, task_name, am, step, am_status, archive_id, api_key
             )
+            if result:
+                errors = get_executed_jobs(am, am_status["uuid"], check_for_failed=True)
+                if errors and len(errors) > 0:
+                    am_status["errormsg"] = errors
+                    am_status["retry"] = True
+                    logger.warning(
+                        f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
+                    )
+                    remove_periodic_task_on_failure(task_name, step, am_status)
+                    step.set_status(Status.COMPLETED_WITH_WARNINGS)
         except Exception as e:
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
             )
             remove_periodic_task_on_failure(
-                task_name, step, {"status": "FAILED", "microservice": str(e)}
+                task_name, step, {"status": "FAILED", "errormsg": str(e)}
             )
 
     elif status == "FAILED" or status == "REJECTED":
+        if not am_status.get("errormsg", None):
+            errors = get_executed_jobs(am, message["id"], check_for_failed=True)
+            if am_status.get("uuid", None):
+                errors += get_executed_jobs(
+                    am, am_status["uuid"], check_for_failed=True
+                )
+            logger.warning(
+                f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
+            )
+            am_status["errormsg"] = errors
+            am_status["retry"] = True
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "USER_INPUT":
@@ -217,6 +235,8 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
         logger.error(
             f"Package requires user input for step {step.id} - automatic pipeline failed"
         )
+        am_status["errormsg"] = "Error: Archivematica requires user input."
+        am_status["retry"] = True
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
@@ -232,6 +252,31 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
         logger.warning(
             f"Unknown status from Archivematica: {status}, for step {step.id}"
         )
+        step.set_output_data(am_status)
+
+    if am_status.get("retry", False):
+        retry_count = 0
+        if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
+            input_data = json.loads(step.input_data) if step.input_data else {}
+            retry_count = input_data.get("retry_count", 0)
+        if retry_count + 1 > AM_RETRY_LIMIT:
+            logger.warning("Max retries exceeded for failed Archivematica jobs.")
+            am_status["retry_count"] = retry_count
+            am_status["retry_limit_exceeded"] = True
+            am_status["retry"] = False
+        else:
+            am_status["retry_count"] = retry_count + 1
+            am_status["retry"] = True
+            logger.info(f"Creating Archivematica retry step for archive {archive_id}")
+            create_retry_step.apply_async(
+                args=[
+                    archive_id,
+                    step.initiated_by_user.id if step.initiated_by_user else None,
+                    True,
+                    StepName.ARCHIVE,
+                    api_key,
+                ],
+            )
         step.set_output_data(am_status)
 
 
@@ -295,6 +340,60 @@ def get_am_client():
     am.processing_config = "automated"
 
     return am
+
+
+def get_executed_jobs(am, unit_uuid, check_for_failed=False):
+    am.unit_uuid = unit_uuid
+    executed_jobs = am.get_jobs()
+    logger.debug(f"Executed jobs for given id({unit_uuid}): {executed_jobs}")
+    errors = []
+    if executed_jobs != 1 and len(executed_jobs) > 0:
+        if not check_for_failed:
+            return len(executed_jobs)
+        for job in executed_jobs:
+            try:
+                # Normalization failure is not failing the whole package, so need to check tasks inside the job
+                if (
+                    job["name"] == "Normalize for preservation"
+                    and job["status"] == "COMPLETE"
+                ):
+                    for task in job["tasks"]:
+                        if task["exit_code"] == 1:
+                            task_uuid = task["uuid"]
+                            filename = None
+                            result = requests.get(
+                                f"{am.am_url}/api/v2beta/task/{task_uuid}",
+                                headers=am._am_auth_headers(),
+                            )
+                            if result.ok:
+                                task_info = result.json()
+                                filename = task_info.get("file_name", None)
+                            errors.append(
+                                {
+                                    "task": job["name"],
+                                    "filename": filename,
+                                    "link": f"{am.am_url}/task/{task_uuid}",
+                                }
+                            )
+                if job["status"] == "FAILED":
+                    errors.append(
+                        {
+                            "task": job["name"],
+                            "microservice": job.get("microservice", None),
+                            "link": f"{am.am_url}/tasks/{job['uuid']}",
+                        }
+                    )
+            except KeyError:
+                logger.warning(
+                    f"KeyError while checking executed jobs for {unit_uuid}: {str(job)}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Error while checking executed jobs for {unit_uuid}: {str(e)}"
+                )
+        return errors
+    else:
+        return 0
 
 
 def create_check_am_status(package, step, archive_id, api_key):
@@ -405,6 +504,7 @@ def handle_completed_am_package(
             logger.warning(e)
         except Exception as e:
             logger.error(e)
+        return True
     else:
         retry_limit = 5
         output_data = {}
@@ -422,3 +522,4 @@ def handle_completed_am_package(
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
+            return False

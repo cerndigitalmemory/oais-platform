@@ -162,7 +162,10 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
         output_data = json.loads(step.output_data)
         if output_data["artifact"]:
             result["artifact"] = output_data["artifact"]
-        result["retry_count"] = input_data.get("retry_count", -1) + 1
+        retry_count = 0
+        if step.input_step and step.input_step.step_type.name == StepName.PUSH_TO_CTA:
+            retry_count = input_data.get("retry_count", -1) + 1
+        result["retry_count"] = retry_count
 
         if result["retry_count"] < FTS_MAX_RETRY_COUNT:
             logger.info(

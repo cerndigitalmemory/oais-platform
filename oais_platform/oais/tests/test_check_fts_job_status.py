@@ -52,6 +52,10 @@ class CheckFTSJobStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.pipeline_actions.create_retry_step.apply_async")
     def test_fts_job_status_failed_multiple_times(self, create_retry_step):
         self.step.input_data = json.dumps({"retry_count": FTS_MAX_RETRY_COUNT})
+        self.step.input_step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.PUSH_TO_CTA,
+        )
         self.step.save()
         self.fts.job_status.return_value = {"job_state": "FAILED"}
         check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
