@@ -61,9 +61,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
     try:
         if _verify_file(archive, cta_folder_name):
-            step.set_status(
-                Status.REJECTED
-            )  # should it be completed or rejected or something else?
+            step.set_status(Status.COMPLETED)
             step.set_output_data(
                 {"status": 0, "details": "Archive already exists on tape"}
             )

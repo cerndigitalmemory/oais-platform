@@ -163,7 +163,7 @@ class PushToCTATests(APITestCase):
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
-        self.assertEqual(self.step.status, Status.REJECTED)
+        self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertFalse(
             PeriodicTask.objects.filter(
                 name=f"FTS job status for step: {self.step.id}"
