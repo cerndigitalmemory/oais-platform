@@ -63,7 +63,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         return
 
     try:
-        fts = apps.get_app_config("oais").fts
+        fts = apps.get_app_config("oais").get_fts_client()
 
         # If already maximum number of transfers ongoing, create a periodic task for trying again
         if fts.number_of_transfers() >= step.step_type.concurrency_limit:
@@ -144,7 +144,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     task_name = f"FTS job status for step: {step.id}"
 
     try:
-        fts = apps.get_app_config("oais").fts
+        fts = apps.get_app_config("oais").get_fts_client()
         status = fts.job_status(job_id)
     except Exception as e:
         logger.warning(str(e))
@@ -188,7 +188,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
 def fts_delegate(self):
     try:
-        fts = apps.get_app_config("oais").fts
+        fts = apps.get_app_config("oais").get_fts_client()
         fts.check_ttl()
         fts.delegate()
     except Exception as e:

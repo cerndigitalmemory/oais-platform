@@ -30,3 +30,8 @@ class OaisConfig(AppConfig):
             )
         except Exception as e:
             logging.warning(f"Couldn't initialize the FTS client: {e}")
+
+    def get_fts_client(self):
+        if not hasattr(self, "fts"):
+            raise RuntimeError("FTS client is not configured.")
+        return self.fts
