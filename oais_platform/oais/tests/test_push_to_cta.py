@@ -63,6 +63,7 @@ class PushToCTATests(APITestCase):
             mock_gfal2.GError = self.MockedGError
         else:
             mock_ctx.stat.return_value = Mock(st_size=123456)
+            mock_ctx.checksum.return_value = "test-checksum"
         mock_gfal2.creat_context.return_value = mock_ctx
 
     def test_push_to_cta_success(self, mock_gfal2):
@@ -152,9 +153,13 @@ class PushToCTATests(APITestCase):
         )
 
     @patch("oais_platform.oais.tasks.cta.Path")
-    def test_push_to_cta_file_exists_on_tape(self, mock_path, mock_gfal2):
+    @patch("oais_platform.oais.tasks.cta.compute_hash")
+    def test_push_to_cta_file_exists_on_tape(
+        self, mock_checksum, mock_path, mock_gfal2
+    ):
         self._setup_gfal2_mocks(mock_gfal2, False)
         mock_path.return_value.stat.return_value.st_size = 123456
+        mock_checksum.return_value = "test-checksum"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
@@ -166,9 +171,13 @@ class PushToCTATests(APITestCase):
         )
 
     @patch("oais_platform.oais.tasks.cta.Path")
-    def test_push_to_cta_file_exists_on_tape_overwrite(self, mock_path, mock_gfal2):
+    @patch("oais_platform.oais.tasks.cta.compute_hash")
+    def test_push_to_cta_file_exists_on_tape_overwrite(
+        self, mock_checksum, mock_path, mock_gfal2
+    ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
         mock_path.return_value.stat.return_value.st_size = 100
+        mock_checksum.return_value = "test-checksum"
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
