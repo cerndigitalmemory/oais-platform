@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from django.apps import apps
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from oais_utils.validate import compute_hash
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
@@ -57,16 +58,9 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         return 1
 
     cta_folder_name = f"aip-{archive.id}"
-    overwrite = False
 
     try:
-        gfal2.set_verbose(gfal2.verbose_level.warning)
-        ctx = gfal2.creat_context()
-        file_stat = ctx.stat(f"{CTA_BASE_PATH}{cta_folder_name}")
-        aip_size = Path(archive.path_to_aip).stat().st_size
-
-        if file_stat.st_size == aip_size:
-            logger.info("File already exists on tape")
+        if _verify_file(archive, cta_folder_name):
             step.set_status(
                 Status.REJECTED
             )  # should it be completed or rejected or something else?
@@ -74,16 +68,13 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
                 {"status": 0, "details": "Archive already exists on tape"}
             )
             return
-        else:
-            logger.info("Overwriting existing file")
-            overwrite = True
-    except gfal2.GError as e:
-        if "404" in e.message:
-            logger.info(f"Archive {archive.id} does not exist on tape yet")
-        else:
-            logger.error(
-                f"Failed checking whether archive {archive.id} exists on tape: {e}"
-            )
+        logger.info("Overwriting existing file")
+        overwrite = True
+    except gfal2.GError:
+        overwrite = False
+    except Exception:
+        logger.warning("Failed to verify existing file")
+        overwrite = False
 
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
@@ -252,3 +243,30 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
         kwargs=None,
         einfo=None,
     )
+
+
+def _verify_file(archive, file_name):
+    try:
+        gfal2.set_verbose(gfal2.verbose_level.warning)
+        ctx = gfal2.creat_context()
+        cta_filename = f"{CTA_BASE_PATH}{file_name}"
+        cta_file_size = ctx.stat(cta_filename).st_size
+        aip_size = Path(archive.path_to_aip).stat().st_size
+
+        if cta_file_size == aip_size:
+            cta_file_checksum = ctx.checksum(cta_filename, "ADLER32")
+            aip_checksum = compute_hash(archive.path_to_aip, alg="adler32")
+            if cta_file_checksum == aip_checksum:
+                logger.info("File already exists on tape")
+                return True
+    except gfal2.GError as e:
+        if "404" in e.message:
+            logger.info(f"Archive {archive.id} does not exist on tape yet")
+        else:
+            logger.error(
+                f"Failed checking whether archive {archive.id} exists on tape: {e}"
+            )
+        raise e
+    except Exception as e:
+        raise e
+    return False
