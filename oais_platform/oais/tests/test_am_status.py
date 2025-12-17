@@ -342,6 +342,12 @@ class ArchivematicaStatusTests(APITestCase):
                     "uuid": 6789,
                 },
                 {
+                    "name": "Extract technical metadata",
+                    "status": "FAILED",
+                    "microservice": "Unzipping file",
+                    "uuid": 6789,
+                },
+                {
                     "name": "Scan for viruses",
                     "status": "COMPLETE",
                     "microservice": "Moving to failed folder",

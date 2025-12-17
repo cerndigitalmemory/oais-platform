@@ -376,13 +376,18 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
                                 }
                             )
                 if job["status"] == "FAILED":
-                    errors.append(
-                        {
-                            "task": job["name"],
-                            "microservice": job.get("microservice", None),
-                            "link": f"{am.am_url}/tasks/{job['uuid']}",
-                        }
-                    )
+                    entry = {
+                        "task": job["name"],
+                        "microservice": job.get("microservice"),
+                        "link": f"{am.am_url}/tasks/{job['uuid']}",
+                    }
+                    if not any(
+                        e["task"] == entry["task"]
+                        and e.get("microservice", None) == entry["microservice"]
+                        and e["link"] == entry["link"]
+                        for e in errors
+                    ):
+                        errors.append(entry)
             except KeyError:
                 logger.warning(
                     f"KeyError while checking executed jobs for {unit_uuid}: {str(job)}"
