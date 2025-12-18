@@ -1,3 +1,4 @@
+import errno
 from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
@@ -59,7 +60,9 @@ class PushToCTATests(APITestCase):
     def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()
         if error:
-            mock_ctx.stat.side_effect = self.MockedGError("404 File not found", 404)
+            mock_ctx.stat.side_effect = self.MockedGError(
+                "404 File not found", errno.ENOENT
+            )
             mock_gfal2.GError = self.MockedGError
         else:
             mock_ctx.stat.return_value = Mock(st_size=123456)
@@ -76,7 +79,7 @@ class PushToCTATests(APITestCase):
         self.fts.push_to_cta.assert_called_once_with(
             self.expected_source,
             self.expected_destination,
-            False,
+            True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
         self.assertTrue(
@@ -171,13 +174,36 @@ class PushToCTATests(APITestCase):
         )
 
     @patch("oais_platform.oais.tasks.cta.Path")
+    def test_push_to_cta_file_exists_on_tape_different_size(
+        self, mock_path, mock_gfal2
+    ):
+        self._setup_gfal2_mocks(mock_gfal2, error=False)
+        mock_path.return_value.stat.return_value.st_size = 100
+        self.fts.number_of_transfers.return_value = 0
+        self.fts.push_to_cta.return_value = "test_job_id"
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.fts.push_to_cta.assert_called_once_with(
+            self.expected_source,
+            self.expected_destination,
+            True,
+        )
+        self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertTrue(
+            PeriodicTask.objects.filter(
+                name=f"FTS job status for step: {self.step.id}"
+            ).exists()
+        )
+
+    @patch("oais_platform.oais.tasks.cta.Path")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
-    def test_push_to_cta_file_exists_on_tape_overwrite(
+    def test_push_to_cta_file_exists_on_tape_different_checksum(
         self, mock_checksum, mock_path, mock_gfal2
     ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
         mock_path.return_value.stat.return_value.st_size = 100
-        mock_checksum.return_value = "test-checksum"
+        mock_checksum.return_value = "mismatching-checksum"
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
