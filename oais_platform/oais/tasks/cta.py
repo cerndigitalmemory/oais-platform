@@ -1,3 +1,4 @@
+import errno
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -60,18 +61,19 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
     cta_folder_name = f"aip-{archive.id}"
 
     try:
-        if _verify_file(archive, cta_folder_name):
+        if _verify_file(archive.path_to_aip, cta_folder_name):
             step.set_status(Status.COMPLETED)
             step.set_output_data(
-                {"status": 0, "details": "Archive already exists on tape"}
+                {
+                    "status": 0,
+                    "details": "Archive already exists on tape with the same size and checksum",
+                }
             )
             return
-        logger.info("Overwriting existing file")
         overwrite = True
-    except gfal2.GError:
-        overwrite = False
-    except Exception:
-        logger.warning("Failed to verify existing file")
+
+    except Exception as e:
+        logger.warning(f"Error while verifing file on tape: {e}")
         overwrite = False
 
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
@@ -243,28 +245,27 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
     )
 
 
-def _verify_file(archive, file_name):
+def _verify_file(aip_path, cta_filename):
     try:
         gfal2.set_verbose(gfal2.verbose_level.warning)
         ctx = gfal2.creat_context()
-        cta_filename = f"{CTA_BASE_PATH}{file_name}"
-        cta_file_size = ctx.stat(cta_filename).st_size
-        aip_size = Path(archive.path_to_aip).stat().st_size
+        cta_path = f"{CTA_BASE_PATH}{cta_filename}"
+        cta_size = ctx.stat(cta_path).st_size
+        aip_size = Path(aip_path).stat().st_size
 
-        if cta_file_size == aip_size:
-            cta_file_checksum = ctx.checksum(cta_filename, "ADLER32")
-            aip_checksum = compute_hash(archive.path_to_aip, alg="adler32")
+        if cta_size == aip_size:
+            cta_file_checksum = ctx.checksum(cta_path, "ADLER32")
+            aip_checksum = compute_hash(aip_path, alg="adler32")
             if cta_file_checksum == aip_checksum:
                 logger.info("File already exists on tape")
                 return True
-    except gfal2.GError as e:
-        if "404" in e.message:
-            logger.info(f"Archive {archive.id} does not exist on tape yet")
+            logger.info("File exists but checksum differs")
         else:
-            logger.error(
-                f"Failed checking whether archive {archive.id} exists on tape: {e}"
-            )
+            logger.info("File exists but size differs")
+        logger.info("Overwriting existing file")
+        return False
+    except gfal2.GError as e:
+        if e.code == errno.ENOENT:  # no entry found
+            logger.info("File not found on tape")
+            return False
         raise e
-    except Exception as e:
-        raise e
-    return False
