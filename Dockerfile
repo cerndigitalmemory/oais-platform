@@ -44,7 +44,25 @@ RUN dnf install -y epel-release && \
       zlib \
       zlib-devel \
       git \
-      swig
+      swig \
+      gcc \
+      gcc-c++ \
+      make \
+      cmake \
+      gfal2 \
+      gfal2-devel \
+      gfal2-plugin-http \
+      wget \
+      tar && \
+    dnf clean -y all
+
+# Install Boost required for gfal2
+RUN wget https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.bz2 && \
+    tar xf boost_1_89_0.tar.bz2
+WORKDIR /boost_1_89_0
+RUN ./bootstrap.sh --with-python=/usr/bin/python3.11 && \
+  ./b2 --with-python && \
+  ./b2 install --with-python
 
 # Install python packages
 COPY ./requirements.txt /requirements.txt

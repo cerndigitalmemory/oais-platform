@@ -1,11 +1,15 @@
+import errno
 import json
 from datetime import timedelta
+from pathlib import Path
 
+import gfal2
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.apps import apps
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from oais_utils.validate import compute_hash
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
@@ -54,6 +58,24 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
+    cta_folder_name = f"aip-{archive.id}"
+
+    try:
+        if _verify_file(archive.path_to_aip, cta_folder_name):
+            step.set_status(Status.COMPLETED)
+            step.set_output_data(
+                {
+                    "status": 0,
+                    "details": "Archive already exists on tape with the same size and checksum",
+                }
+            )
+            return
+        overwrite = True
+
+    except Exception as e:
+        logger.warning(f"Error while verifing file on tape: {e}")
+        overwrite = False
+
     # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
     if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
         logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
@@ -91,10 +113,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         # And set the step as in progress
         step.set_status(Status.IN_PROGRESS)
 
-        cta_folder_name = f"aip-{archive.id}"
         submitted_job = fts.push_to_cta(
             f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
             f"{CTA_BASE_PATH}{cta_folder_name}",
+            overwrite,
         )
     except Exception as e:
         if self.request.retries >= self.max_retries:
@@ -221,3 +243,29 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
         kwargs=None,
         einfo=None,
     )
+
+
+def _verify_file(aip_path, cta_filename):
+    try:
+        gfal2.set_verbose(gfal2.verbose_level.warning)
+        ctx = gfal2.creat_context()
+        cta_path = f"{CTA_BASE_PATH}{cta_filename}"
+        cta_size = ctx.stat(cta_path).st_size
+        aip_size = Path(aip_path).stat().st_size
+
+        if cta_size == aip_size:
+            cta_file_checksum = ctx.checksum(cta_path, "ADLER32")
+            aip_checksum = compute_hash(aip_path, alg="adler32")
+            if cta_file_checksum == aip_checksum:
+                logger.info("File already exists on tape")
+                return True
+            logger.info("File exists but checksum differs")
+        else:
+            logger.info("File exists but size differs")
+        logger.info("Overwriting existing file")
+        return False
+    except gfal2.GError as e:
+        if e.code == errno.ENOENT:  # no entry found
+            logger.info("File not found on tape")
+            return False
+        raise e
