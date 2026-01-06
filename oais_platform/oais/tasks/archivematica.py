@@ -195,19 +195,9 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
-            result = handle_completed_am_package(
+            handle_completed_am_package(
                 self, task_name, am, step, am_status, archive_id, api_key
             )
-            if result:
-                errors = get_executed_jobs(am, am_status["uuid"], check_for_failed=True)
-                if errors and len(errors) > 0:
-                    am_status["errormsg"] = errors
-                    am_status["retry"] = True
-                    logger.warning(
-                        f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
-                    )
-                    remove_periodic_task_on_failure(task_name, step, am_status)
-                    step.set_status(Status.COMPLETED_WITH_WARNINGS)
         except Exception as e:
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
@@ -277,6 +267,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
                     api_key,
                 ],
             )
+        step.set_finish_date()
         step.set_output_data(am_status)
 
 
@@ -492,6 +483,18 @@ def handle_completed_am_package(
         step.archive.set_aip_path(am_status["artifact"]["artifact_path"])
         step.archive.save()
 
+        errors = get_executed_jobs(am, am_status["uuid"], check_for_failed=True)
+        if errors and len(errors) > 0:
+            am_status["errormsg"] = errors
+            am_status["retry"] = True
+            logger.warning(
+                f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
+            )
+            remove_periodic_task_on_failure(task_name, step, am_status)
+            step.set_status(Status.COMPLETED_WITH_WARNINGS)
+            step.set_output_data(am_status)
+            return
+
         finalize(
             self=self,
             current_status=states.SUCCESS,
@@ -509,7 +512,6 @@ def handle_completed_am_package(
             logger.warning(e)
         except Exception as e:
             logger.error(e)
-        return True
     else:
         retry_limit = 5
         output_data = {}
@@ -527,4 +529,3 @@ def handle_completed_am_package(
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
-            return False

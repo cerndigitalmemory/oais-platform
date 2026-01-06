@@ -626,9 +626,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     last_step = Step.objects.select_for_update().get(
                         pk=archive.last_step.id
                     )
-                    if last_step and last_step.status != Status.FAILED:
+                    if last_step and last_step.status not in [
+                        Status.FAILED,
+                        Status.COMPLETED_WITH_WARNINGS,
+                    ]:
                         raise BadRequest(
-                            "Continue operation not permitted, last step is not failed."
+                            "Continue operation not permitted, last step is not failed or completed with warnings."
                         )
                     if len(archive.pipeline_steps) == 0:
                         raise BadRequest(
