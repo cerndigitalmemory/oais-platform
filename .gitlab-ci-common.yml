@@ -1,14 +1,12 @@
 ---
 # Pipeline stages that are common for oais-platform and oais-web
-build-image:
+.build-template:
   stage: build
   image:
     name: registry.cern.ch/quay.io/buildah/stable:latest
   variables:
     FQ_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:$CI_COMMIT_TAG"
     CONTAINER_STORAGE: "/builds/container-storage"
-  rules:
-    - if: '$CI_COMMIT_TAG'
   before_script:
     - mkdir -p ${CONTAINER_STORAGE}
     - mkdir -p ~/.config/containers/ 
@@ -26,8 +24,32 @@ build-image:
     - cp ~/.config/containers/storage.conf /etc/containers/storage.conf || true
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    - buildah build -t $FQ_IMAGE_NAME .
+    - buildah build --build-arg BUILD_ENV=$DEPLOY_ENV -t $FQ_IMAGE_NAME .
     - buildah push $FQ_IMAGE_NAME
+
+build-dev:
+  extends: .build-template
+  stage: build
+  variables:
+    DEPLOY_ENV: "dev"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+build-qa:
+  extends: .build-template
+  stage: build
+  variables:
+    DEPLOY_ENV: "qa"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+
+build-prod:
+  extends: .build-template
+  stage: build
+  variables:
+    DEPLOY_ENV: "prod"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
 
 .deploy_template:
   when: manual
