@@ -33,7 +33,7 @@ class PushToCTATests(APITestCase):
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
-        path_to_aip = "test/path"
+        path_to_aip = "aips/test/path/filename.zip"
         self.archive = Archive.objects.create(path_to_aip=path_to_aip)
         self.step = Step.objects.create(
             archive=self.archive,
@@ -55,7 +55,7 @@ class PushToCTATests(APITestCase):
         )
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
-        self.expected_destination = f"{CTA_BASE_PATH}aip-{self.archive.id}"
+        self.expected_destination = f"{CTA_BASE_PATH}{path_to_aip}"
 
     def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()

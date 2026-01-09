@@ -1,5 +1,6 @@
 import errno
 import json
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -58,7 +59,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
-    cta_folder_name = f"aip-{archive.id}"
+    if "aips/" in archive.path_to_aip:
+        cta_folder_name = "aips/" + archive.path_to_aip.split("aips/")[1]
+    else:
+        cta_folder_name = os.path.basename(archive.path_to_aip)
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
