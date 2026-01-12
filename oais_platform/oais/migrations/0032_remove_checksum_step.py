@@ -2,15 +2,14 @@
 
 from django.db import migrations, models
 
-from oais_platform.oais.models import StepName
-
-
 
 def remove_checksum_automatic_next_step(apps, schema_editor):
     StepType = apps.get_model("oais", "StepType")
+    Step = apps.get_model("oais", "Step")
 
     try:
         validation = StepType.objects.get(name="VALIDATION")
+        checksum = StepType.objects.get(name="CHECKSUM")
     except StepType.DoesNotExist:
         return
 
@@ -18,7 +17,10 @@ def remove_checksum_automatic_next_step(apps, schema_editor):
     validation.automatic_next_step = None
     validation.save(update_fields=["automatic_next_step"])
 
-    StepType.objects.filter(name="CHECKSUM").delete()
+    # Reassign steps using CHECKSUM
+    Step.objects.filter(step_type=checksum).update(step_type=validation)
+
+    checksum.delete()
 
 class Migration(migrations.Migration):
 
