@@ -35,7 +35,9 @@ class CheckFTSJobStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.pipeline_actions.create_retry_step.apply_async")
     def test_fts_job_status_success(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FINISHED"}
-        check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
+        check_fts_job_status.apply(
+            args=[self.archive.id, self.step.id, "test_job_id", "test_file_name"]
+        )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertFalse(
@@ -46,7 +48,9 @@ class CheckFTSJobStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.pipeline_actions.create_retry_step.apply_async")
     def test_fts_job_status_failed(self, create_retry_step):
         self.fts.job_status.return_value = {"job_state": "FAILED"}
-        check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
+        check_fts_job_status.apply(
+            args=[self.archive.id, self.step.id, "test_job_id", "test_file_name"]
+        )
         create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.pipeline_actions.create_retry_step.apply_async")
@@ -58,7 +62,9 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         self.step.save()
         self.fts.job_status.return_value = {"job_state": "FAILED"}
-        check_fts_job_status.apply(args=[self.archive.id, self.step.id, "test_job_id"])
+        check_fts_job_status.apply(
+            args=[self.archive.id, self.step.id, "test_job_id", "test_file_name"]
+        )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         create_retry_step.assert_not_called()

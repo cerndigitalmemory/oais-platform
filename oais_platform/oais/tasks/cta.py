@@ -149,7 +149,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, api_key]),
+        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name, api_key]),
         expire_seconds=3600.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
@@ -160,7 +160,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
-def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
+def check_fts_job_status(self, archive_id, step_id, job_id, folder_name, api_key=None):
     """
     Check the status of a FTS job.
     If finished, set the corresponding step as completed and remove the
@@ -182,7 +182,9 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
     if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
+        _handle_completed_fts_job(
+            self, task_name, step, archive_id, job_id, folder_name, api_key
+        )
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
         input_data = json.loads(step.input_data)
@@ -222,7 +224,9 @@ def fts_delegate(self):
         logger.error(e)
 
 
-def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
+def _handle_completed_fts_job(
+    self, task_name, step, archive_id, job_id, folder_name, api_key=None
+):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
         logger.info("FTS transfer succeded, removing periodic task")
@@ -230,11 +234,10 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
     except Exception as e:
         logger.warning(e)
 
-    cta_folder_name = f"aip-{archive_id}"
     cta_artifact = {
         "artifact_name": "CTA",
-        "artifact_localpath": cta_folder_name,
-        "artifact_url": f"{CTA_BASE_PATH}{cta_folder_name}",
+        "artifact_localpath": folder_name,
+        "artifact_url": f"{CTA_BASE_PATH}{folder_name}",
         "fts_id": job_id,
     }
 
