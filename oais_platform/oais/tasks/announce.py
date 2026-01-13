@@ -12,6 +12,7 @@ from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize, run_step
 from oais_platform.oais.tasks.utils import (
     add_error_to_tag_description,
+    cleanup_empty_path,
     create_path_artifact,
     create_step,
     generate_directory_structure,
@@ -110,6 +111,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
     try:
         os.mkdir(target_path)
     except FileExistsError:
+        cleanup_empty_path(target_path, BIC_UPLOAD_PATH)
         return {
             "status": 1,
             "errormsg": "The SIP couldn't be copied to the platform \
@@ -146,7 +148,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
 
     except Exception as e:
         # In case of exception delete the target folder
-        shutil.rmtree(target_path)
+        cleanup_empty_path(target_path, BIC_UPLOAD_PATH)
         return {"status": 1, "errormsg": e}
 
 

@@ -12,6 +12,7 @@ from django.db import transaction
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
+    cleanup_empty_path,
     create_path_artifact,
     generate_directory_structure,
 )
@@ -114,6 +115,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH)
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -155,6 +157,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH)
         return {
             "status": 1,
             "errormsg": str(e),
