@@ -111,7 +111,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
     try:
         os.mkdir(target_path)
     except FileExistsError:
-        cleanup_empty_path(target_path, BIC_UPLOAD_PATH)
+        cleanup_empty_path(target_path, BIC_UPLOAD_PATH, archive.source)
         return {
             "status": 1,
             "errormsg": "The SIP couldn't be copied to the platform \
@@ -148,7 +148,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
 
     except Exception as e:
         # In case of exception delete the target folder
-        cleanup_empty_path(target_path, BIC_UPLOAD_PATH)
+        cleanup_empty_path(target_path, BIC_UPLOAD_PATH, archive.source)
         return {"status": 1, "errormsg": e}
 
 

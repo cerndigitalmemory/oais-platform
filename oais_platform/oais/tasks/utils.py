@@ -118,9 +118,9 @@ def generate_directory_structure(base_path, source):
     return full_path
 
 
-def cleanup_empty_path(path_to_clean, base_limit):
+def cleanup_empty_path(path_to_clean, base_path, source):
     current = Path(path_to_clean)
-    limit = Path(base_limit)
+    limit = Path(base_path) / source
 
     for folder in [current] + list(current.parents):
         if folder == limit or not folder.is_relative_to(limit):

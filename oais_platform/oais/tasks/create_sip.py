@@ -115,7 +115,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH)
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -157,7 +157,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH)
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
         return {
             "status": 1,
             "errormsg": str(e),
