@@ -59,10 +59,11 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
-    if "aips/" in archive.path_to_aip:
-        cta_folder_name = "aips/" + archive.path_to_aip.split("aips/")[1]
-    else:
-        cta_folder_name = os.path.basename(archive.path_to_aip)
+    try:
+        cta_folder_name = os.path.join("aips", archive.path_to_aip.split("aips/")[1])
+    except IndexError:
+        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
+        cta_folder_name = os.path.join("aips", os.path.basename(archive.path_to_aip))
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
