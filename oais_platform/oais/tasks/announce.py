@@ -14,6 +14,7 @@ from oais_platform.oais.tasks.utils import (
     add_error_to_tag_description,
     create_path_artifact,
     create_step,
+    generate_directory_structure,
 )
 from oais_platform.settings import BIC_UPLOAD_PATH, SIP_UPSTREAM_BASEPATH
 
@@ -101,7 +102,9 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
     announce_path = input_data["announce_path"]
 
     if BIC_UPLOAD_PATH:
-        target_path = os.path.join(BIC_UPLOAD_PATH, foldername)
+        target_path = os.path.join(
+            generate_directory_structure(BIC_UPLOAD_PATH, archive.source), foldername
+        )
     else:
         target_path = foldername
     try:

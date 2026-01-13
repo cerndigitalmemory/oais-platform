@@ -39,9 +39,11 @@ class UploadTaskTest(APITestCase):
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
-    def test_upload_success(self, bagit_create):
+    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
+    def test_upload_success(self, uuid_mock, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
+        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
         mock_file = MagicMock()
         mock_file.stat.return_value.st_size = 100
 
@@ -54,7 +56,12 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(result["artifact"]["artifact_name"], "SIP")
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
-            os.path.join(BIC_UPLOAD_PATH, sip_folder),
+            os.path.join(
+                BIC_UPLOAD_PATH,
+                "local",
+                "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
+                sip_folder,
+            ),
         )
         self.assertFalse(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()

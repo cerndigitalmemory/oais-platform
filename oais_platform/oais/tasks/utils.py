@@ -1,3 +1,5 @@
+import os
+import uuid
 from urllib.parse import urljoin
 
 from celery.utils.log import get_task_logger
@@ -105,3 +107,9 @@ def add_error_to_tag_description(tag, path, errormsg):
         if tag.description.find("ERRORS:") == -1:
             tag.set_description(tag.description + " ERRORS:")
         tag.set_description(tag.description + f" {errormsg}:{path}.")
+
+
+def generate_directory_structure(base_path, source):
+    unique_id = uuid.uuid4().hex
+    segments = [unique_id[i : i + 4] for i in range(0, len(unique_id), 4)]
+    return os.path.join(base_path, source, *segments)

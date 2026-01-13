@@ -23,10 +23,12 @@ class HarvestTest(APITestCase):
         self.step.step_type.size_limit_bytes = 200
         self.step.step_type.save()
 
+    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
     @patch("bagit_create.main.process")
-    def test_harvest_success(self, bagit_create):
+    def test_harvest_success(self, bagit_create, uuid_mock):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
+        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
         fake_file1 = MagicMock()
         fake_file1.stat.return_value.st_size = (
             self.step.step_type.size_limit_bytes - 100
@@ -41,7 +43,12 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["artifact"]["artifact_name"], "SIP")
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
-            os.path.join(BIC_UPLOAD_PATH, sip_folder),
+            os.path.join(
+                BIC_UPLOAD_PATH,
+                "test_source",
+                "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
+                sip_folder,
+            ),
         )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
