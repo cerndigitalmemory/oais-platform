@@ -53,6 +53,12 @@ class HarvestTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        expected_path = (
+            Path(BIC_UPLOAD_PATH)
+            / "test_source"
+            / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+        )
+        self.assertTrue(expected_path.exists())
 
     def test_harvest_file_size_exceeded(self):
         self.archive.set_original_file_size(self.step.step_type.size_limit_bytes + 100)
@@ -98,10 +104,12 @@ class HarvestTest(APITestCase):
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1,
         )
 
+    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
     @patch("bagit_create.main.process")
-    def test_harvest_bagit_exception(self, bagit_create):
+    def test_harvest_bagit_exception(self, bagit_create, uuid_mock):
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
+        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
@@ -109,6 +117,12 @@ class HarvestTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        expected_path = (
+            Path(BIC_UPLOAD_PATH)
+            / "test_source"
+            / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+        )
+        self.assertFalse(expected_path.exists())
 
     @patch("bagit_create.main.process")
     def test_harvest_bagit_redirect(self, bagit_create):
