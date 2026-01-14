@@ -1,5 +1,12 @@
 # Changes
 
+## Version 2.7.0 (released 2026-01-14)
+- CTA: improved error messages, check if file exists before submit
+- AM: fix duplicate error, halt pipeline after completed with warnings
+- Jobs: return summary
+- Steps: improve checksum comparison function, merge checksum and validation
+- Local dev: add files to serve by nginx
+
 ## Version 2.6.0 (released 2025-12-16)
 - Archivematica: add more failure details, automatically retry on some errors
 - Local dev: updated Archivematica local setup
