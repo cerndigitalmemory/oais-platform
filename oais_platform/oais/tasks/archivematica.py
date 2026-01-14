@@ -1,6 +1,7 @@
 import json
 import ntpath
 import os
+import re
 
 import requests
 from amclient import AMClient
@@ -439,9 +440,10 @@ def get_task_name(step):
 )
 def callback_package(self, package_name):
     logger.info(f"Callback for package {package_name} received.")
-    periodic_task = PeriodicTask.objects.filter(
-        Q(name__endswith=package_name) | Q(name__regex=rf"^{package_name}_[0-9]+$")
+    package_name = re.sub(
+        r"_\d+$", "", package_name
     )  # Archivematica may append a suffix to the package name
+    periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
     if periodic_task.count() > 1:
         logger.error(
             f"Ambiguous package name ({package_name}) found: {periodic_task.count()}"

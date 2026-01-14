@@ -140,6 +140,31 @@ class AmCallbackTest(TestCase):
                     args=["arg1", "arg2"], countdown=AM_CALLBACK_DELAY
                 )
 
+    def test_successful_callback_single_match_underscore(self):
+        """Test successful callback with single matching periodic task, package name with underscore suffix"""
+        with patch(
+            "oais_platform.oais.tasks.archivematica.check_am_status"
+        ) as mock_check:
+            mock_check.apply_async = MagicMock()
+
+            with self.assertLogs(
+                "oais_platform.oais.tasks.archivematica", level="INFO"
+            ) as log:
+                callback_package("test-package-name_195")
+
+                self.assertIn(
+                    "Callback for package test-package-name_195 received", log.output[0]
+                )
+
+                # Verify periodic task was disabled
+                self.periodic_task.refresh_from_db()
+                self.assertFalse(self.periodic_task.enabled)
+
+                # Verify check_am_status was called with correct args and delay
+                mock_check.apply_async.assert_called_once_with(
+                    args=["arg1", "arg2"], countdown=AM_CALLBACK_DELAY
+                )
+
     def test_callback_no_matching_task(self):
         """Test callback when no periodic task matches package name"""
         with patch(
