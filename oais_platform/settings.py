@@ -402,6 +402,8 @@ BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
 AM_WAITING_TIME_LIMIT = 5
+# Max processing time in AM (to time out stuck in progress - mins)
+AM_PROCESSING_TIME_LIMIT = 60  # in mins
 
 # Pipeline creation step limit
 PIPELINE_SIZE_LIMIT = 10

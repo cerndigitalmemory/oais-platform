@@ -25,6 +25,7 @@ from oais_platform.settings import (
     AM_API_KEY,
     AM_CALLBACK_DELAY,
     AM_POLLING_INTERVAL,
+    AM_PROCESSING_TIME_LIMIT,
     AM_RETRY_LIMIT,
     AM_SS_API_KEY,
     AM_SS_URL,
@@ -231,14 +232,27 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
         remove_periodic_task_on_failure(task_name, step, am_status)
 
     elif status == "PROCESSING" or status == "COMPLETE":
-        step.set_output_data(am_status)
-        step.set_status(Status.IN_PROGRESS)
-        try:
-            task = PeriodicTask.objects.get(name=task_name)
-            task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
-            task.save()
-        except PeriodicTask.DoesNotExist:
-            logger.warning(f"PeriodicTask {task_name} for step {step.id} not found.")
+        time_passed = (timezone.now() - step.start_date).total_seconds()
+        if time_passed > 60 * AM_PROCESSING_TIME_LIMIT:  # Probably stuck in processing
+            logger.info(
+                f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - deleting task for step {step.id}"
+            )
+            am_status["errormsg"] = (
+                "Error: Archivematica processing time limit reached."
+            )
+            am_status["retry"] = True
+            remove_periodic_task_on_failure(task_name, step, am_status)
+        else:
+            step.set_output_data(am_status)
+            step.set_status(Status.IN_PROGRESS)
+            try:
+                task = PeriodicTask.objects.get(name=task_name)
+                task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
+                task.save()
+            except PeriodicTask.DoesNotExist:
+                logger.warning(
+                    f"PeriodicTask {task_name} for step {step.id} not found."
+                )
     else:
         logger.warning(
             f"Unknown status from Archivematica: {status}, for step {step.id}"

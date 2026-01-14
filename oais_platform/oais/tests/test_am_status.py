@@ -7,7 +7,12 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import check_am_status
-from oais_platform.settings import AM_RETRY_LIMIT, AM_URL, AM_WAITING_TIME_LIMIT
+from oais_platform.settings import (
+    AM_PROCESSING_TIME_LIMIT,
+    AM_RETRY_LIMIT,
+    AM_URL,
+    AM_WAITING_TIME_LIMIT,
+)
 
 
 class ArchivematicaStatusTests(APITestCase):
@@ -258,6 +263,36 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(step_output["status"], "FAILED")
         self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
+        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertTrue(periodic_tasks.delete.called)
+
+    @patch("amclient.AMClient.get_unit_status")
+    @patch("django_celery_beat.models.PeriodicTask.objects")
+    def test_am_status_processing_limit_reached(self, periodic_tasks, get_unit_status):
+        get_unit_status.return_value = {
+            "status": "PROCESSING",
+            "microservice": "Generate metadata",
+            "uuid": 6789,
+        }
+        periodic_tasks.get.return_value = periodic_tasks
+
+        self.step.status = Status.IN_PROGRESS
+        self.step.start_date = timezone.now() - timezone.timedelta(
+            minutes=AM_PROCESSING_TIME_LIMIT + 1
+        )
+        self.step.save()
+
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+
+        self.step.refresh_from_db()
+        step_output = json.loads(self.step.output_data)
+
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(
+            step_output["errormsg"],
+            "Error: Archivematica processing time limit reached.",
+        )
+        self.assertEqual(step_output["retry"], True)
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
 
