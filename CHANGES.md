@@ -1,5 +1,9 @@
 # Changes
 
+## Version 2.7.1 (released 2026-01-15)
+- AM: time out if stuck in processing
+- AM callback: fix regex when package_name has suffix
+
 ## Version 2.7.0 (released 2026-01-14)
 - CTA: improved error messages, check if file exists before submit
 - AM: fix duplicate error, halt pipeline after completed with warnings
