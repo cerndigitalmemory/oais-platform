@@ -394,6 +394,10 @@ class ArchiveTests(APITestCase):
         step = Step.objects.last()
         self.assertEqual(step.initiated_by_user, self.requester)
         self.assertEqual(step.initiated_by_harvest_batch, None)
+        job = Collection.objects.order_by("-timestamp").first()
+        self.assertRegex(job.title, r"^Job \d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+        self.assertEqual(job.creator, self.requester)
+        self.assertEqual(job.archives.count(), 1)
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_archive_mlt_unstage_superuser(self, mock_dispatch):
@@ -411,7 +415,10 @@ class ArchiveTests(APITestCase):
         url = reverse("archives-mlt-unstage")
         response = self.client.post(
             url,
-            {"archives": [{"id": self.private_archive.id}, {"id": other_archive.id}]},
+            {
+                "archives": [{"id": self.private_archive.id}, {"id": other_archive.id}],
+                "job_title": "Test123",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -443,6 +450,10 @@ class ArchiveTests(APITestCase):
         step = Step.objects.last()
         self.assertEqual(step.initiated_by_user, self.superuser)
         self.assertEqual(step.initiated_by_harvest_batch, None)
+        job = Collection.objects.order_by("-timestamp").first()
+        self.assertEqual(job.title, "Test123")
+        self.assertEqual(job.creator, self.superuser)
+        self.assertEqual(job.archives.count(), 2)
 
     def test_archive_delete_staged_other_user(self):
         self.client.force_authenticate(user=self.other_user)
