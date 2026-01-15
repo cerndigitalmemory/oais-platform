@@ -100,7 +100,7 @@ class AmCallbackTest(TestCase):
         )
 
         self.periodic_task = PeriodicTask.objects.create(
-            name="Archive 1 test-package-name",
+            name="ABC test-package-name_Archive_1",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["arg1", "arg2"]),
@@ -108,7 +108,7 @@ class AmCallbackTest(TestCase):
         )
 
         self.another_task = PeriodicTask.objects.create(
-            name="another-task",
+            name="another-task_Archive_2",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["other_arg"]),
@@ -125,10 +125,11 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="INFO"
             ) as log:
-                callback_package("test-package-name")
+                callback_package("test-package-name_Archive_1")
 
                 self.assertIn(
-                    "Callback for package test-package-name received", log.output[0]
+                    "Callback for package test-package-name_Archive_1 received",
+                    log.output[0],
                 )
 
                 # Verify periodic task was disabled
@@ -150,10 +151,11 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="INFO"
             ) as log:
-                callback_package("test-package-name_195")
+                callback_package("test-package-name_Archive_1_195")
 
                 self.assertIn(
-                    "Callback for package test-package-name_195 received", log.output[0]
+                    "Callback for package test-package-name_Archive_1_195 received",
+                    log.output[0],
                 )
 
                 # Verify periodic task was disabled
@@ -193,7 +195,7 @@ class AmCallbackTest(TestCase):
         """Test callback when multiple periodic tasks match package name"""
         # Create another task with similar name
         duplicate_task = PeriodicTask.objects.create(
-            name="Archive 2 test-package-name",
+            name="another-test-package-name_Archive_1",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["dup_arg"]),
@@ -208,11 +210,12 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="ERROR"
             ) as log:
-                callback_package("test-package-name")
+                callback_package("test-package-name_Archive_1")
 
                 # Verify error was logged with count
                 self.assertIn(
-                    "Ambiguous package name (test-package-name) found: 2", log.output[0]
+                    "Ambiguous package name (test-package-name_Archive_1) found: 2",
+                    log.output[0],
                 )
 
                 # Verify no tasks were called
@@ -232,7 +235,7 @@ class AmCallbackTest(TestCase):
         ) as mock_check:
             mock_check.apply_async = MagicMock()
 
-            callback_package("test-package-name")
+            callback_package("test-package-name_Archive_1")
 
             # Verify custom delay was used
             mock_check.apply_async.assert_called_once_with(

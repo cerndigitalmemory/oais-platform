@@ -455,8 +455,8 @@ def get_task_name(step):
 def callback_package(self, package_name):
     logger.info(f"Callback for package {package_name} received.")
     package_name = re.sub(
-        r"_\d+$", "", package_name
-    )  # Archivematica may append a suffix to the package name
+        r"(.*?_\d+)_\d+$", r"\1", package_name
+    )  # Archivematica may append a suffix to the package name (eg cds_abc_Archive_66_1)
     periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
     if periodic_task.count() > 1:
         logger.error(
