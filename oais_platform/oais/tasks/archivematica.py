@@ -1,7 +1,7 @@
 import json
-import ntpath
 import os
 import re
+from pathlib import Path
 
 import requests
 from amclient import AMClient
@@ -34,6 +34,7 @@ from oais_platform.settings import (
     AM_URL,
     AM_USERNAME,
     AM_WAITING_TIME_LIMIT,
+    SIP_UPSTREAM_BASEPATH,
 )
 
 logger = get_task_logger(__name__)
@@ -59,11 +60,10 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
 
     logger.info(f"Starting archiving {path_to_sip}")
 
-    sip_directory = ntpath.basename(path_to_sip)
     # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(
         "/",
-        sip_directory,
+        Path(path_to_sip).relative_to(SIP_UPSTREAM_BASEPATH),
     )
 
     # Set up the AMClient to interact with the AM configuration provided in the settings

@@ -15,7 +15,7 @@ class ArchivematicaCreateTests(APITestCase):
             recid="1",
             source="test",
             source_url="",
-            path_to_sip="test_path",
+            path_to_sip="basepath/sips/test_path",
             sip_size=1000,
         )
 
@@ -25,6 +25,15 @@ class ArchivematicaCreateTests(APITestCase):
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
+
+        self.path_patch = patch(
+            "oais_platform.oais.tasks.archivematica.SIP_UPSTREAM_BASEPATH",
+            "basepath/sips",
+        )
+        self.path_patch.start()
+
+    def tearDown(self):
+        self.path_patch.stop()
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
