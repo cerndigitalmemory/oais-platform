@@ -19,6 +19,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
@@ -534,11 +535,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Archives are also grouped under the same job tag
         """
         archives = request.data["archives"]
+        job_title = (
+            request.data.get("job_title") or f"Job {timezone.now():%Y-%m-%d %H:%M}"
+        )
 
         job_tag = Collection.objects.create(
             internal=True,
             creator=request.user,
-            title="Internal Job",
+            title=job_title,
         )
 
         for archive in archives:
