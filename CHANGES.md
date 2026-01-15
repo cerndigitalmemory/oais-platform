@@ -1,5 +1,8 @@
 # Changes
 
+## Version 2.7.2 (released 2026-01-15)
+- AM callback: correct package_name suffix handling
+
 ## Version 2.7.1 (released 2026-01-15)
 - AM: time out if stuck in processing
 - AM callback: fix regex when package_name has suffix
