@@ -104,7 +104,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
 
     if BIC_UPLOAD_PATH:
         target_path = os.path.join(
-            generate_directory_structure(BIC_UPLOAD_PATH, archive.source), foldername
+            generate_directory_structure(BIC_UPLOAD_PATH, archive), foldername
         )
     else:
         target_path = foldername

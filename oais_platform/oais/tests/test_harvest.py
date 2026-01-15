@@ -23,12 +23,14 @@ class HarvestTest(APITestCase):
         self.step.step_type.size_limit_bytes = 200
         self.step.step_type.save()
 
-    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     @patch("bagit_create.main.process")
-    def test_harvest_success(self, bagit_create, uuid_mock):
+    def test_harvest_success(self, bagit_create, hashlib_mock):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
-        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
         fake_file1 = MagicMock()
         fake_file1.stat.return_value.st_size = (
             self.step.step_type.size_limit_bytes - 100
@@ -104,12 +106,14 @@ class HarvestTest(APITestCase):
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1,
         )
 
-    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     @patch("bagit_create.main.process")
-    def test_harvest_bagit_exception(self, bagit_create, uuid_mock):
+    def test_harvest_bagit_exception(self, bagit_create, hashlib_mock):
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
-        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)

@@ -1,5 +1,5 @@
+import hashlib
 import os
-import uuid
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -110,10 +110,10 @@ def add_error_to_tag_description(tag, path, errormsg):
         tag.set_description(tag.description + f" {errormsg}:{path}.")
 
 
-def generate_directory_structure(base_path, source):
-    unique_id = uuid.uuid4().hex
+def generate_directory_structure(base_path, archive):
+    unique_id = hashlib.md5(archive.title.encode()).hexdigest()
     segments = [unique_id[i : i + 4] for i in range(0, len(unique_id), 4)]
-    full_path = os.path.join(base_path, source, *segments)
+    full_path = os.path.join(base_path, archive.source, *segments)
     os.makedirs(full_path, exist_ok=True)
     return full_path
 

@@ -16,6 +16,7 @@ from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
 from oais_platform.settings import (
+    AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
@@ -60,8 +61,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         return 1
 
     try:
-        cta_folder_name = os.path.join("aips", archive.path_to_aip.split("aips/")[1])
-    except IndexError:
+        cta_folder_name = os.path.join(
+            "aips", Path(archive.path_to_aip).relative_to(AIP_UPSTREAM_BASEPATH)
+        )
+    except ValueError:
         logger.warning(f"Unusual AIP path {archive.path_to_aip}")
         cta_folder_name = os.path.join("aips", os.path.basename(archive.path_to_aip))
 

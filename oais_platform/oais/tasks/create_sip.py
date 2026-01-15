@@ -104,7 +104,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             f"The given source({archive.source}) might requires an API key which was not provided."
         )
 
-    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive.source)
+    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -145,7 +145,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
         return {"status": 1, "errormsg": "Missing input data for step"}
     input_data = json.loads(input_data)
 
-    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive.source)
+    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,

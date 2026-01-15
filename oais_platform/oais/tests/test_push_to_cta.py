@@ -33,7 +33,7 @@ class PushToCTATests(APITestCase):
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
-        path_to_aip = "aips/test/path/filename.zip"
+        path_to_aip = "basepath/aips/test/path/filename.zip"
         self.archive = Archive.objects.create(path_to_aip=path_to_aip)
         self.step = Step.objects.create(
             archive=self.archive,
@@ -55,7 +55,15 @@ class PushToCTATests(APITestCase):
         )
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
-        self.expected_destination = f"{CTA_BASE_PATH}{path_to_aip}"
+        self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
+
+        self.path_patch = patch(
+            "oais_platform.oais.tasks.cta.AIP_UPSTREAM_BASEPATH", "basepath/aips"
+        )
+        self.path_patch.start()
+
+    def tearDown(self):
+        self.path_patch.stop()
 
     def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()
@@ -155,13 +163,13 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    @patch("oais_platform.oais.tasks.cta.Path")
+    @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
     def test_push_to_cta_file_exists_on_tape(
-        self, mock_checksum, mock_path, mock_gfal2
+        self, mock_checksum, mock_stat, mock_gfal2
     ):
         self._setup_gfal2_mocks(mock_gfal2, False)
-        mock_path.return_value.stat.return_value.st_size = 123456
+        mock_stat.return_value.st_size = 123456
         mock_checksum.return_value = "test-checksum"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
@@ -173,12 +181,12 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    @patch("oais_platform.oais.tasks.cta.Path")
+    @patch("oais_platform.oais.tasks.cta.Path.stat")
     def test_push_to_cta_file_exists_on_tape_different_size(
-        self, mock_path, mock_gfal2
+        self, mock_stat, mock_gfal2
     ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
-        mock_path.return_value.stat.return_value.st_size = 100
+        mock_stat.return_value.st_size = 100
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
@@ -196,13 +204,13 @@ class PushToCTATests(APITestCase):
             ).exists()
         )
 
-    @patch("oais_platform.oais.tasks.cta.Path")
+    @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
     def test_push_to_cta_file_exists_on_tape_different_checksum(
-        self, mock_checksum, mock_path, mock_gfal2
+        self, mock_checksum, mock_stat, mock_gfal2
     ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
-        mock_path.return_value.stat.return_value.st_size = 100
+        mock_stat.return_value.st_size = 100
         mock_checksum.return_value = "mismatching-checksum"
         self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"

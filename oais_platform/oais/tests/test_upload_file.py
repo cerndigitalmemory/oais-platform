@@ -39,11 +39,13 @@ class UploadTaskTest(APITestCase):
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
-    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
-    def test_upload_success(self, uuid_mock, bagit_create):
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
+    def test_upload_success(self, hashlib_mock, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
-        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
         mock_file = MagicMock()
         mock_file.stat.return_value.st_size = 100
 
@@ -79,11 +81,13 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    @patch("oais_platform.oais.tasks.utils.uuid.uuid4")
-    def test_upload_bagit_exception(self, uuid_mock, bagit_create):
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
+    def test_upload_bagit_exception(self, hashlib_mock, bagit_create):
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
-        uuid_mock.return_value.hex = "d05f759adf39458dab33ab21b6cd117e"
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
 
         result = upload.apply(
             args=[self.archive.id, self.step.id, self.step.input_data], throw=True
