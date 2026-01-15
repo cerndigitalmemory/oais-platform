@@ -495,38 +495,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             raise BadRequest("An error occured while saving the manifests.", e)
 
-    @extend_schema(operation_id="sgl-unstage")
-    @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
-    def archive_unstage(self, request, pk=None):
-        """
-        Unstages the passed Archive, setting them to the Harvest stage
-        """
-        archive = self.get_object()
-
-        archive.set_unstaged(approver=request.user)
-
-        step = Step.objects.create(
-            archive=archive,
-            step_name=StepName.HARVEST,
-            status=Status.NOT_RUN,
-            initiated_by_user=request.user,
-        )
-
-        try:
-            api_key = ApiKey.objects.get(
-                source__name=archive.source, user=request.user
-            ).key
-        except Exception:
-            api_key = None
-
-        run_step(step, archive.id, api_key=api_key)
-
-        serializer = ArchiveSerializer(
-            archive,
-            many=False,
-        )
-        return Response(serializer.data)
-
     @extend_schema(operation_id="mlt-unstage")
     @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
