@@ -64,6 +64,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - .:/oais_platform
+      - ../oais-web:/oais_web
     command:
       # Wait for the database to be online
       # Run Django migrations (create tables on the db from the models)
@@ -71,12 +72,14 @@ services:
       # Bring up the web server on port 8000
       >
       sh -c "python3 manage.py migrate &&
+             python3 manage.py collectstatic --noinput &&
              python3 manage.py spectacular --file schema.yml &&
              python3 manage.py runserver 0.0.0.0:8000"
     environment:
       <<: *common-variables
       OIDC_RP_CLIENT_ID: <YOUR_OIDC_CLIENT>
       OIDC_RP_CLIENT_SECRET: <YOUR_OIDC_SECRET>
+      DJANGO_STATIC_ROOT: /oais_web/build/static
     env_file:
       - ./.env.dev
     depends_on:
