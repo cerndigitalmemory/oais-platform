@@ -4,6 +4,7 @@ import re
 import requests
 from django.contrib.auth.models import User
 from django.utils import timezone
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -111,3 +112,16 @@ class PersonalAccessTokenAuthentication(BaseAuthentication):
 
         except PersonalAccessToken.DoesNotExist:
             return None
+
+
+class PersonalAccessTokenAuthenticationScheme(OpenApiAuthenticationExtension):
+    target_class = "oais_platform.oais.auth.PersonalAccessTokenAuthentication"
+    name = "PersonalAccessTokenAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "Token",
+            "description": "Personal Access Token authentication. Use format: `Bearer <your-token>`",
+        }

@@ -312,7 +312,7 @@ sentry_sdk.init(
     # environment variable, or infer a git commit
     # SHA as release, however you may want to set
     # something more human-readable.
-    # release="myapp@1.0.0",
+    release=f"oais-platform@{APP_VERSION}",
 )
 
 # Expire session after 12 hours - CERN Security requirement
