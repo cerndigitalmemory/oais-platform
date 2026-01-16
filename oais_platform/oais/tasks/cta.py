@@ -147,6 +147,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         task="check_fts_job_status",
         args=json.dumps([archive.id, step.id, submitted_job, api_key]),
         expire_seconds=3600.0,
+        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
 
     step.set_output_data(
