@@ -545,3 +545,9 @@ def handle_completed_am_package(
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
+            try:
+                periodic_task = PeriodicTask.objects.get(name=task_name)
+                periodic_task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
+                periodic_task.save()
+            except PeriodicTask.DoesNotExist as e:
+                logger.error(e)
