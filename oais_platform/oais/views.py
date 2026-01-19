@@ -637,24 +637,37 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if len(archives_data) > 0:
             archive_ids = [archive["id"] for archive in archives_data]
             with transaction.atomic():
-                archives = Archive.objects.select_for_update().filter(
-                    pk__in=archive_ids
+                archives = list(
+                    Archive.objects.select_for_update()
+                    .filter(pk__in=archive_ids)
+                    .prefetch_related("last_step")
                 )
-                # Convert to list to avoid multiple evaluations
-                archives_list = list(archives)
 
-                if not archives_list:
+                if not archives:
                     return Response(result)
 
-                all_last_step_failed = all(
-                    archive.last_step and archive.last_step.status == Status.FAILED
-                    for archive in archives_list
-                )
+                all_failed = True
+                all_failed_or_warned = True
+                can_continue = True
 
-                can_continue = not archives.filter(pipeline_steps=[]).exists()
+                for archive in archives:
+                    last_step = archive.last_step
+                    if not last_step:
+                        all_failed = all_failed_or_warned = can_continue = False
+                        break
 
-            result["all_last_step_failed"] = all_last_step_failed
-            result["can_continue"] = all_last_step_failed and can_continue
+                    status = last_step.status
+                    all_failed &= status == Status.FAILED
+                    all_failed_or_warned &= status in {
+                        Status.FAILED,
+                        Status.COMPLETED_WITH_WARNINGS,
+                    }
+
+                    if archive.pipeline_steps == []:
+                        can_continue = False
+
+            result["all_last_step_failed"] = all_failed
+            result["can_continue"] = all_failed_or_warned and can_continue
 
         return Response(result)
 
