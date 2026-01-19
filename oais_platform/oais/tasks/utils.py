@@ -1,3 +1,6 @@
+import hashlib
+import os
+from pathlib import Path
 from urllib.parse import urljoin
 
 from celery.utils.log import get_task_logger
@@ -105,3 +108,25 @@ def add_error_to_tag_description(tag, path, errormsg):
         if tag.description.find("ERRORS:") == -1:
             tag.set_description(tag.description + " ERRORS:")
         tag.set_description(tag.description + f" {errormsg}:{path}.")
+
+
+def generate_directory_structure(base_path, archive):
+    unique_id = hashlib.md5(archive.title.encode()).hexdigest()
+    segments = [unique_id[i : i + 4] for i in range(0, len(unique_id), 4)]
+    full_path = os.path.join(base_path, archive.source, *segments)
+    os.makedirs(full_path, exist_ok=True)
+    return full_path
+
+
+def cleanup_empty_path(path_to_clean, base_path, source):
+    current = Path(path_to_clean)
+    limit = Path(base_path) / source
+
+    for folder in [current] + list(current.parents):
+        if folder == limit or not folder.is_relative_to(limit):
+            break
+        try:
+            os.rmdir(folder)
+        except OSError:
+            logger.warning(f"Not cleaning up directory {folder} as it is not empty")
+            break

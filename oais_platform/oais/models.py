@@ -102,7 +102,7 @@ class Archive(models.Model):
         null=True,
         related_name="last_step",
     )
-    path_to_sip = models.CharField(max_length=100)
+    path_to_sip = models.CharField(max_length=250)
     path_to_aip = models.CharField(max_length=250, null=True)
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)

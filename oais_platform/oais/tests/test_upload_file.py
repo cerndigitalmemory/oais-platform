@@ -39,9 +39,13 @@ class UploadTaskTest(APITestCase):
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
-    def test_upload_success(self, bagit_create):
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
+    def test_upload_success(self, hashlib_mock, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
         mock_file = MagicMock()
         mock_file.stat.return_value.st_size = 100
 
@@ -54,11 +58,20 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(result["artifact"]["artifact_name"], "SIP")
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
-            os.path.join(BIC_UPLOAD_PATH, sip_folder),
+            os.path.join(
+                BIC_UPLOAD_PATH,
+                "local",
+                "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
+                sip_folder,
+            ),
         )
         self.assertFalse(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
+        expected_path = (
+            Path(BIC_UPLOAD_PATH) / "local" / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+        )
+        self.assertTrue(expected_path.exists())
 
     def test_upload_missing_input_data(self, bagit_create):
         result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -68,9 +81,13 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
 
-    def test_upload_bagit_exception(self, bagit_create):
+    @patch("oais_platform.oais.tasks.utils.hashlib.md5")
+    def test_upload_bagit_exception(self, hashlib_mock, bagit_create):
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
+        hashlib_mock.return_value.hexdigest.return_value = (
+            "d05f759adf39458dab33ab21b6cd117e"
+        )
 
         result = upload.apply(
             args=[self.archive.id, self.step.id, self.step.input_data], throw=True
@@ -82,6 +99,10 @@ class UploadTaskTest(APITestCase):
         self.assertTrue(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        expected_path = (
+            Path(BIC_UPLOAD_PATH) / "local" / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+        )
+        self.assertFalse(expected_path.exists())
 
     def test_upload_bagit_unsuccessful_status(self, bagit_create):
         error_msg = "An error occurred"

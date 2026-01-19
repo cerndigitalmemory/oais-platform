@@ -11,7 +11,11 @@ from django.db import transaction
 
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
-from oais_platform.oais.tasks.utils import create_path_artifact
+from oais_platform.oais.tasks.utils import (
+    cleanup_empty_path,
+    create_path_artifact,
+    generate_directory_structure,
+)
 from oais_platform.settings import (
     BIC_UPLOAD_PATH,
     BIC_WORKDIR,
@@ -100,16 +104,18 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             f"The given source({archive.source}) might requires an API key which was not provided."
         )
 
+    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
             source=archive.source,
             loglevel=logging.WARNING,
-            target=BIC_UPLOAD_PATH,
+            target=sip_path,
             token=api_key,
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -117,7 +123,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
     if error_response := _handle_bagit_error(self, archive_id, step, bagit_result):
         return error_response
 
-    return _handle_successful_bagit(archive, bagit_result)
+    return _handle_successful_bagit(archive, bagit_result, sip_path)
 
 
 @shared_task(
@@ -139,17 +145,19 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
         return {"status": 1, "errormsg": "Missing input data for step"}
     input_data = json.loads(input_data)
 
+    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
             source=archive.source,
             loglevel=logging.WARNING,
-            target=BIC_UPLOAD_PATH,
+            target=sip_path,
             source_path=input_data.get("tmp_dir"),
             author=input_data.get("author"),
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
+        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
         return {
             "status": 1,
             "errormsg": str(e),
@@ -169,7 +177,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
 
     _delete_local_upload(input_data.get("tmp_dir"))
 
-    return _handle_successful_bagit(archive, bagit_result)
+    return _handle_successful_bagit(archive, bagit_result, sip_path)
 
 
 @shared_task(name="upload_cleanup", bind=True, ignore_result=True)
@@ -246,14 +254,14 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
     return
 
 
-def _handle_successful_bagit(archive, bagit_result):
+def _handle_successful_bagit(archive, bagit_result, sip_path=None):
     """
     Update archive path and size and create the artifact.
     """
     sip_folder_name = bagit_result["foldername"]
 
-    if BIC_UPLOAD_PATH:
-        sip_folder_name = os.path.join(BIC_UPLOAD_PATH, sip_folder_name)
+    if sip_path:
+        sip_folder_name = os.path.join(sip_path, sip_folder_name)
 
     archive.set_path(sip_folder_name)
     archive.update_sip_size()

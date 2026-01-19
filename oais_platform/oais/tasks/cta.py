@@ -1,5 +1,6 @@
 import errno
 import json
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
 from oais_platform.settings import (
+    AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
@@ -58,7 +60,13 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
         return 1
 
-    cta_folder_name = f"aip-{archive.id}"
+    try:
+        cta_folder_name = os.path.join(
+            "aips", Path(archive.path_to_aip).relative_to(AIP_UPSTREAM_BASEPATH)
+        )
+    except ValueError:
+        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
+        cta_folder_name = os.path.join("aips", os.path.basename(archive.path_to_aip))
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
@@ -145,7 +153,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, api_key]),
+        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name, api_key]),
         expire_seconds=3600.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
@@ -156,7 +164,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
-def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
+def check_fts_job_status(self, archive_id, step_id, job_id, folder_name, api_key=None):
     """
     Check the status of a FTS job.
     If finished, set the corresponding step as completed and remove the
@@ -178,7 +186,9 @@ def check_fts_job_status(self, archive_id, step_id, job_id, api_key=None):
     logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
 
     if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key)
+        _handle_completed_fts_job(
+            self, task_name, step, archive_id, job_id, folder_name, api_key
+        )
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
         input_data = json.loads(step.input_data)
@@ -218,7 +228,9 @@ def fts_delegate(self):
         logger.error(e)
 
 
-def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key=None):
+def _handle_completed_fts_job(
+    self, task_name, step, archive_id, job_id, folder_name, api_key=None
+):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
         logger.info("FTS transfer succeded, removing periodic task")
@@ -226,11 +238,10 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, api_key
     except Exception as e:
         logger.warning(e)
 
-    cta_folder_name = f"aip-{archive_id}"
     cta_artifact = {
         "artifact_name": "CTA",
-        "artifact_localpath": cta_folder_name,
-        "artifact_url": f"{CTA_BASE_PATH}{cta_folder_name}",
+        "artifact_localpath": folder_name,
+        "artifact_url": f"{CTA_BASE_PATH}{folder_name}",
         "fts_id": job_id,
     }
 
