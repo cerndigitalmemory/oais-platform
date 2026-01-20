@@ -67,6 +67,8 @@ deploy-qa:
 deploy-prod:
   extends: .deploy_template
   stage: deploy-prod
+  environment:
+    name: production
   variables:
     DEPLOY_ENV: "prod"
   rules:
@@ -107,6 +109,8 @@ trigger-qa:
 trigger-prod:
   extends: .trigger_template
   stage: deploy-prod
+  environment:
+    name: production
   variables:
     ENV: "prod"
   needs:
