@@ -86,11 +86,14 @@ class IntegrationAPITests(APITestCase):
         self.assertEqual(result["recid"], "yz39b-yf220")
 
         response = self.client.post(
-            f"/api/archives/{result['id']}/unstage/", format="json"
+            "/api/archives/unstage/",
+            format="json",
+            data={"archives": [{"id": result["id"]}], "job_title": "Test123"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["approver"]["id"], self.superuser.id)
-        self.assertEqual(response.data["staged"], False)
+        self.assertEqual(response.data["title"], "Test123")
+        self.assertEqual(response.data["creator"]["id"], self.superuser.id)
+        self.assertEqual(response.data["archives_count"], 1)
 
         self.client.force_authenticate(user=self.test_user)
 

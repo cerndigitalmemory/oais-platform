@@ -19,6 +19,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
@@ -494,38 +495,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             raise BadRequest("An error occured while saving the manifests.", e)
 
-    @extend_schema(operation_id="sgl-unstage")
-    @action(detail=True, methods=["POST"], url_path="unstage", url_name="sgl-unstage")
-    def archive_unstage(self, request, pk=None):
-        """
-        Unstages the passed Archive, setting them to the Harvest stage
-        """
-        archive = self.get_object()
-
-        archive.set_unstaged(approver=request.user)
-
-        step = Step.objects.create(
-            archive=archive,
-            step_name=StepName.HARVEST,
-            status=Status.NOT_RUN,
-            initiated_by_user=request.user,
-        )
-
-        try:
-            api_key = ApiKey.objects.get(
-                source__name=archive.source, user=request.user
-            ).key
-        except Exception:
-            api_key = None
-
-        run_step(step, archive.id, api_key=api_key)
-
-        serializer = ArchiveSerializer(
-            archive,
-            many=False,
-        )
-        return Response(serializer.data)
-
     @extend_schema(operation_id="mlt-unstage")
     @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
@@ -534,11 +503,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Archives are also grouped under the same job tag
         """
         archives = request.data["archives"]
+        job_title = (
+            request.data.get("job_title") or f"Job {timezone.now():%Y-%m-%d %H:%M}"
+        )
 
         job_tag = Collection.objects.create(
             internal=True,
             creator=request.user,
-            title="Internal Job",
+            title=job_title,
         )
 
         for archive in archives:

@@ -346,58 +346,6 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 2)
 
-    def test_archive_unstage_forbidden(self):
-        self.client.force_authenticate(user=self.requester)
-
-        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
-        response = self.client.post(url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
-    def test_archive_unstage_with_perms(self, mock_dispatch):
-        self.requester.user_permissions.add(self.approve_permission)
-        self.requester.save()
-
-        self.client.force_authenticate(user=self.requester)
-
-        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
-        response = self.client.post(url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["approver"]["id"], self.requester.id)
-        self.private_archive.refresh_from_db()
-        mock_dispatch.assert_called_once_with(
-            StepType.get_by_stepname(StepName.HARVEST),
-            self.private_archive.id,
-            self.private_archive.last_step.id,
-            None,
-            None,
-            False,
-        )
-        step = Step.objects.last()
-        self.assertEqual(step.initiated_by_user, self.requester)
-        self.assertEqual(step.initiated_by_harvest_batch, None)
-
-    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
-    def test_archive_unstage_superuser(self, mock_dispatch):
-        self.client.force_authenticate(user=self.superuser)
-
-        url = reverse("archives-sgl-unstage", args=[self.private_archive.id])
-        response = self.client.post(url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["approver"]["id"], self.superuser.id)
-        self.private_archive.refresh_from_db()
-        mock_dispatch.assert_called_once_with(
-            StepType.get_by_stepname(StepName.HARVEST),
-            self.private_archive.id,
-            self.private_archive.last_step.id,
-            None,
-            None,
-            False,
-        )
-        step = Step.objects.last()
-        self.assertEqual(step.initiated_by_user, self.superuser)
-        self.assertEqual(step.initiated_by_harvest_batch, None)
-
     def test_archive_mlt_unstage_forbidden(self):
         self.client.force_authenticate(user=self.requester)
 
@@ -446,6 +394,10 @@ class ArchiveTests(APITestCase):
         step = Step.objects.last()
         self.assertEqual(step.initiated_by_user, self.requester)
         self.assertEqual(step.initiated_by_harvest_batch, None)
+        job = Collection.objects.order_by("-timestamp").first()
+        self.assertRegex(job.title, r"^Job \d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+        self.assertEqual(job.creator, self.requester)
+        self.assertEqual(job.archives.count(), 1)
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_archive_mlt_unstage_superuser(self, mock_dispatch):
@@ -463,7 +415,10 @@ class ArchiveTests(APITestCase):
         url = reverse("archives-mlt-unstage")
         response = self.client.post(
             url,
-            {"archives": [{"id": self.private_archive.id}, {"id": other_archive.id}]},
+            {
+                "archives": [{"id": self.private_archive.id}, {"id": other_archive.id}],
+                "job_title": "Test123",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -495,6 +450,10 @@ class ArchiveTests(APITestCase):
         step = Step.objects.last()
         self.assertEqual(step.initiated_by_user, self.superuser)
         self.assertEqual(step.initiated_by_harvest_batch, None)
+        job = Collection.objects.order_by("-timestamp").first()
+        self.assertEqual(job.title, "Test123")
+        self.assertEqual(job.creator, self.superuser)
+        self.assertEqual(job.archives.count(), 2)
 
     def test_archive_delete_staged_other_user(self):
         self.client.force_authenticate(user=self.other_user)
