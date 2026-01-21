@@ -358,3 +358,52 @@ class FileUploadSerializer(serializers.Serializer):
     author = serializers.CharField(
         required=False, allow_blank=True, help_text="Author name"
     )
+
+
+class FileUploadResultSerializer(serializers.Serializer):
+    archive = serializers.IntegerField(
+        help_text="ID of the created archive", required=False
+    )
+    status = serializers.IntegerField(help_text="Status")
+    msg = serializers.CharField(help_text="Message", required=False, allow_blank=True)
+
+
+class StatisticsSerializer(serializers.Serializer):
+    harvested_count = serializers.IntegerField(help_text="Total number of SIPs")
+    preserved_count = serializers.IntegerField(help_text="Total number of AIPs")
+    pushed_to_tape_count = serializers.IntegerField(
+        help_text="Number of archives successfully pushed to CTA"
+    )
+    pushed_to_registry_count = serializers.IntegerField(
+        help_text="Number of archives successfully pushed to registry"
+    )
+
+
+class StepStatisticsSerializer(serializers.Serializer):
+    staged_count = serializers.IntegerField(
+        help_text="Number of staged archives (not yet harvested)"
+    )
+    harvested_count = serializers.IntegerField(help_text="Number of SIPs")
+    harvested_preserved_count = serializers.IntegerField(help_text="Number of AIPs")
+    harvested_preserved_tape_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to CTA only"
+    )
+    harvested_preserved_registry_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to registry only"
+    )
+    harvested_preserved_tape_registry_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to both CTA and registry"
+    )
+    others_count = serializers.IntegerField(
+        help_text="Number of archives not matching any of the above categories"
+    )
+
+
+class ConfigurationSerializer(serializers.Serializer):
+    maxFileSize = serializers.IntegerField(
+        help_text="Maximum allowed file size for uploads (in bytes)"
+    )
+
+
+class LogoutSerializer(serializers.Serializer):
+    success = serializers.CharField(help_text="Indicates if logout was successful")

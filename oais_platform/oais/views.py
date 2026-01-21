@@ -70,13 +70,18 @@ from oais_platform.oais.serializers import (
     CallbackSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
+    ConfigurationSerializer,
+    FileUploadResultSerializer,
     FileUploadSerializer,
     LoginSerializer,
+    LogoutSerializer,
     ParseUrlResultSerializer,
     ParseUrlSerializer,
     SearchByIdResultSerializer,
     SearchResultSerializer,
+    StatisticsSerializer,
     StepSerializer,
+    StepStatisticsSerializer,
     StepTypeMinimalSerializer,
     UserSerializer,
 )
@@ -902,7 +907,7 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_queryset().filter(enabled=True).order_by("name")
 
 
-@extend_schema(request=None, responses={200: dict})
+@extend_schema(request=None, responses={200: StatisticsSerializer})
 @api_view(["GET"])
 def statistics(request):
     harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
@@ -926,7 +931,7 @@ def statistics(request):
     return Response(data)
 
 
-@extend_schema(request=None, responses={200: dict})
+@extend_schema(request=None, responses={200: StepStatisticsSerializer})
 @api_view(["GET"])
 def step_statistics(request):
     categories = {
@@ -977,7 +982,9 @@ def step_statistics(request):
     return Response(data)
 
 
-@extend_schema(request=FileUploadSerializer, responses={200: dict})
+@extend_schema(
+    request=FileUploadSerializer, responses={200: FileUploadResultSerializer}
+)
 @api_view(["POST"])
 @permission_classes([FileUploadPermission])
 def upload_file(request):
@@ -1054,7 +1061,9 @@ def upload_file(request):
         representing a zipped SIP"""
     )
 )
-@extend_schema(request=FileUploadSerializer, responses={200: dict})
+@extend_schema(
+    request=FileUploadSerializer, responses={200: FileUploadResultSerializer}
+)
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def upload_sip(request):
@@ -1291,7 +1300,7 @@ def login(request):
 @extend_schema(
     request=None,
     # TODO: provide a serializer for 403 here
-    responses={200: dict},
+    responses={200: LogoutSerializer},
 )
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
@@ -1422,7 +1431,7 @@ def sources(request):
 
 @extend_schema(
     request=None,
-    responses={200: dict},
+    responses={200: ConfigurationSerializer},
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
