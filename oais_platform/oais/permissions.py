@@ -94,6 +94,7 @@ class ArchivePermission(permissions.BasePermission):
                 archive = Archive.objects.get(id=archive["id"])
             if not self._can_edit_archive(user, archive):
                 return False
+        return True
 
     def _can_approve_archive(self, user, archive=None):
         if archive and not self._can_view_archive(user, archive):
@@ -131,6 +132,8 @@ class TagPermission(permissions.BasePermission):
         if user.is_superuser:
             return True
         if view.action in ["create_tag", "add_arch", "remove_arch"]:
+            if not user.id == obj.creator.id:
+                return False
             if request.data["archives"]:
                 return self.archive_perms._can_edit_archive_list(
                     user, request.data["archives"]
