@@ -1438,7 +1438,7 @@ def sources(request):
 def get_app_config(request):
     return Response(
         {
-            "maxFileSize": FILE_UPLOAD_MAX_SIZE_BYTE,
+            "max_file_size": FILE_UPLOAD_MAX_SIZE_BYTE,
         }
     )
 

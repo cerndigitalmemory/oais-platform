@@ -15,4 +15,4 @@ class GetConfigTest(APITestCase):
     def test_get_config(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["maxFileSize"], FILE_UPLOAD_MAX_SIZE_BYTE)
+        self.assertEqual(response.data["max_file_size"], FILE_UPLOAD_MAX_SIZE_BYTE)

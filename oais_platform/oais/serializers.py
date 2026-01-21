@@ -400,7 +400,7 @@ class StepStatisticsSerializer(serializers.Serializer):
 
 
 class ConfigurationSerializer(serializers.Serializer):
-    maxFileSize = serializers.IntegerField(
+    max_file_size = serializers.IntegerField(
         help_text="Maximum allowed file size for uploads (in bytes)"
     )
 
