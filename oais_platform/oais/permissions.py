@@ -86,6 +86,15 @@ class ArchivePermission(permissions.BasePermission):
             return True
         return False
 
+    def _can_edit_archive_list(self, user, archives):
+        for archive in archives:
+            if type(archive) is int:
+                archive = Archive.objects.get(id=archive)
+            elif type(archive) is dict:
+                archive = Archive.objects.get(id=archive["id"])
+            if not self._can_edit_archive(user, archive):
+                return False
+
     def _can_approve_archive(self, user, archive=None):
         if archive and not self._can_view_archive(user, archive):
             return False
@@ -122,10 +131,8 @@ class TagPermission(permissions.BasePermission):
         if user.is_superuser:
             return True
         if view.action in ["create_tag", "add_arch", "remove_arch"]:
-            if user.id == obj.creator.id:
-                return True
             if request.data["archives"]:
-                return self.archive_perms._can_edit_archive(
+                return self.archive_perms._can_edit_archive_list(
                     user, request.data["archives"]
                 )
             return False
