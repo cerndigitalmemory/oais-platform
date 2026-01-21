@@ -1,4 +1,5 @@
 stages:
+  - protected
   - format
   - test
   - tag
@@ -7,6 +8,15 @@ stages:
   - deploy-qa
   - deploy-prod
   - maintenance
+
+echo-test:
+  stage: protected
+  image: registry.cern.ch/docker.io/library/alpine:latest
+  script:
+    - echo "This is a protected job"
+  environment:
+    name: protected
+  when: manual
 
 check-isort:
   stage: format
