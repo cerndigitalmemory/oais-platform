@@ -406,4 +406,4 @@ class ConfigurationSerializer(serializers.Serializer):
 
 
 class LogoutSerializer(serializers.Serializer):
-    success = serializers.CharField(help_text="Indicates if logout was successful")
+    status = serializers.CharField(help_text="Indicates if logout was successful")
