@@ -90,7 +90,8 @@ class PipelineTests(APITestCase):
         self.assertEqual(response.status_code, status_code)
         self.assertEqual(Step.objects.count(), self.init_step_count)
 
-    def test_execute_pipeline_ongoing_execution(self):
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
+    def test_execute_pipeline_ongoing_execution(self, mock_dispatch):
         self.client.force_authenticate(user=self.testuser)
 
         pipeline = [StepName.ARCHIVE, StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH]
@@ -107,6 +108,14 @@ class PipelineTests(APITestCase):
         self.assertEqual(len(archive.pipeline_steps), len(pipeline) - 1)
         self.assertEqual(Step.objects.count(), self.init_step_count + len(pipeline))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_dispatch.assert_called_once_with(
+            StepType.get_by_stepname(StepName.ARCHIVE),
+            self.archive.id,
+            archive.last_step.id,
+            None,
+            self.testuser_api_key.key,
+            False,
+        )
 
     def test_execute_pipeline_forbidden(self):
         self.client.force_authenticate(user=self.other_user)
