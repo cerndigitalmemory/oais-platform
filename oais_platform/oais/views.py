@@ -20,7 +20,12 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiTypes,
+    extend_schema,
+    extend_schema_view,
+)
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -58,12 +63,25 @@ from oais_platform.oais.permissions import (
     filter_collections,
 )
 from oais_platform.oais.serializers import (
+    AnnounceSerializer,
     ArchiveSerializer,
     ArchiveWithDuplicatesSerializer,
+    BatchAnnounceSerializer,
+    CallbackSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
+    ConfigurationSerializer,
+    FileUploadResultSerializer,
+    FileUploadSerializer,
     LoginSerializer,
+    LogoutSerializer,
+    ParseUrlResultSerializer,
+    ParseUrlSerializer,
+    SearchByIdResultSerializer,
+    SearchResultSerializer,
+    StatisticsSerializer,
     StepSerializer,
+    StepStatisticsSerializer,
     StepTypeMinimalSerializer,
     UserSerializer,
 )
@@ -889,6 +907,7 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_queryset().filter(enabled=True).order_by("name")
 
 
+@extend_schema(request=None, responses={200: StatisticsSerializer})
 @api_view(["GET"])
 def statistics(request):
     harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
@@ -912,6 +931,7 @@ def statistics(request):
     return Response(data)
 
 
+@extend_schema(request=None, responses={200: StepStatisticsSerializer})
 @api_view(["GET"])
 def step_statistics(request):
     categories = {
@@ -962,22 +982,26 @@ def step_statistics(request):
     return Response(data)
 
 
+@extend_schema(
+    request=FileUploadSerializer, responses={200: FileUploadResultSerializer}
+)
 @api_view(["POST"])
 @permission_classes([FileUploadPermission])
 def upload_file(request):
-    if "file" not in request.FILES:
+    serializer = FileUploadSerializer(data=request.data)
+    if not serializer.is_valid(raise_exception=False):
         raise BadRequest("File missing")
+    file = serializer.validated_data["file"]
+    title = serializer.validated_data.get("title", "")
 
-    if request.FILES["file"].size > FILE_UPLOAD_MAX_SIZE_BYTE:
+    if file.size > FILE_UPLOAD_MAX_SIZE_BYTE:
         raise PayloadTooLarge(
             f"File exceeds the maximum allowed size ({FILE_UPLOAD_MAX_SIZE_GB} GB)."
         )
 
     source = "local"
     recid = hashlib.md5(
-        (request.FILES["file"].name + request.user.username + str(time.time())).encode(
-            "utf-8"
-        )
+        (file.name + request.user.username + str(time.time())).encode("utf-8")
     ).hexdigest()
 
     archive = Archive.objects.create(
@@ -985,7 +1009,7 @@ def upload_file(request):
         source=source,
         source_url="",
         requester=request.user,
-        title=request.POST.get("title") or f"{source} - {recid}",
+        title=title or f"{source} - {recid}",
     )
     step = Step.objects.create(
         archive=archive,
@@ -995,12 +1019,10 @@ def upload_file(request):
     )
 
     try:
-        original_filename = sanitize_filename(
-            os.path.basename(request.FILES["file"].name)
-        )
+        original_filename = sanitize_filename(os.path.basename(file.name))
         tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
         os.makedirs(tmp_dir, exist_ok=True)
-        file_path = request.FILES["file"].temporary_file_path()
+        file_path = file.temporary_file_path()
         destination_path = os.path.join(tmp_dir, original_filename)
         shutil.move(file_path, destination_path)
     except OSError as e:
@@ -1024,7 +1046,7 @@ def upload_file(request):
     step.set_input_data(
         {
             "tmp_dir": tmp_dir,
-            "author": request.POST.get("author") or request.user.username,
+            "author": serializer.validated_data.get("author") or request.user.username,
         }
     )
 
@@ -1039,10 +1061,16 @@ def upload_file(request):
         representing a zipped SIP"""
     )
 )
+@extend_schema(
+    request=FileUploadSerializer, responses={200: FileUploadResultSerializer}
+)
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def upload_sip(request):
-    file = request.FILES.getlist("file")[0]
+    serializer = FileUploadSerializer(data=request.data)
+    if not serializer.is_valid(raise_exception=False):
+        raise BadRequest("File missing")
+    file = serializer.validated_data["file"]
     step = None
 
     try:
@@ -1125,7 +1153,34 @@ def upload_sip(request):
         raise BadRequest({"status": 1, "msg": e})
 
 
-@api_view()
+@extend_schema(
+    operation_id="search-records",
+    parameters=[
+        OpenApiParameter(
+            name="q",
+            description="Search query",
+            required=True,
+            type=str,
+            location=OpenApiParameter.QUERY,
+        ),
+        OpenApiParameter(
+            name="p",
+            description="Page number",
+            required=False,
+            type=int,
+            location=OpenApiParameter.QUERY,
+        ),
+        OpenApiParameter(
+            name="s",
+            description="Page size",
+            required=False,
+            type=int,
+            location=OpenApiParameter.QUERY,
+        ),
+    ],
+    responses={200: SearchResultSerializer},
+)
+@api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def search(request, source):
     if "q" not in request.GET:
@@ -1154,7 +1209,19 @@ def search(request, source):
     return Response(results)
 
 
-@api_view()
+@extend_schema(
+    operation_id="search-record-by-id",
+    parameters=[
+        OpenApiParameter(
+            name="source", description="Source name", required=True, type=str
+        ),
+        OpenApiParameter(
+            name="recid", description="Record ID", required=True, type=str
+        ),
+    ],
+    responses={200: SearchByIdResultSerializer},
+)
+@api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def search_by_id(request, source, recid):
     try:
@@ -1169,10 +1236,16 @@ def search_by_id(request, source, recid):
     return Response(result)
 
 
+@extend_schema(
+    request=ParseUrlSerializer,
+    responses={200: ParseUrlResultSerializer},
+)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def parse_url(request):
-    url = request.data["url"]
+    serializer = ParseUrlSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    url = serializer.data["url"]
 
     # To be replaced by utils
     o = urlparse(url)
@@ -1196,7 +1269,7 @@ def parse_url(request):
             "Unable to parse the given URL. Try manually passing the source and the record ID."
         )
 
-    return Response({"recid": recid, "source": source})
+    return Response({"source": source, "recid": recid})
 
 
 @extend_schema(request=LoginSerializer, responses=UserSerializer)
@@ -1227,7 +1300,7 @@ def login(request):
 @extend_schema(
     request=None,
     # TODO: provide a serializer for 403 here
-    responses=None,
+    responses={200: LogoutSerializer},
 )
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
@@ -1239,6 +1312,10 @@ def logout(request):
     return Response({"status": "success"})
 
 
+@extend_schema(
+    request=AnnounceSerializer,
+    responses={200: OpenApiTypes.STR},
+)
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def announce(request):
@@ -1248,7 +1325,9 @@ def announce(request):
     an Archive will be created
     """
     # Get the path passed in the request
-    announce_path = request.data["announce_path"]
+    serializer = AnnounceSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    announce_path = serializer.validated_data["announce_path"]
 
     # Check if the path is allowed (a user is only allowed to "announce" paths in their home folder on EOS)
     if (
@@ -1275,6 +1354,10 @@ def announce(request):
         raise BadRequest(announce_response["errormsg"])
 
 
+@extend_schema(
+    request=BatchAnnounceSerializer,
+    responses={200: OpenApiTypes.STR},
+)
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def batch_announce(request):
@@ -1284,8 +1367,11 @@ def batch_announce(request):
     Archives will be created
     """
     # Get the path passed in the request
-    announce_path = request.data["batch_announce_path"]
-    batch_tag = request.data["batch_tag"]
+    serializer = BatchAnnounceSerializer(data=request.data)
+    if not serializer.is_valid(raise_exception=False):
+        raise BadRequest("Invalid data")
+    announce_path = serializer.validated_data["batch_announce_path"]
+    batch_tag = serializer.validated_data["batch_tag"]
 
     max_title_length = Collection._meta.get_field("title").max_length
     if len(batch_tag) > max_title_length:
@@ -1332,6 +1418,10 @@ def batch_announce(request):
     return redirect(reverse("tags-detail", request=None, kwargs={"pk": tag.id}))
 
 
+@extend_schema(
+    request=None,
+    responses={200: OpenApiTypes.STR},
+)
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def sources(request):
@@ -1339,21 +1429,31 @@ def sources(request):
     return Response(sources)
 
 
+@extend_schema(
+    request=None,
+    responses={200: ConfigurationSerializer},
+)
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def get_app_config(request):
     return Response(
         {
-            "maxFileSize": FILE_UPLOAD_MAX_SIZE_BYTE,
+            "max_file_size": FILE_UPLOAD_MAX_SIZE_BYTE,
         }
     )
 
 
+@extend_schema(
+    request=CallbackSerializer,
+    responses={200: OpenApiTypes.STR},
+)
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def am_callback(request):
-    package_uuid = request.data.get("package_uuid")
-    package_name = request.data.get("package_name")
+    serializer = CallbackSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    package_uuid = serializer.validated_data["package_uuid"]
+    package_name = serializer.validated_data["package_name"]
 
     if not package_name:
         raise BadRequest("package_name is missing")

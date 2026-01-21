@@ -64,7 +64,8 @@ class AmCallbackViewTest(APITestCase):
 
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("package_name is missing", str(response.data))
+        self.assertIn("package_name", response.data)
+        self.assertEqual(response.data["package_name"][0], "This field is required.")
 
     def test_callback_empty_package_name(self):
         """Test callback fails when package_name is empty"""

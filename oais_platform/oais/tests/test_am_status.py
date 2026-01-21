@@ -266,9 +266,12 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
 
+    @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_processing_limit_reached(self, periodic_tasks, get_unit_status):
+    def test_am_status_processing_limit_reached(
+        self, periodic_tasks, get_unit_status, create_retry_step
+    ):
         get_unit_status.return_value = {
             "status": "PROCESSING",
             "microservice": "Generate metadata",
@@ -295,6 +298,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertEqual(step_output["retry"], True)
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
+        create_retry_step.assert_called_once()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")

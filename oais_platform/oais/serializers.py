@@ -1,4 +1,4 @@
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
 from django.db.models import (
     CharField,
     Count,
@@ -9,6 +9,7 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
 
@@ -75,9 +76,11 @@ class UserSerializer(serializers.ModelSerializer):
             "is_superuser",
         ]
 
+    @extend_schema_field(serializers.BooleanField)
     def get_is_superuser(self, obj):
         return obj.is_superuser
 
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_permissions(self, obj):
         if type(obj) is utils.AttrDict:
             id = obj["id"]
@@ -243,15 +246,19 @@ class CollectionSerializer(serializers.ModelSerializer):
             "archives_no_package_count",
         ]
 
+    @extend_schema_field(serializers.IntegerField)
     def get_archives_aip_count(self, obj):
         return obj.archives.filter(state=ArchiveState.AIP).count()
 
+    @extend_schema_field(serializers.IntegerField)
     def get_archives_sip_count(self, obj):
         return obj.archives.filter(state=ArchiveState.SIP).count()
 
+    @extend_schema_field(serializers.IntegerField)
     def get_archives_no_package_count(self, obj):
         return obj.archives.filter(state=ArchiveState.NONE).count()
 
+    @extend_schema_field(serializers.DictField())
     def get_archives_summary(self, obj):
         qs = (
             obj.archives.annotate(
@@ -309,3 +316,94 @@ class LoginSerializer(serializers.Serializer):
 class SourceRecordSerializer(serializers.Serializer):
     source = serializers.CharField(max_length=150, required=True)
     recid = serializers.CharField(max_length=128, required=True)
+
+
+class SearchResultSerializer(serializers.Serializer):
+    results = serializers.ListField()
+    total_num_hits = serializers.IntegerField()
+
+
+class SearchByIdResultSerializer(serializers.Serializer):
+    result = serializers.ListField()
+
+
+class ParseUrlSerializer(serializers.Serializer):
+    url = serializers.URLField(required=True)
+
+
+class ParseUrlResultSerializer(serializers.Serializer):
+    source = serializers.CharField(max_length=150)
+    recid = serializers.CharField(max_length=128)
+
+
+class CallbackSerializer(serializers.Serializer):
+    package_uuid = serializers.CharField(max_length=128, required=True)
+    package_name = serializers.CharField(max_length=256, required=True)
+
+
+class AnnounceSerializer(serializers.Serializer):
+    announce_path = serializers.CharField(max_length=1024, required=True)
+
+
+class BatchAnnounceSerializer(serializers.Serializer):
+    batch_announce_path = serializers.CharField(max_length=1024, required=True)
+    batch_tag = serializers.CharField(max_length=256, required=False)
+
+
+class FileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField(required=True, help_text="File to upload")
+    title = serializers.CharField(
+        required=False, allow_blank=True, help_text="Archive title"
+    )
+    author = serializers.CharField(
+        required=False, allow_blank=True, help_text="Author name"
+    )
+
+
+class FileUploadResultSerializer(serializers.Serializer):
+    archive = serializers.IntegerField(
+        help_text="ID of the created archive", required=False
+    )
+    status = serializers.IntegerField(help_text="Status")
+    msg = serializers.CharField(help_text="Message", required=False, allow_blank=True)
+
+
+class StatisticsSerializer(serializers.Serializer):
+    harvested_count = serializers.IntegerField(help_text="Total number of SIPs")
+    preserved_count = serializers.IntegerField(help_text="Total number of AIPs")
+    pushed_to_tape_count = serializers.IntegerField(
+        help_text="Number of archives successfully pushed to CTA"
+    )
+    pushed_to_registry_count = serializers.IntegerField(
+        help_text="Number of archives successfully pushed to registry"
+    )
+
+
+class StepStatisticsSerializer(serializers.Serializer):
+    staged_count = serializers.IntegerField(
+        help_text="Number of staged archives (not yet harvested)"
+    )
+    harvested_count = serializers.IntegerField(help_text="Number of SIPs")
+    harvested_preserved_count = serializers.IntegerField(help_text="Number of AIPs")
+    harvested_preserved_tape_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to CTA only"
+    )
+    harvested_preserved_registry_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to registry only"
+    )
+    harvested_preserved_tape_registry_count = serializers.IntegerField(
+        help_text="Number of AIP archives pushed to both CTA and registry"
+    )
+    others_count = serializers.IntegerField(
+        help_text="Number of archives not matching any of the above categories"
+    )
+
+
+class ConfigurationSerializer(serializers.Serializer):
+    max_file_size = serializers.IntegerField(
+        help_text="Maximum allowed file size for uploads (in bytes)"
+    )
+
+
+class LogoutSerializer(serializers.Serializer):
+    status = serializers.CharField(help_text="Indicates if logout was successful")

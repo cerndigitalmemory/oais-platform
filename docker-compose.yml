@@ -1,4 +1,3 @@
-version: "3"
 x-common-variables: &common-variables
   # If we leave this one empty, the system will attempt to get it from the local archivematica installation
   # Since there is no archivemeatica deployment in the pipelines, it fails
