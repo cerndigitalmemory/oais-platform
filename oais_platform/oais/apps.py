@@ -16,8 +16,9 @@ class OaisConfig(AppConfig):
         logging.basicConfig(level=logging.INFO)
         logging.getLogger("fts3.rest.client").setLevel(logging.DEBUG)
 
-        # Skip initialization unless running server
-        if len(sys.argv) > 1 and sys.argv[1] in ["runserver", "gunicorn", "uwsgi"]:
+        # Skip initialization unless running server or worker
+        valid_commands = ["runserver", "gunicorn", "uwsgi", "worker", "beat"]
+        if any(arg in valid_commands for arg in sys.argv):
             # Initialize FTS client
             try:
                 self.fts = FTS(
