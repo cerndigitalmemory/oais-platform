@@ -264,12 +264,12 @@ class CollectionSerializer(serializers.ModelSerializer):
             obj.archives.annotate(
                 step_name=Coalesce(
                     "last_step__step_type__name",
-                    Value(None),
+                    Value("not_defined"),
                     output_field=CharField(),
                 ),
                 step_status=Coalesce(
                     "last_step__status",
-                    Value(None),
+                    Value(0),
                     output_field=IntegerField(),
                 ),
                 step_ts=Coalesce(
