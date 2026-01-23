@@ -125,13 +125,20 @@ class TagPermission(permissions.BasePermission):
     archive_perms = ArchivePermission()
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated
+        if not request.user.is_authenticated:
+            return False
+        if view.action == "create_tag":
+            if request.data["archives"]:
+                return self.archive_perms._can_edit_archive_list(
+                    request.user, request.data["archives"]
+                )
+        return True
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         if user.is_superuser:
             return True
-        if view.action in ["create_tag", "add_arch", "remove_arch"]:
+        if view.action in ["add_arch", "remove_arch"]:
             if not user.id == obj.creator.id:
                 return False
             if request.data["archives"]:

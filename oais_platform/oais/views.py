@@ -840,7 +840,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return self.make_paginated_response(archives, ArchiveSerializer)
 
     def add_or_remove_arch(self, request, add):
-        if request.data["archives"] is None:
+        if request.data.get("archives") in (None, []):
             raise BadRequest("No archives selected")
         else:
             archives = request.data["archives"]
