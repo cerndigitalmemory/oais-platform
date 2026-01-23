@@ -26,6 +26,7 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
+from oais_utils.sanitization import sanitize_filename
 from oais_utils.validate import get_manifest
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -97,7 +98,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     execute_pipeline,
     run_step,
 )
-from oais_platform.oais.upload import handle_failed_upload, sanitize_filename
+from oais_platform.oais.upload import handle_failed_upload
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     FILE_UPLOAD_MAX_SIZE_BYTE,
