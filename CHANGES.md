@@ -1,5 +1,17 @@
 # Changes
 
+## Version 2.8.0 (released 2026-01-23)
+- SIP: path structure change
+- Management: script added to move SIP
+- CTA: modify path, fix jobs not picked up
+- AM: fix PeriodicTask disabled after callback
+- views: add missing serializers, update config endpoint response key
+- Local dev: add Django static content
+- Unstage: add title option, remove single unstage
+- Pipeline: add option to continue after completed with warnings
+- Sanitize filename moved to oais_utils
+- Job summary: add undefined for staged archives
+
 ## Version 2.7.2 (released 2026-01-15)
 - AM callback: correct package_name suffix handling
 
