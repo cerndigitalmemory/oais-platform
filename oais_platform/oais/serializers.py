@@ -288,7 +288,12 @@ class CollectionSerializer(serializers.ModelSerializer):
         summary = {}
         for row in qs:
             step = row["step_name"]
-            status = str(row["step_status"])  # JSON-friendly keys
+            status = row["step_status"]
+
+            if step is None or status is None:
+                continue
+
+            status = str(status)  # JSON-friendly keys
 
             summary.setdefault(step, {})[status] = {
                 "count": row["count"],
