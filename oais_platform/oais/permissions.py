@@ -127,8 +127,10 @@ class TagPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
+        if request.user.is_superuser:
+            return True
         if view.action == "create_tag":
-            if request.data["archives"]:
+            if request.data.get("archives", []) not in (None, []):
                 return self.archive_perms._can_edit_archive_list(
                     request.user, request.data["archives"]
                 )
@@ -136,15 +138,16 @@ class TagPermission(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = request.user
+        if not user.is_authenticated:
+            return False
         if user.is_superuser:
             return True
         if view.action in ["add_arch", "remove_arch"]:
-            if not user.id == obj.creator.id:
-                return False
-            if request.data["archives"]:
-                return self.archive_perms._can_edit_archive_list(
-                    user, request.data["archives"]
-                )
+            if user.id == obj.creator.id or user.has_perm("oais.can_edit_all"):
+                if request.data.get("archives", []) not in (None, []):
+                    return self.archive_perms._can_edit_archive_list(
+                        user, request.data["archives"]
+                    )
             return False
         if view.action in ["edit_tag", "delete_tag"]:
             return user.id == obj.creator.id
