@@ -153,7 +153,15 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name, api_key]),
+        kwargs=json.dumps(
+            {
+                "archive_id": archive.id,
+                "step_id": step.id,
+                "job_id": submitted_job,
+                "folder_name": cta_folder_name,
+                "api_key": api_key,
+            }
+        ),
         expire_seconds=3600.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
