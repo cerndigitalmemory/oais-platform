@@ -130,7 +130,7 @@ class TagPermission(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         if view.action == "create_tag":
-            if request.data.get("archives", []) not in (None, []):
+            if request.data.get("archives"):
                 return self.archive_perms._can_edit_archive_list(
                     request.user, request.data["archives"]
                 )
@@ -144,7 +144,7 @@ class TagPermission(permissions.BasePermission):
             return True
         if view.action in ["add_arch", "remove_arch"]:
             if user.id == obj.creator.id or user.has_perm("oais.can_edit_all"):
-                if request.data.get("archives", []) not in (None, []):
+                if request.data.get("archives"):
                     return self.archive_perms._can_edit_archive_list(
                         user, request.data["archives"]
                     )
