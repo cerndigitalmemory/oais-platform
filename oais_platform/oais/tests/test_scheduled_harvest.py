@@ -409,6 +409,39 @@ class ScheduledHarvestTests(APITestCase):
         self.assertEqual(self.batch.failed, 1)
         self.assertEqual(self.batch.archives.count(), 4)
 
+    def test_batch_status(self):
+        self.batch_setup()
+        self.batch.records.extend(
+            [
+                {
+                    "source_url": "https://example.com/record/2",
+                    "recid": "2",
+                    "title": "test2",
+                    "source": "test",
+                },
+            ]
+        )
+        self.batch.save()
+        self.assertEqual(self.batch.status, BatchStatus.PENDING)
+        self.batch.set_status(BatchStatus.IN_PROGRESS)
+        archive = self.create_batch_archive()
+        archive2 = self.create_batch_archive(recid="2")
+        step = self.create_batch_step(archive, StepName.HARVEST, Status.WAITING)
+        step2 = self.create_batch_step(archive2, StepName.HARVEST, Status.WAITING)
+        step.set_status(Status.FAILED)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, BatchStatus.IN_PROGRESS)
+        step2.set_status(Status.COMPLETED)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, BatchStatus.PARTIALLY_FAILED)
+        step.set_status(Status.COMPLETED)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, BatchStatus.COMPLETED)
+        step.set_status(Status.FAILED)
+        step2.set_status(Status.FAILED)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, BatchStatus.FAILED)
+
     def create_batch_archive(self, recid="1", updated_time=None):
         archive = Archive.objects.create(
             recid=recid,
@@ -423,7 +456,7 @@ class ScheduledHarvestTests(APITestCase):
         return archive
 
     def create_batch_step(self, archive, name, status):
-        Step.objects.create(
+        return Step.objects.create(
             archive=archive,
             step_name=name,
             initiated_by_harvest_batch=self.batch,

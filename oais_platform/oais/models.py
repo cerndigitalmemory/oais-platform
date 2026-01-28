@@ -446,25 +446,31 @@ class Step(models.Model):
         return self.initiated_by_harvest_batch is not None
 
     def set_status(self, status):
-        self.status = status
-        self.save()
+        if self.status == status:
+            return
 
-        if self.is_batch_initiated and status in [Status.COMPLETED, Status.FAILED]:
-            # Check if the batch is finished
-            with transaction.atomic():
-                batch = HarvestBatch.objects.select_for_update().get(
-                    pk=self.initiated_by_harvest_batch.id
-                )
-                batch_archive_size = batch.size - batch.skipped_count
-                if batch_archive_size == batch.completed:
-                    batch.set_status(BatchStatus.COMPLETED)
-                    logging.info(f"Batch {batch.id} completed")
-                elif batch_archive_size == batch.failed:
-                    batch.set_status(BatchStatus.FAILED)
-                    logging.error(f"Batch {batch.id} failed")
-                elif batch_archive_size == batch.completed + batch.failed:
-                    batch.set_status(BatchStatus.PARTIALLY_FAILED)
-                    logging.warning(f"Batch {batch.id} partially failed")
+        with transaction.atomic():
+            self.status = status
+            self.save(update_fields=["status"])
+
+            if not self.initiated_by_harvest_batch:
+                return
+
+            if status not in (
+                Status.COMPLETED,
+                Status.COMPLETED_WITH_WARNINGS,
+                Status.FAILED,
+                Status.IN_PROGRESS,
+            ) and not (status == Status.WAITING and self.celery_task_id is not None):
+                return  # then status is not relevant for batch status update
+
+            batch = HarvestBatch.objects.select_for_update(
+                skip_locked=True
+            ).get(  # other transaction will update it
+                pk=self.initiated_by_harvest_batch.pk
+            )
+            if batch:
+                batch.refresh_status()
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -807,7 +813,7 @@ class HarvestBatch(models.Model):
             .exclude(
                 models.Q(status=Status.WAITING) & models.Q(celery_task_id__isnull=True)
             )
-            .order_by("-create_date")
+            .order_by("-create_date", "-id")
             .values("status")[:1]
         )
 
@@ -823,7 +829,7 @@ class HarvestBatch(models.Model):
             Step.objects.filter(
                 archive=models.OuterRef("pk"), initiated_by_harvest_batch=self
             )
-            .order_by("-create_date")
+            .order_by("-create_date", "-id")
             .values("status")[:1]
         )
 
@@ -831,7 +837,9 @@ class HarvestBatch(models.Model):
             batch_status=models.Subquery(last_step)
         )
 
-        return archives_with_status.filter(batch_status=Status.COMPLETED).count()
+        return archives_with_status.filter(
+            batch_status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]
+        ).count()
 
     @property
     def archives(self):
@@ -848,3 +856,23 @@ class HarvestBatch(models.Model):
     def increase_skipped_count(self):
         self.skipped_count += 1
         self.save()
+
+    def refresh_status(self):
+        total = self.archives.count()
+        completed = self.completed
+        failed = self.failed
+
+        if completed == total:
+            new_status = BatchStatus.COMPLETED
+            logging.info(f"Batch {self.id} completed")
+        elif failed == total:
+            new_status = BatchStatus.FAILED
+            logging.error(f"Batch {self.id} failed")
+        elif completed + failed == total:
+            new_status = BatchStatus.PARTIALLY_FAILED
+            logging.warning(f"Batch {self.id} partially failed")
+        else:
+            new_status = BatchStatus.IN_PROGRESS
+
+        if self.status != new_status:
+            self.set_status(new_status)

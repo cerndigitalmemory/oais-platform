@@ -248,6 +248,9 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
             try:
                 task = PeriodicTask.objects.get(name=task_name)
                 task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
+                task.last_run_at = (
+                    timezone.now()
+                )  # Update last run time to avoid expiration
                 task.save()
             except PeriodicTask.DoesNotExist:
                 logger.warning(
@@ -548,6 +551,9 @@ def handle_completed_am_package(
             try:
                 periodic_task = PeriodicTask.objects.get(name=task_name)
                 periodic_task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
+                periodic_task.last_run_at = (
+                    timezone.now()
+                )  # Update last run time to avoid expiration
                 periodic_task.save()
             except PeriodicTask.DoesNotExist as e:
                 logger.error(e)
