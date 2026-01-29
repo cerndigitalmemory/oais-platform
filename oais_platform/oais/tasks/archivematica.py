@@ -256,6 +256,9 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
                 logger.warning(
                     f"PeriodicTask {task_name} for step {step.id} not found."
                 )
+    elif status == "WAITING":
+        step.set_status(Status.WAITING)
+        step.set_output_data(am_status)
     else:
         logger.warning(
             f"Unknown status from Archivematica: {status}, for step {step.id}"
