@@ -512,20 +512,18 @@ def handle_completed_am_package(
             logger.warning(
                 f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
             )
-            remove_periodic_task_on_failure(task_name, step, am_status)
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
-            return
-
-        finalize(
-            self=self,
-            current_status=states.SUCCESS,
-            retval={"status": 0},
-            task_id=None,
-            args=[archive_id, step.id, None, api_key],
-            kwargs=None,
-            einfo=None,
-        )
+        else:
+            finalize(
+                self=self,
+                current_status=states.SUCCESS,
+                retval={"status": 0},
+                task_id=None,
+                args=[archive_id, step.id, None, api_key],
+                kwargs=None,
+                einfo=None,
+            )
 
         try:
             periodic_task = PeriodicTask.objects.get(name=task_name)
