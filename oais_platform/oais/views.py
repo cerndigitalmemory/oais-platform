@@ -905,7 +905,7 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = StepTypePagination
 
     def get_queryset(self):
-        return super().get_queryset().filter(enabled=True).order_by("name")
+        return super().get_queryset().filter().order_by("name")
 
 
 @extend_schema(request=None, responses={200: StatisticsSerializer})
