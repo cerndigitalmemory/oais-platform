@@ -464,13 +464,16 @@ class Step(models.Model):
             ) and not (status == Status.WAITING and self.celery_task_id is not None):
                 return  # then status is not relevant for batch status update
 
-            batch = HarvestBatch.objects.select_for_update(
-                skip_locked=True
-            ).get(  # other transaction will update it
-                pk=self.initiated_by_harvest_batch.pk
-            )
-            if batch:
-                batch.refresh_status()
+            try:
+                batch = HarvestBatch.objects.select_for_update(nowait=True).get(
+                    pk=self.initiated_by_harvest_batch.pk
+                )
+                if batch:
+                    batch.refresh_status()
+            except Exception as e:
+                logging.error(
+                    f"Step {self.id} could not lock HarvestBatch {self.initiated_by_harvest_batch.pk} for update: {e}"
+                )
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
