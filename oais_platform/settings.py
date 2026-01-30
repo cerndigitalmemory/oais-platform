@@ -358,7 +358,7 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 # Bagit Create Settings
 
 # Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
-BIC_UPLOAD_PATH = "/oais_platform/oais-data"
+BIC_UPLOAD_PATH = "/oais_platform/oais-data/sips"
 # Path where the bags are processed, but not stored
 BIC_WORKDIR = "/tmp"
 # Path where uploaded files are temporarily stored to be picked up by bagit-create
@@ -369,9 +369,9 @@ UPLOAD_DELETION_CUTOFF_DAYS = 14
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
 # Path where the AIPs will be served from
-AIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/aip/"
+AIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/aips/"
 # Path where the SIPs will be served from
-SIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/sip/"
+SIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/sips/"
 
 # FTS Settings
 FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-public.cern.ch:8446")
