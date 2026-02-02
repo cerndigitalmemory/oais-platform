@@ -369,7 +369,7 @@ UPLOAD_DELETION_CUTOFF_DAYS = 14
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
 # Path where the AIPs will be served from
-AIP_UPSTREAM_BASEPATH = "/oais-platform/oais-data/aips/"
+AIP_UPSTREAM_BASEPATH = "/eos/project/p/preserve/platform/local/aips/"
 # Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/sips/"
 
@@ -394,7 +394,7 @@ FTS_GRID_CERT_KEY = environ.get("FTS_GRID_CERT_KEY", "private.nopwd.key")
 # CTA Settings
 CTA_BASE_PATH = environ.get(
     "CTA_BASE_PATH",
-    "https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/",
+    "https://eosctapublic.cern.ch:8444//eos/ctapublic/archivetest/digitalmemory/dev/",
 )
 
 # Batch announce number of subfolders limit
