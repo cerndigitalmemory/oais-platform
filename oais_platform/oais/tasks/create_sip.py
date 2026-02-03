@@ -17,7 +17,6 @@ from oais_platform.oais.tasks.utils import (
     generate_directory_structure,
 )
 from oais_platform.settings import (
-    BIC_UPLOAD_PATH,
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
     SIP_UPSTREAM_BASEPATH,
@@ -104,7 +103,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             f"The given source({archive.source}) might requires an API key which was not provided."
         )
 
-    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
+    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -115,7 +114,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
+        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -145,7 +144,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
         return {"status": 1, "errormsg": "Missing input data for step"}
     input_data = json.loads(input_data)
 
-    sip_path = generate_directory_structure(BIC_UPLOAD_PATH, archive)
+    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -157,7 +156,7 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, BIC_UPLOAD_PATH, archive.source)
+        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
         return {
             "status": 1,
             "errormsg": str(e),

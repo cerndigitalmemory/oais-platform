@@ -17,7 +17,7 @@ from oais_platform.oais.tasks.utils import (
     create_step,
     generate_directory_structure,
 )
-from oais_platform.settings import BIC_UPLOAD_PATH, SIP_UPSTREAM_BASEPATH
+from oais_platform.settings import SIP_UPSTREAM_BASEPATH
 
 logger = get_task_logger(__name__)
 
@@ -102,16 +102,16 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
     foldername = input_data["foldername"]
     announce_path = input_data["announce_path"]
 
-    if BIC_UPLOAD_PATH:
+    if SIP_UPSTREAM_BASEPATH:
         target_path = os.path.join(
-            generate_directory_structure(BIC_UPLOAD_PATH, archive), foldername
+            generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive), foldername
         )
     else:
         target_path = foldername
     try:
         os.mkdir(target_path)
     except FileExistsError:
-        cleanup_empty_path(target_path, BIC_UPLOAD_PATH, archive.source)
+        cleanup_empty_path(target_path, SIP_UPSTREAM_BASEPATH, archive.source)
         return {
             "status": 1,
             "errormsg": "The SIP couldn't be copied to the platform \
@@ -148,7 +148,7 @@ def copy_sip(self, archive_id, step_id, input_data, api_key=None):
 
     except Exception as e:
         # In case of exception delete the target folder
-        cleanup_empty_path(target_path, BIC_UPLOAD_PATH, archive.source)
+        cleanup_empty_path(target_path, SIP_UPSTREAM_BASEPATH, archive.source)
         return {"status": 1, "errormsg": e}
 
 

@@ -357,8 +357,6 @@ INVENIO_API_TOKEN = environ.get("INVENIO_API_TOKEN")
 
 # Bagit Create Settings
 
-# Path where SIPs (uploaded, announced or created through the Harvest feature) are stored
-BIC_UPLOAD_PATH = "/oais_platform/oais-data/sips"
 # Path where the bags are processed, but not stored
 BIC_WORKDIR = "/tmp"
 # Path where uploaded files are temporarily stored to be picked up by bagit-create

@@ -13,10 +13,10 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
-    BIC_UPLOAD_PATH,
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
+    SIP_UPSTREAM_BASEPATH,
 )
 
 
@@ -59,7 +59,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                BIC_UPLOAD_PATH,
+                SIP_UPSTREAM_BASEPATH,
                 "local",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -69,7 +69,9 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         expected_path = (
-            Path(BIC_UPLOAD_PATH) / "local" / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+            Path(SIP_UPSTREAM_BASEPATH)
+            / "local"
+            / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
         self.assertTrue(expected_path.exists())
 
@@ -100,7 +102,9 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         expected_path = (
-            Path(BIC_UPLOAD_PATH) / "local" / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
+            Path(SIP_UPSTREAM_BASEPATH)
+            / "local"
+            / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
         self.assertFalse(expected_path.exists())
 
