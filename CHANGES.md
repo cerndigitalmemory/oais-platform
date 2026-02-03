@@ -1,5 +1,11 @@
 # Changes
 
+## Version 2.8.1 (released 2026-02-03)
+- AM status: add waiting case, fix completed with warnings case
+- Move batch status update, add nowait lock
+- API: return all StepTypes
+- Update tag permissions
+
 ## Version 2.8.0 (released 2026-01-23)
 - SIP: path structure change
 - Management: script added to move SIP
