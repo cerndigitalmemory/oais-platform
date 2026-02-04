@@ -367,7 +367,7 @@ UPLOAD_DELETION_CUTOFF_DAYS = 14
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
 # Path where the AIPs will be served from
-AIP_UPSTREAM_BASEPATH = "/eos/project/p/preserve/platform/local/aips/"
+AIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/aips/"
 # Path where the SIPs will be served from
 SIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/sips/"
 
