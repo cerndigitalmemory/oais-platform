@@ -456,24 +456,26 @@ class Step(models.Model):
             if not self.initiated_by_harvest_batch:
                 return
 
-            if status not in (
+            is_terminal = status in {
                 Status.COMPLETED,
                 Status.COMPLETED_WITH_WARNINGS,
                 Status.FAILED,
-                Status.IN_PROGRESS,
-            ) and not (status == Status.WAITING and self.celery_task_id is not None):
-                return  # then status is not relevant for batch status update
+            }
+
+            is_progress_relevant = status == Status.IN_PROGRESS or (
+                status == Status.WAITING and self.celery_task_id
+            )
+
+            if not is_terminal and not is_progress_relevant:
+                return
 
             try:
-                batch = HarvestBatch.objects.select_for_update(nowait=True).get(
+                batch = HarvestBatch.objects.select_for_update(skip_locked=True).get(
                     pk=self.initiated_by_harvest_batch.pk
                 )
-                if batch:
-                    batch.refresh_status()
-            except Exception as e:
-                logging.error(
-                    f"Step {self.id} could not lock HarvestBatch {self.initiated_by_harvest_batch.pk} for update: {e}"
-                )
+                batch.refresh_status(status)
+            except HarvestBatch.DoesNotExist:
+                pass  # batch was locked by another transaction
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
@@ -860,7 +862,19 @@ class HarvestBatch(models.Model):
         self.skipped_count += 1
         self.save()
 
-    def refresh_status(self):
+    def refresh_status(self, step_status=None):
+        if step_status is not None:
+            no_op = {
+                BatchStatus.IN_PROGRESS: {Status.IN_PROGRESS, Status.WAITING},
+                BatchStatus.FAILED: {Status.FAILED},
+                BatchStatus.COMPLETED: {
+                    Status.COMPLETED,
+                    Status.COMPLETED_WITH_WARNINGS,
+                },
+            }
+            if step_status in no_op.get(self.status, ()):
+                return
+
         total = self.archives.count()
         completed = self.completed
         failed = self.failed
