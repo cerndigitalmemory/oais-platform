@@ -666,10 +666,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Get common possible actions for the archives
         """
-        archives_data = request.data["archives"]
+        archive_ids = request.data["archives"]
         result = {}
-        if len(archives_data) > 0:
-            archive_ids = [archive["id"] for archive in archives_data]
+        if len(archive_ids) > 0:
             with transaction.atomic():
                 archives = list(
                     Archive.objects.select_for_update()

@@ -539,8 +539,8 @@ class ArchiveTests(APITestCase):
             url,
             {
                 "archives": [
-                    {"id": self.private_archive.id},
-                    {"id": other_archive.id},
+                    self.private_archive.id,
+                    other_archive.id,
                 ]
             },
             format="json",
@@ -566,8 +566,8 @@ class ArchiveTests(APITestCase):
             url,
             {
                 "archives": [
-                    {"id": self.private_archive.id},
-                    {"id": other_archive.id},
+                    self.private_archive.id,
+                    other_archive.id,
                 ]
             },
             format="json",
