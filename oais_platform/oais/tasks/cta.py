@@ -110,6 +110,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
                     task="push_to_cta",
                     args=json.dumps([archive_id, step_id, input_data, api_key]),
                     expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
+                    last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
                 )
             return
 
