@@ -364,20 +364,17 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return result
 
-    @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
-    def archives_filtered(self, request):
+    def get_filtered_queryset(self, filters):
         """
-        Returns an Archive list based on the filters set
+        Returns an Archive list based on the given filters set
         """
         result = self.get_queryset()
-        if "filters" not in request.data:
-            raise BadRequest("No filters")
-        filters = request.data["filters"]
-
         try:
             query = Q()
             exclude_query = Q()
             for key, value in filters.items():
+                if key not in self.filters_map:
+                    continue
                 subquery = Q()
                 exclude_subquery = Q()
                 for query_arg in self.filters_map[key]:
@@ -389,20 +386,38 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 exclude_query &= exclude_subquery
                 query &= subquery
 
-        except Exception as error:
-            match error:
-                case KeyError():
-                    raise BadRequest("Invalid filter")
-                case _:
-                    raise BadRequest("Invalid request")
+            return (
+                result.filter(query)
+                .exclude(exclude_query)
+                .order_by("-last_modification_timestamp")
+            )
+        except KeyError:
+            raise BadRequest("Invalid filter")
+        except Exception:
+            raise BadRequest("Invalid request")
 
-        result = (
-            result.filter(query)
-            .exclude(exclude_query)
-            .order_by("-last_modification_timestamp")
-        )
-
+    @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
+    def archives_filtered(self, request):
+        """
+        Returns an Archive list based on the filters set
+        """
+        if "filters" not in request.data:
+            raise BadRequest("No filters")
+        result = self.get_filtered_queryset(request.data["filters"])
         return self.make_paginated_response(result, ArchiveSerializer)
+
+    @action(
+        detail=False, methods=["POST"], url_path="filter-ids", url_name="filter-ids"
+    )
+    def archive_ids_filtered(self, request):
+        """
+        Returns a list of only the IDs of Archives matching the filters
+        """
+        if "filters" not in request.data:
+            raise BadRequest("No filters")
+        result = self.get_filtered_queryset(request.data["filters"])
+        ids = list(result.values_list("id", flat=True))
+        return Response({"ids": ids})
 
     @action(
         detail=False, methods=["POST"], url_path="duplicates", url_name="duplicates"
