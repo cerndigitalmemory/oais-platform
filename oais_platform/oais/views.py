@@ -594,20 +594,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Creates the pipline of Steps for the passed Archive and executes it
         """
-        self.get_object()
+        archive = self.get_object()
         run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
-        archive_id = request.data["archive"]["id"]
 
         try:
             api_key = ApiKey.objects.get(
-                source__name=request.data["archive"]["source"], user=request.user
+                source__name=archive.source, user=request.user
             ).key
         except Exception:
             api_key = None
 
         with transaction.atomic():
-            archive = Archive.objects.select_for_update().get(pk=archive_id)
+            archive = Archive.objects.select_for_update().get(pk=archive.id)
             force_continue = False
 
             match run_type:
@@ -623,7 +622,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest(e)
                 case "retry":
                     force_continue = True
-                    result = create_retry_step.apply(args=[archive_id, request.user.id])
+                    result = create_retry_step.apply(args=[archive.id, request.user.id])
                     result = result.get()
                     if result["errormsg"]:
                         raise BadRequest(result["errormsg"])
@@ -656,7 +655,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     )
 
         step, _ = execute_pipeline(
-            archive_id, api_key=api_key, force_continue=force_continue
+            archive.id, api_key=api_key, force_continue=force_continue
         )
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)

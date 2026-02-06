@@ -16,7 +16,6 @@ from oais_platform.oais.models import (
     StepName,
     StepType,
 )
-from oais_platform.oais.serializers import ArchiveSerializer
 from oais_platform.settings import PIPELINE_SIZE_LIMIT
 
 
@@ -53,8 +52,6 @@ class PipelineTests(APITestCase):
             state=ArchiveState.SIP,
         )
 
-        self.dict_archive = ArchiveSerializer(self.archive, many=False)
-
         self.harvest_step = Step.objects.create(
             archive=self.archive, step_name=StepName.HARVEST
         )
@@ -83,7 +80,7 @@ class PipelineTests(APITestCase):
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
-            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            {"pipeline_steps": pipeline},
             format="json",
         )
 
@@ -99,7 +96,7 @@ class PipelineTests(APITestCase):
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
-            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            {"pipeline_steps": pipeline},
             format="json",
         )
 
@@ -125,7 +122,7 @@ class PipelineTests(APITestCase):
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
-            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            {"pipeline_steps": pipeline},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -142,7 +139,7 @@ class PipelineTests(APITestCase):
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
             url,
-            {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+            {"pipeline_steps": pipeline},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -217,7 +214,7 @@ class PipelineTests(APITestCase):
             url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
             response = self.client.post(
                 url,
-                {"archive": self.dict_archive.data, "pipeline_steps": pipeline},
+                {"pipeline_steps": pipeline},
                 format="json",
             )
 
@@ -249,7 +246,6 @@ class PipelineTests(APITestCase):
         response = self.client.post(
             url,
             {
-                "archive": self.dict_archive.data,
                 "pipeline_steps": [StepName.VALIDATION],
             },
             format="json",
@@ -323,7 +319,6 @@ class PipelineTests(APITestCase):
         response = self.client.post(
             url,
             {
-                "archive": self.dict_archive.data,
                 "pipeline_steps": [StepName.EXTRACT_TITLE],
             },
             format="json",
