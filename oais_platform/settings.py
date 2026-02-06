@@ -112,6 +112,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "upload_cleanup",
         "schedule": crontab(minute=0, hour=2, day_of_month=1),
     },
+    "archive-failed-count-reset": {
+        "task": "archive_failed_count_reset",
+        "schedule": crontab(hour="*/2", minute=00),
+    },
 }
 
 ## Authentication

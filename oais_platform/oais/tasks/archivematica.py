@@ -558,3 +558,12 @@ def handle_completed_am_package(
                 periodic_task.save()
             except PeriodicTask.DoesNotExist as e:
                 logger.error(e)
+
+
+@shared_task(name="archive_failed_count_reset")
+def archive_failed_count_reset():
+    step_type = StepType.objects.get(name=StepName.ARCHIVE)
+    if step_type.enabled and step_type.failed_count > 0:
+        logger.info(f"Resetting failed count for step type {step_type.name}")
+        step_type.failed_count = 0
+        step_type.save()

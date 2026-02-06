@@ -5,8 +5,11 @@ import requests
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tasks.archivematica import check_am_status
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.tasks.archivematica import (
+    archive_failed_count_reset,
+    check_am_status,
+)
 from oais_platform.settings import (
     AM_PROCESSING_TIME_LIMIT,
     AM_RETRY_LIMIT,
@@ -639,3 +642,25 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertEqual(step_output["retry_limit_exceeded"], True)
         self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_not_called()
+
+    def test_archive_failed_count_reset(self):
+        step_type = StepType.objects.get(name=StepName.ARCHIVE)
+        step_type.failed_count = 5
+        step_type.save()
+
+        archive_failed_count_reset()
+
+        step_type.refresh_from_db()
+        self.assertEqual(step_type.failed_count, 0)
+
+    def test_archive_failed_count_reset_disabled(self):
+        step_type = StepType.objects.get(name=StepName.ARCHIVE)
+        step_type.failed_count = 5
+        step_type.enabled = False
+        step_type.save()
+
+        archive_failed_count_reset()
+
+        step_type.refresh_from_db()
+        self.assertEqual(step_type.failed_count, 5)
+        self.assertFalse(step_type.enabled)
