@@ -7,11 +7,11 @@ from django.core.management.base import BaseCommand
 
 from oais_platform.oais.models import Archive
 from oais_platform.oais.tasks.utils import generate_directory_structure
-from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_platform.settings import SIP_UPSTREAM_BASEPATH
 
 
 class Command(BaseCommand):
-    help = "Moves SIPs to the path <BIC_UPLOAD_PATH>/<source>/<hash>/<sip_folder_name>"
+    help = "Moves SIPs to the path <SIP_UPSTREAM_BASEPATH>/<source>/<hash>/<sip_folder_name>"
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS("Starting script..."))
@@ -38,7 +38,7 @@ class Command(BaseCommand):
                 continue
 
             folder_name = os.path.basename(current_path)
-            new_structure = generate_directory_structure(BIC_UPLOAD_PATH, archive)
+            new_structure = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
             new_path = os.path.join(new_structure, folder_name)
 
             if current_path == new_path:

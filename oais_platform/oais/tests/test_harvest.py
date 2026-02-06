@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import harvest
-from oais_platform.settings import BIC_UPLOAD_PATH
+from oais_platform.settings import SIP_UPSTREAM_BASEPATH
 
 
 class HarvestTest(APITestCase):
@@ -46,7 +46,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                BIC_UPLOAD_PATH,
+                SIP_UPSTREAM_BASEPATH,
                 "test_source",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -56,7 +56,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         expected_path = (
-            Path(BIC_UPLOAD_PATH)
+            Path(SIP_UPSTREAM_BASEPATH)
             / "test_source"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -122,7 +122,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         expected_path = (
-            Path(BIC_UPLOAD_PATH)
+            Path(SIP_UPSTREAM_BASEPATH)
             / "test_source"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )

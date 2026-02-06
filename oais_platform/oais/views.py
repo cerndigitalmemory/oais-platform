@@ -1076,8 +1076,8 @@ def upload_sip(request):
 
     try:
         # Settings must be imported from django.conf.settings in order to be overridable from the tests
-        if settings.BIC_UPLOAD_PATH:
-            base_path = settings.BIC_UPLOAD_PATH
+        if settings.SIP_UPSTREAM_BASEPATH:
+            base_path = settings.SIP_UPSTREAM_BASEPATH
         else:
             base_path = os.getcwd()
         # Save compressed SIP

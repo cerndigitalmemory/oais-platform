@@ -70,7 +70,7 @@ class UploadTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_upload_sip(self, mock_dispatch):
-        with override_settings(BIC_UPLOAD_PATH=None):
+        with override_settings(SIP_UPSTREAM_BASEPATH=None):
             # Prepare a temp folder to save the results
             with tempfile.TemporaryDirectory() as tmpdir2:
                 # Run Bagit Create with the following parameters:
