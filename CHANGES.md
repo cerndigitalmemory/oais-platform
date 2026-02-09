@@ -1,5 +1,12 @@
 # Changes
 
+## Version 2.8.2 (released 2026-02-09)
+- AM: periodically reset failed count
+- Batch: skip updating locked batch
+- Requirements: update celery and django-celery-beat
+- CTA: fix PeriodicTask not picked up
+- Local dev: fixes for AM and CTA pipelines
+
 ## Version 2.8.1 (released 2026-02-03)
 - AM status: add waiting case, fix completed with warnings case
 - Move batch status update, add nowait lock
