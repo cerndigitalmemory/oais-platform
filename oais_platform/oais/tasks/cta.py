@@ -126,6 +126,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         if has_periodic_task:
             periodic_task = PeriodicTask.objects.get(name=task_name)
             periodic_task.delete()
+            has_periodic_task = False
 
         # And set the step as in progress
         step.set_status(Status.IN_PROGRESS)
@@ -137,7 +138,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
     except Exception as e:
         if self.request.retries >= self.max_retries:
-            set_and_return_error(step, str(e))
+            if has_periodic_task:
+                remove_periodic_task_on_failure(task_name, step, str(e))
+            else:
+                set_and_return_error(step, str(e))
             return 1
 
         logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
