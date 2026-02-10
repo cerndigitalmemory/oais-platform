@@ -17,6 +17,33 @@ from oais_platform.oais.models import (
     StepType,
 )
 
+FILTER_TEST_CASES = [
+    (
+        {"access": "all", "filters": {"source": "test", "query": "1"}},
+        {"status": status.HTTP_200_OK, "size": 2},
+    ),
+    (
+        {"access": "all", "filters": {"query": "723"}},
+        {"status": status.HTTP_200_OK, "size": 1},
+    ),
+    (
+        {"access": "all", "filters": {"query": "archive"}},
+        {"status": status.HTTP_200_OK, "size": 2},
+    ),
+    (
+        {"access": "all", "filters": {"source": "test2", "query": "1"}},
+        {"status": status.HTTP_200_OK, "size": 0},
+    ),
+    (
+        lambda self: {
+            "access": "all",
+            "filters": {"exclude_tag": str(self.private_tag.id)},
+        },
+        {"status": status.HTTP_200_OK, "size": 3},
+    ),
+    ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
+]
+
 
 class ArchiveTests(APITestCase):
     def setUp(self):
@@ -133,35 +160,7 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 4)
 
-    @parameterized.expand(
-        [
-            (
-                {"access": "all", "filters": {"source": "test", "query": "1"}},
-                {"status": status.HTTP_200_OK, "size": 2},
-            ),
-            (
-                {"access": "all", "filters": {"query": "723"}},
-                {"status": status.HTTP_200_OK, "size": 1},
-            ),
-            (
-                {"access": "all", "filters": {"query": "archive"}},
-                {"status": status.HTTP_200_OK, "size": 2},
-            ),
-            (
-                {"access": "all", "filters": {"source": "test2", "query": "1"}},
-                {"status": status.HTTP_200_OK, "size": 0},
-            ),
-            (
-                lambda self: {
-                    "access": "all",
-                    "filters": {"exclude_tag": str(self.private_tag.id)},
-                },
-                {"status": status.HTTP_200_OK, "size": 3},
-            ),
-            ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
-        ]
-    )
-    def test_archives_filtered(self, data, output):
+    def _run_filter_test(self, url_name, result_key, data, output):
         if callable(data):
             data = data(self)  # Resolve the lambda function
 
@@ -170,12 +169,20 @@ class ArchiveTests(APITestCase):
 
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archives-filter")
+        url = reverse(url_name)
         response = self.client.post(url, data, format="json")
         self.assertEqual(response.status_code, output["status"])
 
         if response.status_code == status.HTTP_200_OK:
-            self.assertEqual(len(response.data["results"]), output["size"])
+            self.assertEqual(len(response.data[result_key]), output["size"])
+
+    @parameterized.expand(FILTER_TEST_CASES)
+    def test_archives_filtered(self, data, output):
+        self._run_filter_test("archives-filter", "results", data, output)
+
+    @parameterized.expand(FILTER_TEST_CASES)
+    def test_archives_filtered_ids(self, data, output):
+        self._run_filter_test("archives-filter-ids", "ids", data, output)
 
     def test_archive_details_requester(self):
         self.client.force_authenticate(user=self.requester)
@@ -539,8 +546,8 @@ class ArchiveTests(APITestCase):
             url,
             {
                 "archives": [
-                    {"id": self.private_archive.id},
-                    {"id": other_archive.id},
+                    self.private_archive.id,
+                    other_archive.id,
                 ]
             },
             format="json",
@@ -566,8 +573,8 @@ class ArchiveTests(APITestCase):
             url,
             {
                 "archives": [
-                    {"id": self.private_archive.id},
-                    {"id": other_archive.id},
+                    self.private_archive.id,
+                    other_archive.id,
                 ]
             },
             format="json",

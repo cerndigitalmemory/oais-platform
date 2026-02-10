@@ -364,16 +364,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return result
 
-    @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
-    def archives_filtered(self, request):
+    def get_filtered_queryset(self, filters):
         """
-        Returns an Archive list based on the filters set
+        Returns an Archive list based on the given filters set
         """
         result = self.get_queryset()
-        if "filters" not in request.data:
-            raise BadRequest("No filters")
-        filters = request.data["filters"]
-
         try:
             query = Q()
             exclude_query = Q()
@@ -389,20 +384,38 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 exclude_query &= exclude_subquery
                 query &= subquery
 
-        except Exception as error:
-            match error:
-                case KeyError():
-                    raise BadRequest("Invalid filter")
-                case _:
-                    raise BadRequest("Invalid request")
+            return (
+                result.filter(query)
+                .exclude(exclude_query)
+                .order_by("-last_modification_timestamp")
+            )
+        except KeyError:
+            raise BadRequest("Invalid filter")
+        except Exception:
+            raise BadRequest("Invalid request")
 
-        result = (
-            result.filter(query)
-            .exclude(exclude_query)
-            .order_by("-last_modification_timestamp")
-        )
-
+    @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
+    def archives_filtered(self, request):
+        """
+        Returns an Archive list based on the filters set
+        """
+        if "filters" not in request.data:
+            raise BadRequest("No filters")
+        result = self.get_filtered_queryset(request.data["filters"])
         return self.make_paginated_response(result, ArchiveSerializer)
+
+    @action(
+        detail=False, methods=["POST"], url_path="filter-ids", url_name="filter-ids"
+    )
+    def archive_ids_filtered(self, request):
+        """
+        Returns a list of only the IDs of Archives matching the filters
+        """
+        if "filters" not in request.data:
+            raise BadRequest("No filters")
+        result = self.get_filtered_queryset(request.data["filters"])
+        ids = list(result.values_list("id", flat=True))
+        return Response({"ids": ids})
 
     @action(
         detail=False, methods=["POST"], url_path="duplicates", url_name="duplicates"
@@ -579,20 +592,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Creates the pipline of Steps for the passed Archive and executes it
         """
-        self.get_object()
+        archive = self.get_object()
         run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
-        archive_id = request.data["archive"]["id"]
 
         try:
             api_key = ApiKey.objects.get(
-                source__name=request.data["archive"]["source"], user=request.user
+                source__name=archive.source, user=request.user
             ).key
         except Exception:
             api_key = None
 
         with transaction.atomic():
-            archive = Archive.objects.select_for_update().get(pk=archive_id)
+            archive = Archive.objects.select_for_update().get(pk=archive.id)
             force_continue = False
 
             match run_type:
@@ -608,7 +620,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         raise BadRequest(e)
                 case "retry":
                     force_continue = True
-                    result = create_retry_step.apply(args=[archive_id, request.user.id])
+                    result = create_retry_step.apply(args=[archive.id, request.user.id])
                     result = result.get()
                     if result["errormsg"]:
                         raise BadRequest(result["errormsg"])
@@ -641,7 +653,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                     )
 
         step, _ = execute_pipeline(
-            archive_id, api_key=api_key, force_continue=force_continue
+            archive.id, api_key=api_key, force_continue=force_continue
         )
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
@@ -651,10 +663,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Get common possible actions for the archives
         """
-        archives_data = request.data["archives"]
+        archive_ids = request.data["archives"]
         result = {}
-        if len(archives_data) > 0:
-            archive_ids = [archive["id"] for archive in archives_data]
+        if len(archive_ids) > 0:
             with transaction.atomic():
                 archives = list(
                     Archive.objects.select_for_update()
