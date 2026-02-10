@@ -373,8 +373,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             query = Q()
             exclude_query = Q()
             for key, value in filters.items():
-                if key not in self.filters_map:
-                    continue
                 subquery = Q()
                 exclude_subquery = Q()
                 for query_arg in self.filters_map[key]:
