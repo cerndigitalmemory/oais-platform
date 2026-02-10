@@ -40,6 +40,7 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
+        self.assertIsNotNone(self.step.finish_date)
         self.assertFalse(
             PeriodicTask.objects.filter(name=self.periodic_task.name).exists()
         )
@@ -67,4 +68,5 @@ class CheckFTSJobStatusTests(APITestCase):
         )
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertIsNotNone(self.step.finish_date)
         create_retry_step.assert_not_called()

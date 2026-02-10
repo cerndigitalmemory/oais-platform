@@ -14,7 +14,10 @@ from oais_utils.validate import compute_hash
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
-from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
+from oais_platform.oais.tasks.utils import (
+    remove_periodic_task_on_failure,
+    set_and_return_error,
+)
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
@@ -70,12 +73,17 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
-            step.set_status(Status.COMPLETED)
-            step.set_output_data(
-                {
+            finalize(
+                self=self,
+                current_status=states.SUCCESS,
+                retval={
                     "status": 0,
                     "details": "Archive already exists on tape with the same size and checksum",
-                }
+                },
+                task_id=None,
+                args=[archive_id, step.id, None, api_key],
+                kwargs=None,
+                einfo=None,
             )
             return
         overwrite = True
@@ -118,6 +126,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         if has_periodic_task:
             periodic_task = PeriodicTask.objects.get(name=task_name)
             periodic_task.delete()
+            has_periodic_task = False
 
         # And set the step as in progress
         step.set_status(Status.IN_PROGRESS)
@@ -129,9 +138,10 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
     except Exception as e:
         if self.request.retries >= self.max_retries:
-            logger.warning(str(e))
-            step.set_status(Status.FAILED)
-            step.set_output_data({"status": 1, "errormsg": str(e)})
+            if has_periodic_task:
+                remove_periodic_task_on_failure(task_name, step, str(e))
+            else:
+                set_and_return_error(step, str(e))
             return 1
 
         logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")

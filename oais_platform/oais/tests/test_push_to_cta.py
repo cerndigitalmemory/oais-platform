@@ -104,6 +104,7 @@ class PushToCTATests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 2)
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertIsNotNone(self.step.finish_date)
         self.assertFalse(
             PeriodicTask.objects.filter(
                 name=f"FTS job status for step: {self.step.id}"
@@ -156,6 +157,7 @@ class PushToCTATests(APITestCase):
         )
         self.wait_limit_step.refresh_from_db()
         self.assertEqual(self.wait_limit_step.status, Status.FAILED)
+        self.assertIsNotNone(self.wait_limit_step.finish_date)
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertFalse(
             PeriodicTask.objects.filter(
@@ -175,6 +177,7 @@ class PushToCTATests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertEqual(self.step.status, Status.COMPLETED)
+        self.assertIsNotNone(self.step.finish_date)
         self.assertFalse(
             PeriodicTask.objects.filter(
                 name=f"FTS job status for step: {self.step.id}"
