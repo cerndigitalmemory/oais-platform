@@ -70,12 +70,17 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
-            step.set_status(Status.COMPLETED)
-            step.set_output_data(
-                {
+            finalize(
+                self=self,
+                current_status=states.SUCCESS,
+                retval={
                     "status": 0,
                     "details": "Archive already exists on tape with the same size and checksum",
-                }
+                },
+                task_id=None,
+                args=[archive_id, step.id, None, api_key],
+                kwargs=None,
+                einfo=None,
             )
             return
         overwrite = True
