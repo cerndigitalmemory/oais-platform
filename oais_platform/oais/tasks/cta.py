@@ -14,7 +14,10 @@ from oais_utils.validate import compute_hash
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
-from oais_platform.oais.tasks.utils import remove_periodic_task_on_failure
+from oais_platform.oais.tasks.utils import (
+    remove_periodic_task_on_failure,
+    set_and_return_error,
+)
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
@@ -134,9 +137,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         )
     except Exception as e:
         if self.request.retries >= self.max_retries:
-            logger.warning(str(e))
-            step.set_status(Status.FAILED)
-            step.set_output_data({"status": 1, "errormsg": str(e)})
+            set_and_return_error(step, str(e))
             return 1
 
         logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
