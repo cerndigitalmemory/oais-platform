@@ -114,8 +114,6 @@ class UploadTests(APITestCase):
                     StepType.get_by_stepname(StepName.VALIDATION),
                     Archive.objects.latest("id").id,
                     latest_step.id,
-                    latest_step.output_data,
-                    None,
                     False,
                 )
                 self.assertEqual(latest_step.initiated_by_user, self.user)

@@ -1,3 +1,4 @@
+import json
 import ntpath
 import os
 import shutil
@@ -82,22 +83,31 @@ def announce_sip(announce_path, user):
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
     step = create_step(
-        StepName.ANNOUNCE, archive, input_step_id=None, input_data=input_data, user=user
+        StepName.ANNOUNCE,
+        archive,
+        input_step_id=None,
+        input_data=input_data,
+        user=user,
     )
 
     # Let's copy the SIP to our storage
-    run_step(step, archive.id, api_key=None)
+    run_step(step, archive.id)
     return {"status": 0, "archive_id": archive.id}
 
 
 @shared_task(name="announce", bind=True, ignore_result=True, after_return=finalize)
-def copy_sip(self, archive_id, step_id, input_data, api_key=None):
+def copy_sip(self, archive_id, step_id):
     """
     Given a path, copy it into the platform SIP storage
     If successful, save the final path in the passed Archive
     """
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
+    archive = Archive.objects.get(pk=archive_id)
+
+    if not step.input_data:
+        return {"status": 1, "errormsg": "Missing input data for step"}
+    input_data = json.loads(step.input_data)
 
     foldername = input_data["foldername"]
     announce_path = input_data["announce_path"]

@@ -1,3 +1,4 @@
+import json
 import logging
 import ntpath
 import os
@@ -105,13 +106,12 @@ class AnnounceTests(APITestCase):
             StepType.get_by_stepname(StepName.ANNOUNCE),
             latest_archive_id,
             latest_step.id,
-            {
-                "foldername": ntpath.basename(path_to_sip),
-                "announce_path": path_to_sip,
-            },
-            None,
             False,
         )
+        input_data = json.loads(latest_step.input_data)
+        self.assertEqual(input_data["announce_path"], path_to_sip)
+        self.assertEqual(input_data["foldername"], foldername)
+        self.assertEqual(latest_step.step_type.name, StepName.ANNOUNCE)
         self.assertEqual(latest_step.initiated_by_user, self.user)
         self.assertEqual(latest_step.initiated_by_harvest_batch, None)
 

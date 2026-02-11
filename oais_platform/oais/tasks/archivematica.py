@@ -45,7 +45,7 @@ logger = get_task_logger(__name__)
     bind=True,
     ignore_result=True,
 )
-def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
+def archivematica(self, archive_id, step_id):
     """
     Submit the SIP of the passed Archive to Archivematica
     preparing the call to the Archivematica API
@@ -69,7 +69,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     # Set up the AMClient to interact with the AM configuration provided in the settings
     am = get_am_client()
     am.transfer_directory = archivematica_dst
-    am.transfer_name = get_transfer_name(archive)
+    am.transfer_name = get_transfer_name(archive, current_step)
 
     # Create archivematica package
     logger.info(
@@ -98,7 +98,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
                 }
             )
 
-            create_check_am_status(package, current_step, archive_id, api_key)
+            create_check_am_status(package, current_step, archive_id)
             return current_step.output_data
     except requests.HTTPError as e:
         return set_and_return_error(
@@ -117,7 +117,7 @@ def archivematica(self, archive_id, step_id, input_data=None, api_key=None):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id, archive_id, api_key=None):
+def check_am_status(self, message, step_id, archive_id):
     """
     Check the status of an Archivematica job by polling its API.
     The related Step is updated with the information returned from Archivematica
@@ -198,7 +198,7 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
             handle_completed_am_package(
-                self, task_name, am, step, am_status, archive_id, api_key
+                self, task_name, am, step, am_status, archive_id
             )
         except Exception as e:
             logger.warning(
@@ -285,7 +285,6 @@ def check_am_status(self, message, step_id, archive_id, api_key=None):
                     step.initiated_by_user.id if step.initiated_by_user else None,
                     True,
                     StepName.ARCHIVE,
-                    api_key,
                 ],
             )
         step.set_finish_date()
@@ -413,7 +412,7 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
         return 0
 
 
-def create_check_am_status(package, step, archive_id, api_key):
+def create_check_am_status(package, step, archive_id):
     # overwrite the start date so the waiting limit is counted from here
     step.set_start_date()
     task_name = get_task_name(step)
@@ -431,26 +430,32 @@ def create_check_am_status(package, step, archive_id, api_key):
         interval=schedule,
         name=task_name,
         task="check_am_status",
-        args=json.dumps([package, step.id, archive_id, api_key]),
+        args=json.dumps([package, step.id, archive_id]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
 
 
-def get_transfer_name(archive):
+def get_transfer_name(archive, step):
     # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = (
-        archive.source + "__" + archive.recid + "_Archive_" + str(archive.id)
+        archive.source
+        + "_"
+        + archive.recid
+        + "_Archive_"
+        + str(archive.id)
+        + "_Step_"
+        + str(step.id)
     )
     if len(transfer_name) > 50:  # AM has a limit of 50 chars for transfer names
-        transfer_name = "Archive_" + str(archive.id)
+        transfer_name = "Archive_" + str(archive.id) + "_Step_" + str(step.id)
 
     return transfer_name
 
 
 def get_task_name(step):
-    transfer_name = get_transfer_name(step.archive)
-    return f"AM Status for step: {step.id}, package: {transfer_name}"
+    transfer_name = get_transfer_name(step.archive, step)
+    return f"AM package: {transfer_name}"
 
 
 @shared_task(
@@ -462,7 +467,7 @@ def callback_package(self, package_name):
     logger.info(f"Callback for package {package_name} received.")
     package_name = re.sub(
         r"(.*?_\d+)_\d+$", r"\1", package_name
-    )  # Archivematica may append a suffix to the package name (eg cds_abc_Archive_66_1)
+    )  # Archivematica may append a suffix to the package name (eg cds_abc_Archive_66_Step_12_1)
     periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
     if periodic_task.count() > 1:
         logger.error(
@@ -470,6 +475,21 @@ def callback_package(self, package_name):
         )
         return
     elif not periodic_task.exists():
+        try:  # Periodic status check might have completed it already
+            step_id = int(re.search(r"Archive_(\d+)_Step_(\d+)", package_name).group(2))
+            step = Step.objects.get(id=step_id)
+            if step.status == Status.COMPLETED:
+                logger.info(
+                    f"Archivematica package {package_name} already processed, ignoring callback."
+                )
+                return
+            if step.status == Status.FAILED:
+                logger.info(
+                    f"Archivematica package {package_name} already set to failed, ignoring callback."
+                )
+                return
+        except (AttributeError, Step.DoesNotExist):
+            pass
         logger.error(f"Package with name {package_name} not found")
         return
 
@@ -482,9 +502,7 @@ def callback_package(self, package_name):
     check_am_status.apply_async(args=args, countdown=AM_CALLBACK_DELAY)
 
 
-def handle_completed_am_package(
-    self, task_name, am, step, am_status, archive_id, api_key
-):
+def handle_completed_am_package(self, task_name, am, step, am_status, archive_id):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
@@ -520,7 +538,7 @@ def handle_completed_am_package(
                 current_status=states.SUCCESS,
                 retval={"status": 0},
                 task_id=None,
-                args=[archive_id, step.id, None, api_key],
+                args=[archive_id, step.id, None],
                 kwargs=None,
                 einfo=None,
             )

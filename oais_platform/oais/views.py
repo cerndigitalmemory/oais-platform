@@ -557,13 +557,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 initiated_by_user=request.user,
             )
             # Step is auto-approved and harvest step runs
-            try:
-                api_key = ApiKey.objects.get(
-                    source__name=archive.source, user=request.user
-                ).key
-            except Exception:
-                api_key = None
-            run_step(step, archive.id, api_key=api_key)
+            run_step(step, archive.id)
 
         serializer = CollectionSerializer(
             job_tag,
@@ -595,13 +589,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive = self.get_object()
         run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
-
-        try:
-            api_key = ApiKey.objects.get(
-                source__name=archive.source, user=request.user
-            ).key
-        except Exception:
-            api_key = None
 
         with transaction.atomic():
             archive = Archive.objects.select_for_update().get(pk=archive.id)
@@ -652,9 +639,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                         "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
                     )
 
-        step, _ = execute_pipeline(
-            archive.id, api_key=api_key, force_continue=force_continue
-        )
+        step, _ = execute_pipeline(archive.id, force_continue=force_continue)
         serializer = StepSerializer(step, many=False)
         return Response(serializer.data)
 

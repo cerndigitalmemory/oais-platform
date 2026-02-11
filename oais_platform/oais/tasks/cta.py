@@ -39,7 +39,7 @@ logger = get_task_logger(__name__)
     max_retries=1,
     retry_kwargs={"countdown": FTS_WAIT_IN_HOURS * 60 * 60},
 )
-def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
+def push_to_cta(self, archive_id, step_id):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
@@ -81,7 +81,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
                     "details": "Archive already exists on tape with the same size and checksum",
                 },
                 task_id=None,
-                args=[archive_id, step.id, None, api_key],
+                args=[archive_id, step.id, None],
                 kwargs=None,
                 einfo=None,
             )
@@ -116,7 +116,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
                     interval=schedule,
                     name=task_name,
                     task="push_to_cta",
-                    args=json.dumps([archive_id, step_id, input_data, api_key]),
+                    args=json.dumps([archive_id, step_id]),
                     expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
                     last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
                 )
@@ -164,7 +164,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
         interval=schedule,
         name=f"FTS job status for step: {step.id}",
         task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name, api_key]),
+        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name]),
         expire_seconds=3600.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
@@ -175,7 +175,7 @@ def push_to_cta(self, archive_id, step_id, input_data=None, api_key=None):
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
-def check_fts_job_status(self, archive_id, step_id, job_id, folder_name, api_key=None):
+def check_fts_job_status(self, archive_id, step_id, job_id, folder_name):
     """
     Check the status of a FTS job.
     If finished, set the corresponding step as completed and remove the
@@ -198,7 +198,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, folder_name, api_key
 
     if status["job_state"] == "FINISHED":
         _handle_completed_fts_job(
-            self, task_name, step, archive_id, job_id, folder_name, api_key
+            self, task_name, step, archive_id, job_id, folder_name
         )
     elif status["job_state"] == "FAILED":
         result = {"FTS status": status}
@@ -217,7 +217,7 @@ def check_fts_job_status(self, archive_id, step_id, job_id, folder_name, api_key
             )
             result["retrying"] = True
             create_retry_step.apply_async(
-                args=(archive_id, None, True, StepName.PUSH_TO_CTA, api_key),
+                args=(archive_id, None, True, StepName.PUSH_TO_CTA),
                 eta=timezone.now() + timedelta(hours=1),
             )
         else:
@@ -239,9 +239,7 @@ def fts_delegate(self):
         logger.error(e)
 
 
-def _handle_completed_fts_job(
-    self, task_name, step, archive_id, job_id, folder_name, api_key=None
-):
+def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, folder_name):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
         logger.info("FTS transfer succeded, removing periodic task")
@@ -262,7 +260,7 @@ def _handle_completed_fts_job(
         current_status=states.SUCCESS,
         retval=status,
         task_id=None,
-        args=[archive_id, step.id, None, api_key],
+        args=[archive_id, step.id, None],
         kwargs=None,
         einfo=None,
     )
