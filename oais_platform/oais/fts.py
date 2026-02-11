@@ -23,9 +23,8 @@ class FTS:
             ukey=cert_key_path,
             verify=True,
         )
-        logging.info(
-            f'Authenticated on FTS with certificate DN: { fts3.whoami(context)["user_dn"] } '
-        )
+        self.user_dn = fts3.whoami(context)["user_dn"]
+        logging.info(f"Authenticated on FTS with certificate DN: {self.user_dn}")
         self.context = context
         self.cert_path = user_cert_path
         self.check_ttl()
@@ -71,8 +70,7 @@ class FTS:
         return fts3.get_job_status(self.context, job_id, list_files=True)
 
     def number_of_transfers(self):
-        user_dn = fts3.whoami(self.context)["user_dn"]
-        return len(fts3.list_jobs(self.context, user_dn=user_dn))
+        return len(fts3.list_jobs(self.context, user_dn=self.user_dn))
 
     def delegate(self):
         logging.info("Delegating certificate")
