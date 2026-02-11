@@ -51,7 +51,7 @@ class UploadTaskTest(APITestCase):
 
         with patch.object(Path, "rglob", return_value=[mock_file]):
             result = upload.apply(
-                args=[self.archive.id, self.step.id, self.step.input_data], throw=True
+                args=[self.archive.id, self.step.id], throw=True
             ).get()
         self.assertEqual(result["status"], 0)
         self.assertEqual(result["foldername"], sip_folder)
@@ -76,6 +76,8 @@ class UploadTaskTest(APITestCase):
         self.assertTrue(expected_path.exists())
 
     def test_upload_missing_input_data(self, bagit_create):
+        self.step.input_data = None
+        self.step.save()
         result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], "Missing input data for step")
@@ -91,9 +93,7 @@ class UploadTaskTest(APITestCase):
             "d05f759adf39458dab33ab21b6cd117e"
         )
 
-        result = upload.apply(
-            args=[self.archive.id, self.step.id, self.step.input_data], throw=True
-        ).get()
+        result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], exc_msg)
         self.assertEqual(result["tmp_dir"], self.tmp_dir)
@@ -112,9 +112,7 @@ class UploadTaskTest(APITestCase):
         error_msg = "An error occurred"
         bagit_create.return_value = {"status": 1, "errormsg": error_msg}
 
-        result = upload.apply(
-            args=[self.archive.id, self.step.id, self.step.input_data], throw=True
-        ).get()
+        result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
         self.assertEqual(result["errormsg"], error_msg)
         self.assertEqual(result["tmp_dir"], self.tmp_dir)

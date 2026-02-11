@@ -60,7 +60,7 @@ class ArchivematicaStatusTests(APITestCase):
             "uuid": 5678,
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -85,7 +85,7 @@ class ArchivematicaStatusTests(APITestCase):
             "uuid": 5678,
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -114,7 +114,7 @@ class ArchivematicaStatusTests(APITestCase):
         }
         get_package_details.return_value = "Not found"
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -145,7 +145,7 @@ class ArchivematicaStatusTests(APITestCase):
         }
         get_package_details.return_value = "Not found"
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -165,7 +165,7 @@ class ArchivematicaStatusTests(APITestCase):
             "microservice": "Package is being processed",
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -185,7 +185,7 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_periodictask_not_found(self, periodic_tasks):
         exception_msg = "Unexpected exception occurred"
         periodic_tasks.get.side_effect = Exception(exception_msg)
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
 
@@ -198,7 +198,7 @@ class ArchivematicaStatusTests(APITestCase):
         get_unit_status.side_effect = Exception(exception_msg)
         periodic_tasks.get.return_value = periodic_tasks
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -225,7 +225,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.status = Status.WAITING
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -258,7 +258,7 @@ class ArchivematicaStatusTests(APITestCase):
         )
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -288,7 +288,7 @@ class ArchivematicaStatusTests(APITestCase):
         )
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -320,7 +320,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -351,7 +351,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -411,7 +411,7 @@ class ArchivematicaStatusTests(APITestCase):
             "uuid": 1111,
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -469,7 +469,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -490,7 +490,7 @@ class ArchivematicaStatusTests(APITestCase):
         )
         periodic_tasks.get.return_value = periodic_tasks
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -556,7 +556,7 @@ class ArchivematicaStatusTests(APITestCase):
             "uuid": 7890,
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 6789}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 6789}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -592,7 +592,7 @@ class ArchivematicaStatusTests(APITestCase):
             "microservice": "Scan for viruses",
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
@@ -627,7 +627,7 @@ class ArchivematicaStatusTests(APITestCase):
             "microservice": "Scan for viruses",
         }
         periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id, None])
+        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)

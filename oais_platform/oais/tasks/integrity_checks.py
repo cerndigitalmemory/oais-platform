@@ -12,7 +12,7 @@ logger = get_task_logger(__name__)
 
 
 @shared_task(name="validate", bind=True, ignore_result=True, after_return=finalize)
-def validate(self, archive_id, step_id, input_data=None, api_key=None):
+def validate(self, archive_id, step_id):
     """
     Validate a folder against the CERN SIP specification,
     using the OAIS utils package

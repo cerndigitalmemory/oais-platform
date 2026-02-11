@@ -14,7 +14,7 @@ logger = get_task_logger(__name__)
 @shared_task(
     name="process_invenio", bind=True, ignore_result=True, after_return=finalize
 )
-def invenio(self, archive_id, step_id, input_data=None, api_key=None):
+def invenio(self, archive_id, step_id):
     """
     Publish an Archive on the configured InvenioRDM instance
     If the Archive was already published, create a new version of the Record.

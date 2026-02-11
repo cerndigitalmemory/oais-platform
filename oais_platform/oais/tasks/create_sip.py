@@ -9,12 +9,21 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    ApiKey,
+    Archive,
+    Profile,
+    Status,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     cleanup_empty_path,
     create_path_artifact,
     generate_directory_structure,
+    get_api_key_for_step,
 )
 from oais_platform.settings import (
     BIC_WORKDIR,
@@ -31,7 +40,7 @@ RETRY_INTERVAL_MINUTES = 2
 @shared_task(
     name="harvest", bind=True, ignore_result=True, after_return=finalize, max_retries=5
 )
-def harvest(self, archive_id, step_id, input_data=None, api_key=None):
+def harvest(self, archive_id, step_id, input_data=None):
     """
     Run BagIt-Create to harvest data from upstream, preparing a
     Submission Package (SIP)
@@ -98,6 +107,8 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
                 countdown=RETRY_INTERVAL_MINUTES * 60,
             )
 
+    api_key = get_api_key_for_step(step)
+
     if not api_key:
         logger.info(
             f"The given source({archive.source}) might requires an API key which was not provided."
@@ -128,7 +139,7 @@ def harvest(self, archive_id, step_id, input_data=None, api_key=None):
 @shared_task(
     name="upload", bind=True, ignore_result=True, after_return=finalize, max_retries=5
 )
-def upload(self, archive_id, step_id, input_data=None, api_key=None):
+def upload(self, archive_id, step_id):
     """
     Run BagIt-Create to prepare a Submission Package (SIP) from a locally uploaded file
     """
@@ -140,9 +151,9 @@ def upload(self, archive_id, step_id, input_data=None, api_key=None):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    if not input_data:
+    if not step.input_data:
         return {"status": 1, "errormsg": "Missing input data for step"}
-    input_data = json.loads(input_data)
+    input_data = json.loads(step.input_data)
 
     sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
     try:

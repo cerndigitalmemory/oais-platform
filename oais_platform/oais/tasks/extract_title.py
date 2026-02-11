@@ -11,7 +11,7 @@ logger = get_task_logger(__name__)
 
 
 @shared_task(name="extract_title", bind=True, ignore_result=True, after_return=finalize)
-def extract_title(self, archive_id, step_id, input_data=None, api_key=None):
+def extract_title(self, archive_id, step_id):
     # For archives without title try to extract it from the metadata
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
