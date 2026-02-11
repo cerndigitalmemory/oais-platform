@@ -71,7 +71,8 @@ class FTS:
         return fts3.get_job_status(self.context, job_id, list_files=True)
 
     def number_of_transfers(self):
-        return len(fts3.list_jobs(self.context))
+        user_dn = fts3.whoami(self.context)["user_dn"]
+        return len(fts3.list_jobs(self.context, user_dn=user_dn))
 
     def delegate(self):
         logging.info("Delegating certificate")
