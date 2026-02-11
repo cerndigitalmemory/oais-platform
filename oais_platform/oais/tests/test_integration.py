@@ -113,7 +113,5 @@ class IntegrationAPITests(APITestCase):
             StepType.get_by_stepname(StepName.HARVEST),
             result["id"],
             response.data[0]["id"],
-            None,
-            None,
             False,
         )

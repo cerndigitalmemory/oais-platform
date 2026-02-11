@@ -19,25 +19,20 @@ def dispatch_task(
     step_type,
     archive_id,
     step_id,
-    input_data=None,
-    api_key=None,
     return_signature=False,
 ):
-    sig = app.signature(
-        step_type.task_name, args=(archive_id, step_id, input_data, api_key)
-    )
+    sig = app.signature(step_type.task_name, args=(archive_id, step_id))
     if return_signature:
         return sig
     return sig.delay()
 
 
-def run_step(step, archive_id, api_key=None, return_signature=False):
+def run_step(step, archive_id, return_signature=False):
     """
     Execute the given Step by spawning a Celery tasks for it
 
     step: target Step
     archive_id: ID of target Archive
-    api_key: API key
     """
     # If no input_data, set the output of the input_step
     if step.input_data is None and step.input_step is not None:
@@ -65,16 +60,12 @@ def run_step(step, archive_id, api_key=None, return_signature=False):
         )
         return step, None
 
-    res = dispatch_task(
-        step.step_type, archive_id, step.id, step.input_data, api_key, return_signature
-    )
+    res = dispatch_task(step.step_type, archive_id, step.id, return_signature)
 
     return step, res
 
 
-def execute_pipeline(
-    archive_id, api_key=None, force_continue=False, return_signature=False
-):
+def execute_pipeline(archive_id, force_continue=False, return_signature=False):
 
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
@@ -106,12 +97,16 @@ def execute_pipeline(
             return None, None
 
     if step.status == Status.WAITING:
-        return run_step(step, archive.id, api_key, return_signature)
+        return run_step(step, archive.id, return_signature)
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
 def create_retry_step(
-    self, archive_id, user_id=None, execute=False, step_name=None, api_key=None
+    self,
+    archive_id,
+    user_id=None,
+    execute=False,
+    step_name=None,
 ):
     archive = Archive.objects.get(pk=archive_id)
     last_step = archive.last_step
@@ -147,7 +142,7 @@ def create_retry_step(
     archive.save()
 
     if execute:
-        execute_pipeline(archive.id, api_key=api_key, force_continue=True)
+        execute_pipeline(archive.id, force_continue=True)
 
     return {"errormsg": None}
 
@@ -209,10 +204,7 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
                 archive.set_last_completed_step(step_id)
 
             # Execute the remainig steps in the pipeline
-            api_key = None
-            if len(args) >= 4:
-                api_key = args[3]
-            execute_pipeline(archive_id, api_key=api_key)
+            execute_pipeline(archive_id)
         else:
             # Set the Step as failed and save the return value as the output data
             step.set_status(Status.FAILED)

@@ -109,8 +109,6 @@ class PipelineTests(APITestCase):
             StepType.get_by_stepname(StepName.ARCHIVE),
             self.archive.id,
             archive.last_step.id,
-            None,
-            self.testuser_api_key.key,
             False,
         )
 
@@ -148,8 +146,6 @@ class PipelineTests(APITestCase):
             StepType.get_by_stepname(StepName.VALIDATION),
             self.archive.id,
             self.archive.last_step.id,
-            None,
-            None,
             False,
         )
 
@@ -233,8 +229,6 @@ class PipelineTests(APITestCase):
                 StepType.get_by_stepname(input["pipeline"][0]),
                 self.archive.id,
                 latest_step.id,
-                latest_step.input_data,
-                self.testuser_api_key.key,
                 False,
             )
 
@@ -333,7 +327,5 @@ class PipelineTests(APITestCase):
             StepType.get_by_stepname(StepName.EXTRACT_TITLE),
             self.archive.id,
             latest_step.id,
-            latest_step.input_data,
-            self.testuser_api_key.key,
             False,
         )

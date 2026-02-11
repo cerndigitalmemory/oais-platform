@@ -5,6 +5,7 @@ from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import Archive, ArchiveState, Source, Status, Step
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize
+from oais_platform.oais.tasks.utils import get_api_key_for_step
 
 # Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
@@ -17,7 +18,7 @@ logger = get_task_logger(__name__)
     after_return=finalize,
     max_retries=5,
 )
-def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
+def notify_source(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
@@ -46,6 +47,8 @@ def notify_source(self, archive_id, step_id, input_data=None, api_key=None):
             "status": 1,
             "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
         }
+
+    api_key = get_api_key_for_step(step)
 
     try:
         get_source(archive.source).notify_source(

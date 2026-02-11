@@ -20,11 +20,12 @@ class AmCallbackViewTest(APITestCase):
         self.regular_user = User.objects.create_user(
             username="user", email="user@test.com", password="testpass"
         )
-        self.url = reverse("am_callback")  # Adjust URL path as needed
+        self.url = reverse("am_callback")
+        self.package_name = "cds_abc_Archive_66_Step_12"
 
     def test_callback_without_authentication(self):
         """Test callback fails without authentication"""
-        data = {"package_uuid": "test-uuid-123", "package_name": "test-package"}
+        data = {"package_uuid": "test-uuid-123", "package_name": self.package_name}
 
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -33,7 +34,7 @@ class AmCallbackViewTest(APITestCase):
         """Test callback fails with regular user (not superuser)"""
         self.client.force_authenticate(user=self.regular_user)
 
-        data = {"package_uuid": "test-uuid-123", "package_name": "test-package"}
+        data = {"package_uuid": "test-uuid-123", "package_name": self.package_name}
 
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -42,7 +43,7 @@ class AmCallbackViewTest(APITestCase):
         """Test successful callback with valid data and superuser permissions"""
         self.client.force_authenticate(user=self.superuser)
 
-        data = {"package_uuid": "test-uuid-123", "package_name": "test-package"}
+        data = {"package_uuid": "test-uuid-123", "package_name": self.package_name}
 
         with patch("oais_platform.oais.views.callback_package") as mock_task:
             mock_task.delay = MagicMock()
@@ -51,7 +52,7 @@ class AmCallbackViewTest(APITestCase):
 
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertEqual(response.data, "Callback received.")
-            mock_task.delay.assert_called_once_with("test-package")
+            mock_task.delay.assert_called_once_with(self.package_name)
 
     def test_callback_missing_package_name(self):
         """Test callback fails when package_name is missing"""
@@ -99,20 +100,13 @@ class AmCallbackTest(TestCase):
         self.schedule, _ = IntervalSchedule.objects.get_or_create(
             every=1, period=IntervalSchedule.HOURS
         )
+        self.package_name = "cds_abc_Archive_13_Step_22"
 
         self.periodic_task = PeriodicTask.objects.create(
-            name="ABC test-package-name_Archive_1",
+            name=self.package_name,
             task="check_am_status",
             enabled=True,
             args=json.dumps(["arg1", "arg2"]),
-            interval=self.schedule,
-        )
-
-        self.another_task = PeriodicTask.objects.create(
-            name="another-task_Archive_2",
-            task="check_am_status",
-            enabled=True,
-            args=json.dumps(["other_arg"]),
             interval=self.schedule,
         )
 
@@ -126,10 +120,10 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="INFO"
             ) as log:
-                callback_package("test-package-name_Archive_1")
+                callback_package(self.package_name)
 
                 self.assertIn(
-                    "Callback for package test-package-name_Archive_1 received",
+                    f"Callback for package {self.package_name} received",
                     log.output[0],
                 )
 
@@ -152,10 +146,12 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="INFO"
             ) as log:
-                callback_package("test-package-name_Archive_1_195")
+                callback_package(
+                    self.package_name + "_16"
+                )  # Simulate Archivematica appending a suffix
 
                 self.assertIn(
-                    "Callback for package test-package-name_Archive_1_195 received",
+                    f"Callback for package {self.package_name}_16 received",
                     log.output[0],
                 )
 
@@ -196,7 +192,7 @@ class AmCallbackTest(TestCase):
         """Test callback when multiple periodic tasks match package name"""
         # Create another task with similar name
         duplicate_task = PeriodicTask.objects.create(
-            name="another-test-package-name_Archive_1",
+            name=f"dup_{self.package_name}",
             task="check_am_status",
             enabled=True,
             args=json.dumps(["dup_arg"]),
@@ -211,11 +207,11 @@ class AmCallbackTest(TestCase):
             with self.assertLogs(
                 "oais_platform.oais.tasks.archivematica", level="ERROR"
             ) as log:
-                callback_package("test-package-name_Archive_1")
+                callback_package(self.package_name)
 
                 # Verify error was logged with count
                 self.assertIn(
-                    "Ambiguous package name (test-package-name_Archive_1) found: 2",
+                    f"Ambiguous package name ({self.package_name}) found: 2",
                     log.output[0],
                 )
 
@@ -236,7 +232,7 @@ class AmCallbackTest(TestCase):
         ) as mock_check:
             mock_check.apply_async = MagicMock()
 
-            callback_package("test-package-name_Archive_1")
+            callback_package(self.package_name)
 
             # Verify custom delay was used
             mock_check.apply_async.assert_called_once_with(

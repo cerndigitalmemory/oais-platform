@@ -44,7 +44,6 @@ class ArchivematicaCreateTests(APITestCase):
         self.step.refresh_from_db()
         periodic_task = PeriodicTask.objects.latest("id")
         task_arg = json.loads(periodic_task.args)
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
         self.assertEqual(periodic_task.name, get_task_name(self.step))
@@ -55,7 +54,6 @@ class ArchivematicaCreateTests(APITestCase):
                 create_package.return_value,
                 self.step.id,
                 self.archive.id,
-                None,
             ],
         )
         self.assertEqual(self.step.step_type.current_count, 1)

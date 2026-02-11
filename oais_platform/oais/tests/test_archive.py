@@ -394,8 +394,6 @@ class ArchiveTests(APITestCase):
             StepType.get_by_stepname(StepName.HARVEST),
             self.private_archive.id,
             self.private_archive.last_step.id,
-            None,
-            None,
             False,
         )
         step = Step.objects.last()
@@ -438,8 +436,6 @@ class ArchiveTests(APITestCase):
                 StepType.get_by_stepname(StepName.HARVEST),
                 self.private_archive.id,
                 self.private_archive.last_step.id,
-                None,
-                None,
                 False,
             ),
         )
@@ -449,8 +445,6 @@ class ArchiveTests(APITestCase):
                 StepType.get_by_stepname(StepName.HARVEST),
                 other_archive.id,
                 other_archive.last_step.id,
-                None,
-                None,
                 False,
             ),
         )

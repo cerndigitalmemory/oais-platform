@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from pathlib import Path
 from urllib.parse import urljoin
@@ -6,7 +7,7 @@ from urllib.parse import urljoin
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import PeriodicTask
 
-from oais_platform.oais.models import Status, Step
+from oais_platform.oais.models import ApiKey, Profile, Status, Step
 from oais_platform.settings import FILES_URL
 
 logger = get_task_logger(__name__)
@@ -28,6 +29,9 @@ def create_step(
     archive: target Archive
     input_step_id: (optional) step to set as "input" for the new one
     """
+    if input_data is not None and isinstance(input_data, dict):
+        input_data = json.dumps(input_data)
+
     return Step.objects.create(
         archive=archive,
         step_name=step_name,
@@ -130,3 +134,30 @@ def cleanup_empty_path(path_to_clean, base_path, source):
         except OSError:
             logger.warning(f"Not cleaning up directory {folder} as it is not empty")
             break
+
+
+def get_api_key_for_step(step):
+    api_key = None
+    if step.initiated_by_harvest_batch:
+        try:
+            user = Profile.objects.get(system=True).user
+            api_key = ApiKey.objects.get(
+                source__name=step.archive.source, user=user
+            ).key
+        except Profile.DoesNotExist:
+            logger.error("System user does not exist.")
+            return
+        except ApiKey.DoesNotExist:
+            logger.warning(
+                f"System user({user.username}) does not have API key set for the given source."
+            )
+    elif step.initiated_by_user:
+        try:
+            api_key = ApiKey.objects.get(
+                source__name=step.archive.source, user=step.initiated_by_user
+            ).key
+        except ApiKey.DoesNotExist:
+            logger.warning(
+                f"User({step.initiated_by_user.username}) does not have API key set for the given source."
+            )
+    return api_key
