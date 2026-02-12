@@ -1,5 +1,11 @@
 # Changes
 
+## Version 2.8.3 (released 2026-02-12)
+- Pipeline: remove API key and input data propagation
+- CTA: fix task finalization in all cases
+- FTS: filter concurrent job count based on user DN
+- API: improve archive selection based on ID 
+
 ## Version 2.8.2 (released 2026-02-09)
 - AM: periodically reset failed count
 - Batch: skip updating locked batch
