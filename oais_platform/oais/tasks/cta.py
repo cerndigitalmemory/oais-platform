@@ -8,6 +8,7 @@ import gfal2
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.apps import apps
+from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import compute_hash
@@ -49,30 +50,30 @@ def push_to_cta(self, archive_id, step_id):
     logger.info(f"Pushing Archive {archive_id} to CTA")
 
     task_name = f"Push to CTA: {step_id}"
-    has_periodic_task = PeriodicTask.objects.filter(name=task_name).exists()
 
-    # Get the Archive and Step we're running for
+    with transaction.atomic():
+        step = Step.objects.select_for_update().get(pk=step_id)
+        if step.status in [Status.IN_PROGRESS, Status.COMPLETED]:
+            logger.info(f"Step {step_id} is already in progress or completed")
+            _remove_periodic_task_if_exists(task_name)
+            return
+        step.set_status(Status.IN_PROGRESS)
+        step.set_task(self.request.id)
+
     archive = Archive.objects.get(pk=archive_id)
-    step = Step.objects.get(pk=step_id)
-    step.set_task(self.request.id)
     if not archive.path_to_aip:
-        logger.warning("AIP path not found for the given archive.")
-        step.set_status(Status.FAILED)
-        step.set_output_data(
-            {"status": 1, "errormsg": "AIP path not found for the given archive."}
+        _remove_periodic_task_if_exists(task_name)
+        set_and_return_error(
+            step,
+            {"status": 1, "errormsg": "AIP path not found for the given archive."},
         )
-        return 1
+        return
 
-    try:
-        cta_folder_name = os.path.join(
-            "aips", Path(archive.path_to_aip).relative_to(AIP_UPSTREAM_BASEPATH)
-        )
-    except ValueError:
-        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
-        cta_folder_name = os.path.join("aips", os.path.basename(archive.path_to_aip))
+    cta_folder_name = _get_cta_path(archive)
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
+            _remove_periodic_task_if_exists(task_name)
             finalize(
                 self=self,
                 current_status=states.SUCCESS,
@@ -81,7 +82,7 @@ def push_to_cta(self, archive_id, step_id):
                     "details": "Archive already exists on tape with the same size and checksum",
                 },
                 task_id=None,
-                args=[archive_id, step.id, None],
+                args=[archive_id, step_id, None],
                 kwargs=None,
                 einfo=None,
             )
@@ -101,77 +102,27 @@ def push_to_cta(self, archive_id, step_id):
         return
 
     try:
-        fts = apps.get_app_config("oais").get_fts_client()
-
-        # If already maximum number of transfers ongoing, create a periodic task for trying again
-        if fts.number_of_transfers() >= step.step_type.concurrency_limit:
-            logger.info(
-                f"Waiting for current transfers to finish before pushing archive {archive_id} to CTA"
-            )
-            if not has_periodic_task:
-                schedule, _ = IntervalSchedule.objects.get_or_create(
-                    every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
-                )
-                PeriodicTask.objects.get_or_create(
-                    interval=schedule,
-                    name=task_name,
-                    task="push_to_cta",
-                    args=json.dumps([archive_id, step_id]),
-                    expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
-                    last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
-                )
+        submitted_job = _submit_fts_job(
+            archive, step, cta_folder_name, overwrite, task_name
+        )
+        if not submitted_job:
+            step.set_status(Status.WAITING)
             return
 
-        # Remove periodic task if it exists
-        if has_periodic_task:
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-            has_periodic_task = False
-
-        # And set the step as in progress
-        step.set_status(Status.IN_PROGRESS)
-
-        submitted_job = fts.push_to_cta(
-            f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
-            f"{CTA_BASE_PATH}{cta_folder_name}",
-            overwrite,
-        )
     except Exception as e:
         if self.request.retries >= self.max_retries:
-            if has_periodic_task:
+            if PeriodicTask.objects.filter(name=task_name).exists():
                 remove_periodic_task_on_failure(task_name, step, str(e))
             else:
                 set_and_return_error(step, str(e))
             return 1
 
         logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
+        step.set_status(Status.WAITING)
         raise e
 
-    logger.info(submitted_job)
-
-    output_cta_artifact = {
-        "artifact_name": "FTS Job",
-        "artifact_path": cta_folder_name,
-        "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
-    }
-
-    # Create the scheduler
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=1, period=IntervalSchedule.HOURS
-    )
-    # Spawn a periodic task to check for the status of the job
-    PeriodicTask.objects.create(
-        interval=schedule,
-        name=f"FTS job status for step: {step.id}",
-        task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, cta_folder_name]),
-        expire_seconds=3600.0,
-        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
-    )
-
-    step.set_output_data(
-        {"status": 0, "artifact": output_cta_artifact, "fts_job_id": submitted_job}
-    )
+    _remove_periodic_task_if_exists(task_name)
+    _handle_submitted_fts_job(archive, step, cta_folder_name, submitted_job)
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
@@ -239,6 +190,71 @@ def fts_delegate(self):
         logger.error(e)
 
 
+def _get_cta_path(archive):
+    try:
+        return os.path.join(
+            "aips", Path(archive.path_to_aip).relative_to(AIP_UPSTREAM_BASEPATH)
+        )
+    except ValueError:
+        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
+        return os.path.join("aips", os.path.basename(archive.path_to_aip))
+
+
+def _submit_fts_job(archive, step, cta_path, overwrite, task_name):
+    fts = apps.get_app_config("oais").get_fts_client()
+
+    # If already maximum number of transfers ongoing, create a periodic task for trying again
+    if fts.number_of_transfers() >= step.step_type.concurrency_limit:
+        logger.info(
+            f"Waiting for current transfers to finish before pushing archive {archive.id} to CTA"
+        )
+        if not PeriodicTask.objects.filter(name=task_name).exists():
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
+            )
+            PeriodicTask.objects.get_or_create(
+                interval=schedule,
+                name=task_name,
+                task="push_to_cta",
+                args=json.dumps([archive.id, step.id]),
+                expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
+                last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
+            )
+        return
+
+    return fts.push_to_cta(
+        f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
+        f"{CTA_BASE_PATH}{cta_path}",
+        overwrite,
+    )
+
+
+def _handle_submitted_fts_job(archive, step, cta_path, submitted_job):
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=1, period=IntervalSchedule.HOURS
+    )
+    # Spawn a periodic task to check for the status of the job
+    PeriodicTask.objects.create(
+        interval=schedule,
+        name=f"FTS job status for step: {step.id}",
+        task="check_fts_job_status",
+        args=json.dumps([archive.id, step.id, submitted_job, cta_path]),
+        expire_seconds=3600.0,
+        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
+    )
+    step.set_output_data(
+        {
+            "status": 0,
+            "artifact": {
+                "artifact_name": "FTS Job",
+                "artifact_path": cta_path,
+                "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
+            },
+            "fts_job_id": submitted_job,
+        }
+    )
+
+
 def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, folder_name):
     try:
         periodic_task = PeriodicTask.objects.get(name=task_name)
@@ -290,3 +306,9 @@ def _verify_file(aip_path, cta_filename):
             logger.info("File not found on tape")
             return False
         raise e
+
+
+def _remove_periodic_task_if_exists(task_name):
+    if PeriodicTask.objects.filter(name=task_name).exists():
+        periodic_task = PeriodicTask.objects.get(name=task_name)
+        periodic_task.delete()
