@@ -121,8 +121,8 @@ def push_to_cta(self, archive_id, step_id):
         step.set_status(Status.WAITING)
         raise e
 
-    _remove_periodic_task_if_exists(task_name)
     _handle_submitted_fts_job(archive, step, cta_folder_name, submitted_job)
+    _remove_periodic_task_if_exists(task_name)
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
@@ -310,5 +310,8 @@ def _verify_file(aip_path, cta_filename):
 
 def _remove_periodic_task_if_exists(task_name):
     if PeriodicTask.objects.filter(name=task_name).exists():
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-        periodic_task.delete()
+        try:
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+        except PeriodicTask.DoesNotExist:
+            logger.info(f"Task {task_name} already removed")
