@@ -16,6 +16,7 @@ from oais_utils.validate import compute_hash
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
+    remove_periodic_task_if_exists,
     remove_periodic_task_on_failure,
     set_and_return_error,
 )
@@ -55,14 +56,14 @@ def push_to_cta(self, archive_id, step_id):
         step = Step.objects.select_for_update().get(pk=step_id)
         if step.status in [Status.IN_PROGRESS, Status.COMPLETED]:
             logger.info(f"Step {step_id} is already in progress or completed")
-            _remove_periodic_task_if_exists(task_name)
+            remove_periodic_task_if_exists(task_name)
             return
         step.set_status(Status.IN_PROGRESS)
         step.set_task(self.request.id)
 
     archive = Archive.objects.get(pk=archive_id)
     if not archive.path_to_aip:
-        _remove_periodic_task_if_exists(task_name)
+        remove_periodic_task_if_exists(task_name)
         set_and_return_error(
             step,
             {"status": 1, "errormsg": "AIP path not found for the given archive."},
@@ -73,7 +74,7 @@ def push_to_cta(self, archive_id, step_id):
 
     try:
         if _verify_file(archive.path_to_aip, cta_folder_name):
-            _remove_periodic_task_if_exists(task_name)
+            remove_periodic_task_if_exists(task_name)
             finalize(
                 self=self,
                 current_status=states.SUCCESS,
@@ -122,7 +123,7 @@ def push_to_cta(self, archive_id, step_id):
         raise e
 
     _handle_submitted_fts_job(archive, step, cta_folder_name, submitted_job)
-    _remove_periodic_task_if_exists(task_name)
+    remove_periodic_task_if_exists(task_name)
 
 
 @shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
@@ -306,12 +307,3 @@ def _verify_file(aip_path, cta_filename):
             logger.info("File not found on tape")
             return False
         raise e
-
-
-def _remove_periodic_task_if_exists(task_name):
-    if PeriodicTask.objects.filter(name=task_name).exists():
-        try:
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-        except PeriodicTask.DoesNotExist:
-            logger.info(f"Task {task_name} already removed")

@@ -92,13 +92,19 @@ def remove_periodic_task_on_failure(task_name, step, output_data):
     logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-        periodic_task.delete()
-    except PeriodicTask.DoesNotExist as e:
-        logger.warning(e)
+        remove_periodic_task_if_exists(task_name)
     except Exception as e:
         logger.error(e)
         return
+
+
+def remove_periodic_task_if_exists(task_name):
+    if PeriodicTask.objects.filter(name=task_name).exists():
+        try:
+            periodic_task = PeriodicTask.objects.get(name=task_name)
+            periodic_task.delete()
+        except PeriodicTask.DoesNotExist:
+            logger.info(f"Task {task_name} already removed")
 
 
 def add_error_to_tag_description(tag, path, errormsg):
