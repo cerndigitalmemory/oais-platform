@@ -326,9 +326,6 @@ def run_bulk_pipeline(self, archive_ids, run_type, steps, user_id):
     archives = Archive.objects.filter(id__in=archive_ids).values("id", "source")
     user = User.objects.get(pk=user_id)
 
-    processed = 0
-    failed = 0
-
     for item in archives:
         archive_id = item["id"]
         source_name = item["source"]
@@ -340,7 +337,5 @@ def run_bulk_pipeline(self, archive_ids, run_type, steps, user_id):
 
         try:
             create_pipeline(archive_id, steps, run_type, user, api_key)
-            processed += 1
         except Exception as e:
             logging.warning(f"Failed to run pipeline for archive {archive_id}: {e}")
-            failed += 1
