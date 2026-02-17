@@ -295,15 +295,18 @@ def _verify_file(aip_path, cta_filename):
             cta_file_checksum = ctx.checksum(cta_path, "ADLER32")
             aip_checksum = compute_hash(aip_path, alg="adler32")
             if cta_file_checksum == aip_checksum:
-                logger.info("File already exists on tape")
+                logger.info("File already exists on tape. No transfer will be issued.")
                 return True
-            logger.info("File exists but checksum differs")
+            logger.info(
+                "File exists but checksum differs. Initiating transfer to overwrite existing file..."
+            )
         else:
-            logger.info("File exists but size differs")
-        logger.info("Overwriting existing file")
+            logger.info(
+                "File exists but size differs. Initiating transfer to overwrite existing file..."
+            )
         return False
     except gfal2.GError as e:
         if e.code == errno.ENOENT:  # no entry found
-            logger.info("File not found on tape")
+            logger.info("File not found on tape. Initiating transfer...")
             return False
         raise e
