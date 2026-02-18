@@ -16,7 +16,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -648,43 +648,45 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         Get common possible actions for the archives
         """
-        archive_ids = request.data["archives"]
-        result = {}
-        if len(archive_ids) > 0:
-            with transaction.atomic():
-                archives = list(
-                    Archive.objects.select_for_update()
-                    .filter(pk__in=archive_ids)
-                    .prefetch_related("last_step")
-                )
+        archive_ids = request.data.get("archives")
 
-                if not archives:
-                    return Response(result)
+        if not archive_ids:
+            return Response({})
 
-                all_failed = True
-                all_failed_or_warned = True
-                can_continue = True
-
-                for archive in archives:
-                    last_step = archive.last_step
-                    if not last_step:
-                        all_failed = all_failed_or_warned = can_continue = False
-                        break
-
-                    status = last_step.status
-                    all_failed &= status == Status.FAILED
-                    all_failed_or_warned &= status in {
+        stats = Archive.objects.filter(pk__in=archive_ids).aggregate(
+            total=Count("id"),
+            missing_step=Count("id", filter=Q(last_step__isnull=True)),
+            not_failed=Count("id", filter=~Q(last_step__status=Status.FAILED)),
+            not_failed_or_warned=Count(
+                "id",
+                filter=~Q(
+                    last_step__status__in=[
                         Status.FAILED,
                         Status.COMPLETED_WITH_WARNINGS,
-                    }
+                    ]
+                ),
+            ),
+            empty_pipeline=Count("id", filter=Q(pipeline_steps=[])),
+        )
 
-                    if archive.pipeline_steps == []:
-                        can_continue = False
+        if stats["total"] == 0:
+            return Response({})
 
-            result["all_last_step_failed"] = all_failed
-            result["can_continue"] = all_failed_or_warned and can_continue
+        if stats["missing_step"] > 0:
+            return Response(
+                {
+                    "all_last_step_failed": False,
+                    "can_continue": False,
+                }
+            )
 
-        return Response(result)
+        return Response(
+            {
+                "all_last_step_failed": stats["not_failed"] == 0,
+                "can_continue": stats["not_failed_or_warned"] == 0
+                and stats["empty_pipeline"] == 0,
+            }
+        )
 
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
