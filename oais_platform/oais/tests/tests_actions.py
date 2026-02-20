@@ -53,7 +53,7 @@ class ArchiveActionIntersectionTest(APITestCase):
         self.assertFalse(response.data["can_continue"])
 
     def test_cannot_continue_with_successful_step(self):
-        archive = self.create_archive_with_state(Status.COMPLETED)
+        archive = self.create_archive_with_state(Status.IN_PROGRESS)
 
         payload = {"archives": [archive.id]}
         response = self.client.post(self.url, payload, format="json")
