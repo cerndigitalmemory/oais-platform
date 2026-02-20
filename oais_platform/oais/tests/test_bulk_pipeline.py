@@ -123,8 +123,6 @@ class BulkPipelineTests(APITestCase):
                 StepType.objects.filter(name=StepName.ARCHIVE).first(),
                 archive.id,
                 archive.last_step.id,
-                None,
-                self.testuser_api_key.key,
                 False,
             )
 
@@ -140,6 +138,4 @@ class BulkPipelineTests(APITestCase):
 
         self.assertEqual(mock_execute.call_count, len(self.archive_ids))
         for archive_id in self.archive_ids:
-            mock_execute.assert_any_call(
-                archive_id, api_key=self.testuser_api_key.key, force_continue=True
-            )
+            mock_execute.assert_any_call(archive_id, force_continue=True)
