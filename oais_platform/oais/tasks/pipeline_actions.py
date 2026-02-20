@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.db import models, transaction
 
 from oais_platform.celery import app
-from oais_platform.oais.models import ApiKey, Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.utils import create_step
 
 logger = get_task_logger(__name__)
@@ -265,7 +265,7 @@ def manage_end_of_step(step):
                 logging.info(f"No waiting {StepName.ARCHIVE} step found to run.")
 
 
-def create_pipeline(archive_id, steps, run_type, user, api_key=None):
+def create_pipeline(archive_id, steps, run_type, user):
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         force_continue = False
@@ -328,14 +328,7 @@ def run_bulk_pipeline(self, archive_ids, run_type, steps, user_id):
 
     for item in archives:
         archive_id = item["id"]
-        source_name = item["source"]
-
         try:
-            api_key = ApiKey.objects.get(source__name=source_name, user=user).key
-        except Exception:
-            api_key = None
-
-        try:
-            create_pipeline(archive_id, steps, run_type, user, api_key)
+            create_pipeline(archive_id, steps, run_type, user)
         except Exception as e:
             logging.warning(f"Failed to run pipeline for archive {archive_id}: {e}")

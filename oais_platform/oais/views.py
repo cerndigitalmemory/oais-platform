@@ -595,14 +595,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             raise BadRequest("Invalid pipeline size")
 
         try:
-            api_key = ApiKey.objects.get(
-                source__name=archive.source, user=request.user
-            ).key
-        except Exception:
-            api_key = None
-
-        try:
-            step = create_pipeline(archive.id, steps, run_type, request.user, api_key)
+            step = create_pipeline(archive.id, steps, run_type, request.user)
             return Response(StepSerializer(step, many=False).data)
         except Exception as e:
             raise BadRequest(str(e))
