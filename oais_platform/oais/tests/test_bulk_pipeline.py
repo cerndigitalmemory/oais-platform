@@ -22,21 +22,12 @@ from oais_platform.settings import PIPELINE_SIZE_LIMIT
 
 class BulkPipelineTests(APITestCase):
     def setUp(self):
-        self.view_permission = Permission.objects.get(codename="view_archive_all")
         self.execute_permission = Permission.objects.get(codename="can_execute_step")
-        # self.edit_permission = Permission.objects.get(codename="can_edit_all")
-
         self.testuser = User.objects.create_user("testuser", password="pw")
-        self.testuser.user_permissions.add(
-            self.execute_permission
-        )  # self.view_permission
+        self.testuser.user_permissions.add(self.execute_permission)
         self.testuser.save()
 
         self.source = Source.objects.create(name="test", classname="Local")
-        self.testuser_api_key = ApiKey.objects.create(
-            user=self.testuser, source=self.source, key="abcd1234"
-        )
-
         self.archives = [
             Archive.objects.create(
                 recid=str(i),
