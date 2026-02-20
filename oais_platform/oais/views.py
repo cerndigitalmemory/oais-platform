@@ -624,6 +624,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if not archive_ids:
             raise BadRequest("No archive IDs.")
 
+        if run_type not in ("run", "retry", "continue"):
+            raise BadRequest(
+                "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
+            )
+
         if run_type == "run" and (len(steps) > PIPELINE_SIZE_LIMIT or len(steps) == 0):
             raise BadRequest("Invalid pipeline size")
 
