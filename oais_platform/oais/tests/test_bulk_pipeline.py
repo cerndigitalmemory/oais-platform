@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
@@ -62,21 +62,28 @@ class BulkPipelineTests(APITestCase):
 
     @parameterized.expand(
         [
-            ([], [StepName.VALIDATION], status.HTTP_400_BAD_REQUEST),
-            ([1, 2], [], status.HTTP_400_BAD_REQUEST),
+            ([], [StepName.VALIDATION], "run", status.HTTP_400_BAD_REQUEST),
+            ([1, 2], [], "run", status.HTTP_400_BAD_REQUEST),
             (
                 [1, 2],
                 [i for i in range(PIPELINE_SIZE_LIMIT + 1)],
+                "run",
+                status.HTTP_400_BAD_REQUEST,
+            ),
+            (
+                [1, 2],
+                [StepName.VALIDATION],
+                "invalid-type",
                 status.HTTP_400_BAD_REQUEST,
             ),
         ]
     )
-    def test_bulk_pipeline_invalid_input(self, ids, steps, status_code):
+    def test_bulk_pipeline_invalid_input(self, ids, steps, run_type, status_code):
         self.client.force_authenticate(user=self.testuser)
 
         response = self.client.post(
             self.url,
-            {"archive_ids": ids, "pipeline_steps": steps, "run_type": "run"},
+            {"archive_ids": ids, "pipeline_steps": steps, "run_type": run_type},
             format="json",
         )
 
@@ -128,6 +135,7 @@ class BulkPipelineTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
     def test_bulk_retry_logic(self, mock_execute):
+        mock_execute.return_value = (MagicMock(spec=Step), None)
         for archive in self.archives:
             step = Step.objects.create(
                 archive=archive, step_name=StepName.PUSH_TO_CTA, status=Status.FAILED
@@ -139,3 +147,66 @@ class BulkPipelineTests(APITestCase):
         self.assertEqual(mock_execute.call_count, len(self.archive_ids))
         for archive_id in self.archive_ids:
             mock_execute.assert_any_call(archive_id, force_continue=True)
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
+    def test_bulk_continue_logic(self, mock_execute):
+        mock_execute.return_value = (MagicMock(spec=Step), None)
+        for archive in self.archives:
+            failed_step = Step.objects.create(
+                archive=archive, step_name=StepName.HARVEST, status=Status.FAILED
+            )
+            waiting_step = Step.objects.create(
+                archive=archive, step_name=StepName.VALIDATION, status=Status.WAITING
+            )
+
+            archive.set_last_step(failed_step.id)
+            archive.pipeline_steps = [waiting_step.id]
+            archive.save()
+
+        run_bulk_pipeline.apply(
+            args=[self.archive_ids, "continue", [], self.testuser.id]
+        )
+
+        self.assertEqual(mock_execute.call_count, len(self.archive_ids))
+        for archive_id in self.archive_ids:
+            mock_execute.assert_any_call(archive_id, force_continue=True)
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
+    def test_bulk_continue_logic_invalid_state(self, mock_execute):
+        for archive in self.archives:
+            completed_step = Step.objects.create(
+                archive=archive, step_name=StepName.HARVEST, status=Status.COMPLETED
+            )
+            archive.set_last_step(completed_step.id)
+            archive.save()
+
+        with self.assertLogs(level="WARNING") as mock_logs:
+            run_bulk_pipeline.apply(
+                args=[self.archive_ids, "continue", [], self.testuser.id]
+            )
+            self.assertTrue(
+                any(
+                    "Continue operation not permitted" in msg
+                    for msg in mock_logs.output
+                )
+            )
+
+        mock_execute.assert_not_called()
+
+    @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
+    def test_run_bulk_pipeline_task_invalid_type(self, mock_execute):
+        invalid_type = "unsupported_operation"
+
+        with self.assertLogs(level="WARNING") as mock_logs:
+            run_bulk_pipeline.apply(
+                args=[self.archive_ids, invalid_type, [], self.testuser.id]
+            )
+            self.assertTrue(
+                any(
+                    "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
+                    in msg
+                    for msg in mock_logs.output
+                )
+            )
+
+        mock_execute.assert_not_called()
