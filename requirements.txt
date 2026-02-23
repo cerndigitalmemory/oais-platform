@@ -1,4 +1,4 @@
-bagit-create>=1.1.0,<2.0.0
+bagit-create>=1.4.2,<2.0.0
 Django==5.0.6
 djangorestframework==3.14.0
 pymarc==4.2.2
