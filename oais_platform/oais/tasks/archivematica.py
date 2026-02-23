@@ -619,7 +619,7 @@ def outdate_aip_dependent_steps(archive):
             StepName.INVENIO_RDM_PUSH,
             StepName.NOTIFY_SOURCE,
         ],
-        status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
+        status__in=COMPLETED_STATUSES,
     )
     steps.update(status=Status.OUTDATED)
     logger.info(
