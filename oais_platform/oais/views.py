@@ -94,8 +94,9 @@ from oais_platform.oais.statistics import (
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.archivematica import callback_package
 from oais_platform.oais.tasks.pipeline_actions import (
-    create_retry_step,
+    create_pipeline,
     execute_pipeline,
+    run_bulk_pipeline,
     run_step,
 )
 from oais_platform.oais.upload import handle_failed_upload
@@ -590,58 +591,47 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         run_type = request.data.get("run_type", "run")
         steps = request.data.get("pipeline_steps")
 
-        with transaction.atomic():
-            archive = Archive.objects.select_for_update().get(pk=archive.id)
-            force_continue = False
+        if run_type == "run" and (not steps or len(steps) > PIPELINE_SIZE_LIMIT):
+            raise BadRequest("Invalid pipeline size")
 
-            match run_type:
-                case "run":
-                    if steps is not None and (
-                        len(steps) > PIPELINE_SIZE_LIMIT or len(steps) == 0
-                    ):
-                        raise BadRequest("Invalid pipeline size")
-                    try:
-                        for step_name in steps:
-                            archive.add_step_to_pipeline(step_name, user=request.user)
-                    except Exception as e:
-                        raise BadRequest(e)
-                case "retry":
-                    force_continue = True
-                    result = create_retry_step.apply(args=[archive.id, request.user.id])
-                    result = result.get()
-                    if result["errormsg"]:
-                        raise BadRequest(result["errormsg"])
-                case "continue":
-                    force_continue = True
-                    last_step = Step.objects.select_for_update().get(
-                        pk=archive.last_step.id
-                    )
-                    if last_step and last_step.status not in [
-                        Status.FAILED,
-                        Status.COMPLETED_WITH_WARNINGS,
-                    ]:
-                        raise BadRequest(
-                            "Continue operation not permitted, last step is not failed or completed with warnings."
-                        )
-                    if len(archive.pipeline_steps) == 0:
-                        raise BadRequest(
-                            "Continue operation not permitted, the pipeline is empty."
-                        )
-                    continue_step = Step.objects.select_for_update().get(
-                        pk=archive.pipeline_steps[0]
-                    )
-                    if continue_step.status != Status.WAITING:
-                        raise BadRequest(
-                            "Continue operation not permitted, next step in pipeline is not in status WAITING."
-                        )
-                case _:
-                    raise BadRequest(
-                        "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
-                    )
+        try:
+            step = create_pipeline(archive.id, steps, run_type, request.user)
+            return Response(StepSerializer(step, many=False).data)
+        except Exception as e:
+            raise BadRequest(str(e))
 
-        step, _ = execute_pipeline(archive.id, force_continue=force_continue)
-        serializer = StepSerializer(step, many=False)
-        return Response(serializer.data)
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="bulk-pipeline",
+        url_name="bulk-pipeline",
+    )
+    def bulk_run_pipeline(self, request):
+        """
+        Creates pipelines of Steps for the list of Archives and executes them
+        """
+        archive_ids = request.data.get("archive_ids", [])
+        run_type = request.data.get("run_type", "run")
+        steps = request.data.get("pipeline_steps", [])
+
+        if not archive_ids:
+            raise BadRequest("No archive IDs.")
+
+        if run_type not in ("run", "retry", "continue"):
+            raise BadRequest(
+                "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
+            )
+
+        if run_type == "run" and (len(steps) > PIPELINE_SIZE_LIMIT or len(steps) == 0):
+            raise BadRequest("Invalid pipeline size")
+
+        run_bulk_pipeline.delay(archive_ids, run_type, steps, request.user.id)
+
+        return Response(
+            {
+                "msg": f"Processing {len(archive_ids)} archives",
+            },
+        )
 
     @action(detail=False, methods=["POST"], url_path="actions", url_name="actions")
     def archive_action_intersection(self, request, pk=None):

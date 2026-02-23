@@ -17,6 +17,7 @@ from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
+    get_interval_schedule,
     remove_periodic_task_on_failure,
     set_and_return_error,
 )
@@ -422,9 +423,7 @@ def create_check_am_status(package, step, archive_id):
             f"Task '{task_name}' already exists, previous job is still in progress"
         )
     # Create the scheduler
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=AM_POLLING_INTERVAL, period=IntervalSchedule.MINUTES
-    )
+    schedule = get_interval_schedule(AM_POLLING_INTERVAL, IntervalSchedule.MINUTES)
     # Spawn a periodic task to check for the status of the package on AM
     PeriodicTask.objects.create(
         interval=schedule,

@@ -100,9 +100,7 @@ def execute_pipeline(archive_id, force_continue=False, return_signature=False):
         return run_step(step, archive.id, return_signature)
 
 
-@shared_task(name="create_retry_step", bind=True, ignore_result=True)
-def create_retry_step(
-    self,
+def _create_retry_step(
     archive_id,
     user_id=None,
     execute=False,
@@ -145,6 +143,11 @@ def create_retry_step(
         execute_pipeline(archive.id, force_continue=True)
 
     return {"errormsg": None}
+
+
+@shared_task(name="create_retry_step", bind=True, ignore_result=True)
+def create_retry_step(self, archive_id, user_id=None, execute=False, step_name=None):
+    return _create_retry_step(archive_id, user_id, execute, step_name)
 
 
 def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
@@ -260,3 +263,72 @@ def manage_end_of_step(step):
                 step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)
             else:
                 logging.info(f"No waiting {StepName.ARCHIVE} step found to run.")
+
+
+def create_pipeline(archive_id, steps, run_type, user):
+    with transaction.atomic():
+        archive = Archive.objects.select_for_update().get(pk=archive_id)
+        force_continue = False
+
+        match run_type:
+            case "run":
+                for step_name in steps:
+                    archive.add_step_to_pipeline(step_name, user=user)
+
+            case "retry":
+                force_continue = True
+                result = _create_retry_step(archive_id, user.id)
+                if result.get("errormsg"):
+                    raise Exception(result["errormsg"])
+
+            case "continue":
+                force_continue = True
+                if not archive.last_step:
+                    raise Exception("No last step found to continue.")
+
+                last_step = Step.objects.select_for_update().get(
+                    pk=archive.last_step.id
+                )
+
+                if last_step.status not in [
+                    Status.FAILED,
+                    Status.COMPLETED_WITH_WARNINGS,
+                ]:
+                    raise Exception(
+                        "Continue operation not permitted, last step is not failed or completed with warnings."
+                    )
+
+                if not archive.pipeline_steps:
+                    raise Exception(
+                        "Continue operation not permitted, the pipeline is empty."
+                    )
+
+                continue_step = Step.objects.select_for_update().get(
+                    pk=archive.pipeline_steps[0]
+                )
+                if continue_step.status != Status.WAITING:
+                    raise Exception(
+                        "Continue operation not permitted, next step in pipeline is not in status WAITING."
+                    )
+
+            case _:
+                raise Exception(
+                    "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
+                )
+
+    step, _ = execute_pipeline(archive.id, force_continue=force_continue)
+
+    return step
+
+
+@shared_task(name="run_bulk_pipeline", bind=True, ignore_result=True)
+def run_bulk_pipeline(self, archive_ids, run_type, steps, user_id):
+    archives = Archive.objects.filter(id__in=archive_ids).values("id", "source")
+    user = User.objects.get(pk=user_id)
+
+    for item in archives:
+        archive_id = item["id"]
+        try:
+            create_pipeline(archive_id, steps, run_type, user)
+        except Exception as e:
+            logging.warning(f"Failed to run pipeline for archive {archive_id}: {e}")

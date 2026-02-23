@@ -46,7 +46,8 @@ class ArchivePermission(permissions.BasePermission):
         elif view.action in ["archive_unstage"]:  # Actions that need approve right
             return self._can_approve_archive(user, obj)
         elif view.action in [
-            "archive_run_pipeline"
+            "archive_run_pipeline",
+            "bulk_run_pipeline",
         ]:  # Actions that need execute_steps right
             return self._can_execute_steps(user, obj)
         else:

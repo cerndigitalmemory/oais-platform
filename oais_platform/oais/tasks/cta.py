@@ -16,6 +16,7 @@ from oais_utils.validate import compute_hash
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
+    get_interval_schedule,
     remove_periodic_task_if_exists,
     remove_periodic_task_on_failure,
     set_and_return_error,
@@ -210,9 +211,7 @@ def _submit_fts_job(archive, step, cta_path, overwrite, task_name):
             f"Waiting for current transfers to finish before pushing archive {archive.id} to CTA"
         )
         if not PeriodicTask.objects.filter(name=task_name).exists():
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
-            )
+            schedule = get_interval_schedule(FTS_WAIT_IN_HOURS, IntervalSchedule.HOURS)
             PeriodicTask.objects.get_or_create(
                 interval=schedule,
                 name=task_name,
@@ -231,9 +230,7 @@ def _submit_fts_job(archive, step, cta_path, overwrite, task_name):
 
 
 def _handle_submitted_fts_job(archive, step, cta_path, submitted_job):
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=1, period=IntervalSchedule.HOURS
-    )
+    schedule = get_interval_schedule(1, IntervalSchedule.HOURS)
     # Spawn a periodic task to check for the status of the job
     PeriodicTask.objects.create(
         interval=schedule,

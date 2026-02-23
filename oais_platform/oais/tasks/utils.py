@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from celery.utils.log import get_task_logger
-from django_celery_beat.models import PeriodicTask
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
 from oais_platform.oais.models import ApiKey, Profile, Status, Step
 from oais_platform.settings import FILES_URL
@@ -167,3 +167,12 @@ def get_api_key_for_step(step):
                 f"User({step.initiated_by_user.username}) does not have API key set for the given source."
             )
     return api_key
+
+
+def get_interval_schedule(every, period):
+    # to ensure no duplicate IntervalSchedule is created when executing a large amount of tasks simultaneously
+    try:
+        schedule, _ = IntervalSchedule.objects.get_or_create(every=every, period=period)
+        return schedule
+    except Exception:
+        return IntervalSchedule.objects.filter(every=every, period=period).first()
