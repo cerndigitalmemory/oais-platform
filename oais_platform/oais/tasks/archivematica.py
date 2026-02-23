@@ -541,8 +541,11 @@ def handle_completed_am_package(self, task_name, am, step, am_status, archive_id
         )
 
         step.set_output_data(am_status)
-        step.archive.set_aip_path(am_status["artifact"]["artifact_path"])
-        step.archive.save()
+        if step.archive.path_to_aip != am_status["artifact"]["artifact_path"]:
+            step.archive.set_aip_path(am_status["artifact"]["artifact_path"])
+            step.archive.save()
+
+            outdate_aip_dependent_steps(step.archive)
 
         errors = get_executed_jobs(am, am_status["uuid"], check_for_failed=True)
         if errors and len(errors) > 0:
@@ -606,3 +609,19 @@ def archive_failed_count_reset():
         logger.info(f"Resetting failed count for step type {step_type.name}")
         step_type.failed_count = 0
         step_type.save()
+
+
+def outdate_aip_dependent_steps(archive):
+    """Outdate all steps that depend on the AIP."""
+    steps = archive.steps.filter(
+        step_type__name__in=[
+            StepName.PUSH_TO_CTA,
+            StepName.INVENIO_RDM_PUSH,
+            StepName.NOTIFY_SOURCE,
+        ],
+        status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
+    )
+    steps.update(status=Status.OUTDATED)
+    logger.info(
+        f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
+    )

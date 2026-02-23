@@ -161,7 +161,10 @@ class Invenio(AbstractSource):
 
         archive_time = (
             archive.steps.all()
-            .filter(step_name=StepName.ARCHIVE, status=Status.COMPLETED)
+            .filter(
+                step_name=StepName.ARCHIVE,
+                status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
+            )
             .order_by("-start_date")
             .first()
             .start_date
