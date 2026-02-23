@@ -170,7 +170,7 @@ def get_api_key_for_step(step):
 
 
 def get_interval_schedule(every, period):
-    # to ensure no duplicate IntervalSchedule is created when executing a large amount of tasks simultaneusly
+    # to ensure no duplicate IntervalSchedule is created when executing a large amount of tasks simultaneously
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(every=every, period=period)
         return schedule
