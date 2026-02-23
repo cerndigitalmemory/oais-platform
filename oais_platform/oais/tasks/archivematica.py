@@ -9,7 +9,6 @@ from amclient.errors import error_codes, error_lookup
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
@@ -98,8 +97,7 @@ def archivematica(self, archive_id, step_id):
                     "errormsg": None,
                 }
             )
-
-            create_check_am_status(package, current_step, archive_id)
+            create_check_am_status(package["id"], current_step, archive_id)
             return current_step.output_data
     except requests.HTTPError as e:
         return set_and_return_error(
@@ -118,7 +116,7 @@ def archivematica(self, archive_id, step_id):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, message, step_id, archive_id):
+def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     """
     Check the status of an Archivematica job by polling its API.
     The related Step is updated with the information returned from Archivematica
@@ -130,7 +128,14 @@ def check_am_status(self, message, step_id, archive_id):
     am = get_am_client()
 
     try:
-        am_status = am.get_unit_status(message["id"])
+        if ingest_retry:
+            logger.info(
+                f"Retrying to check status for package with uuid {uuid} for step {step_id}"
+            )
+            am.sip_uuid = uuid
+            am_status = am.get_ingest_status()
+        else:
+            am_status = am.get_unit_status(uuid)
         logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
         logger.info(f"Error {e.response.status_code} for archivematica")
@@ -138,7 +143,7 @@ def check_am_status(self, message, step_id, archive_id):
             is_failed = True
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
-                executed_jobs = get_executed_jobs(am, message["id"])
+                executed_jobs = get_executed_jobs(am, uuid)
                 if executed_jobs > 0:
                     is_failed = False
                     am_status = {
@@ -211,7 +216,7 @@ def check_am_status(self, message, step_id, archive_id):
 
     elif status == "FAILED" or status == "REJECTED":
         if not am_status.get("errormsg", None):
-            errors = get_executed_jobs(am, message["id"], check_for_failed=True)
+            errors = get_executed_jobs(am, uuid, check_for_failed=True)
             if am_status.get("uuid", None):
                 errors += get_executed_jobs(
                     am, am_status["uuid"], check_for_failed=True
@@ -413,9 +418,12 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
         return 0
 
 
-def create_check_am_status(package, step, archive_id):
+def create_check_am_status(
+    uuid, step, archive_id, reset_start_date=True, ingest_retry=False
+):
     # overwrite the start date so the waiting limit is counted from here
-    step.set_start_date()
+    if reset_start_date:
+        step.set_start_date()
     task_name = get_task_name(step)
     # Check for the existing task by name
     if PeriodicTask.objects.filter(name=task_name).exists():
@@ -425,11 +433,12 @@ def create_check_am_status(package, step, archive_id):
     # Create the scheduler
     schedule = get_interval_schedule(AM_POLLING_INTERVAL, IntervalSchedule.MINUTES)
     # Spawn a periodic task to check for the status of the package on AM
-    PeriodicTask.objects.create(
+    return PeriodicTask.objects.create(
         interval=schedule,
         name=task_name,
         task="check_am_status",
-        args=json.dumps([package, step.id, archive_id]),
+        enabled=True,
+        args=json.dumps([uuid, step.id, archive_id, ingest_retry]),
         expire_seconds=AM_POLLING_INTERVAL * 60.0,
         last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
     )
@@ -462,37 +471,46 @@ def get_task_name(step):
     bind=True,
     ignore_result=True,
 )
-def callback_package(self, package_name):
+def callback_package(self, package_name, package_uuid):
     logger.info(f"Callback for package {package_name} received.")
     package_name = re.sub(
         r"(.*?_\d+)_\d+$", r"\1", package_name
     )  # Archivematica may append a suffix to the package name (eg cds_abc_Archive_66_Step_12_1)
     periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
-    if periodic_task.count() > 1:
+    periodic_task_count = periodic_task.count()
+    if periodic_task_count > 1:
         logger.error(
             f"Ambiguous package name ({package_name}) found: {periodic_task.count()}"
         )
         return
-    elif not periodic_task.exists():
+    elif periodic_task_count == 0:
+        logger.warning(
+            f"No periodic task found for package name {package_name}. Trying to find the related step and recreate the periodic task."
+        )
         try:  # Periodic status check might have completed it already
             step_id = int(re.search(r"Archive_(\d+)_Step_(\d+)", package_name).group(2))
             step = Step.objects.get(id=step_id)
-            if step.status == Status.COMPLETED:
+            if step.status in [Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]:
                 logger.info(
                     f"Archivematica package {package_name} already processed, ignoring callback."
                 )
                 return
-            if step.status == Status.FAILED:
-                logger.info(
-                    f"Archivematica package {package_name} already set to failed, ignoring callback."
-                )
-                return
+            logger.info(
+                f"Archivematica package {package_name} already set to {step.status}, processing callback - recreating Periodic Task."
+            )
+            periodic_task = create_check_am_status(
+                package_uuid,
+                step,
+                step.archive.id,
+                reset_start_date=False,
+                ingest_retry=True,
+            )
         except (AttributeError, Step.DoesNotExist):
-            pass
-        logger.error(f"Package with name {package_name} not found")
-        return
+            logger.error(f"Could not find step for package {package_name}.")
+            return
+    else:
+        periodic_task = periodic_task.get()
 
-    periodic_task = periodic_task.get()
     periodic_task.enabled = False
     periodic_task.save()
 

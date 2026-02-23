@@ -51,9 +51,10 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(
             task_arg,
             [
-                create_package.return_value,
+                create_package.return_value["id"],
                 self.step.id,
                 self.archive.id,
+                False,
             ],
         )
         self.assertEqual(self.step.step_type.current_count, 1)

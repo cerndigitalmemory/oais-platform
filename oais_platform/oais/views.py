@@ -1444,14 +1444,11 @@ def am_callback(request):
     package_uuid = serializer.validated_data["package_uuid"]
     package_name = serializer.validated_data["package_name"]
 
-    if not package_name:
-        raise BadRequest("package_name is missing")
-
     logging.info(
         f"Archivematica callback for package {package_uuid} with name {package_name}"
     )
 
-    callback_package.delay(package_name)
+    callback_package.delay(package_name, package_uuid)
 
     return Response("Callback received.")
 
