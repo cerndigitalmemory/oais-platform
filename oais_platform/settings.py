@@ -417,6 +417,9 @@ PIPELINE_SIZE_LIMIT = 10
 # Encryption key for storing the API Keys in the DB
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
 
+# Step filtering limits
+STEP_FILTER_COMBINATION_LIMIT = 2
+
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa
