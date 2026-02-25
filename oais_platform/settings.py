@@ -45,6 +45,9 @@ def get_default_transfer_source():
         am.ss_api_key = AM_SS_API_KEY
 
         locations = am.list_storage_locations()
+        # Archivematica returns integers for errors
+        if not locations or not isinstance(locations, dict):
+            raise Exception("Invalid storage locations response.")
 
     except Exception as exc:
         raise ImproperlyConfigured(
@@ -346,7 +349,7 @@ AM_TRANSFER_SOURCE = (
 )
 
 # Interval in minutes to poll Archivematica for status updates
-AM_POLLING_INTERVAL = 15  # minutes
+AM_POLLING_INTERVAL = 1  # minutes
 # After callback check status with delay
 AM_CALLBACK_DELAY = 10  # seconds
 # Maximum number of retries for Archivematica failed jobs
@@ -403,7 +406,7 @@ CTA_BASE_PATH = environ.get(
 BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
-AM_WAITING_TIME_LIMIT = 5
+AM_WAITING_TIME_LIMIT = 0
 # Max processing time in AM (to time out stuck in progress - mins)
 AM_PROCESSING_TIME_LIMIT = 60  # in mins
 
