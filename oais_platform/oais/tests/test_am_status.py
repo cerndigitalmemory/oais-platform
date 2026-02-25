@@ -238,11 +238,12 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertFalse(periodic_tasks.delete.called)
 
+    @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_bad_request_waiting_limit_reached(
-        self, periodic_tasks, get_unit_status, get_jobs
+        self, periodic_tasks, get_unit_status, get_jobs, create_retry_step
     ):
         bad_request = requests.Response()
         bad_request.status_code = 400
@@ -265,9 +266,11 @@ class ArchivematicaStatusTests(APITestCase):
 
         self.assertEqual(self.step.status, Status.TIMED_OUT)
         self.assertEqual(step_output["status"], "TIMED_OUT")
+        self.assertEqual(step_output["retry"], True)
         self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
+        create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")

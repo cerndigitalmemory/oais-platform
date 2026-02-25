@@ -12,7 +12,14 @@ from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    COMPLETED_STATUSES,
+    Archive,
+    Status,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
@@ -487,7 +494,7 @@ def callback_package(self, package_name, package_uuid):
         try:  # Periodic status check might have completed it already
             step_id = int(re.search(r"Archive_(\d+)_Step_(\d+)", package_name).group(2))
             step = Step.objects.get(id=step_id)
-            if step.status in [Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]:
+            if step.status in COMPLETED_STATUSES:
                 logger.info(
                     f"Archivematica package {package_name} already processed, ignoring callback."
                 )

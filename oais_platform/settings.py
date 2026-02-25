@@ -349,7 +349,7 @@ AM_TRANSFER_SOURCE = (
 )
 
 # Interval in minutes to poll Archivematica for status updates
-AM_POLLING_INTERVAL = 1  # minutes
+AM_POLLING_INTERVAL = 15  # minutes
 # After callback check status with delay
 AM_CALLBACK_DELAY = 10  # seconds
 # Maximum number of retries for Archivematica failed jobs
@@ -406,7 +406,7 @@ CTA_BASE_PATH = environ.get(
 BATCH_ANNOUNCE_LIMIT = 20
 
 # Max waiting time in AM queue for upload (mins)
-AM_WAITING_TIME_LIMIT = 0
+AM_WAITING_TIME_LIMIT = 5
 # Max processing time in AM (to time out stuck in progress - mins)
 AM_PROCESSING_TIME_LIMIT = 60  # in mins
 
