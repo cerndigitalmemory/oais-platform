@@ -63,13 +63,16 @@ def create_path_artifact(name, path, localpath):
     }
 
 
-def set_and_return_error(step, errormsg, extra_log=None):
+def set_and_return_error(step, errormsg, extra_log=None, timed_out=False):
     """
     Set the step as failed and return the error message
     """
     from oais_platform.oais.tasks.pipeline_actions import manage_end_of_step
 
-    step.set_status(Status.FAILED)
+    if timed_out:
+        step.set_status(Status.TIMED_OUT)
+    else:
+        step.set_status(Status.FAILED)
     step.set_finish_date()
     if type(errormsg) is dict:
         step.set_output_data(errormsg)
@@ -84,12 +87,14 @@ def set_and_return_error(step, errormsg, extra_log=None):
     return return_value
 
 
-def remove_periodic_task_on_failure(task_name, step, output_data):
+def remove_periodic_task_on_failure(task_name, step, output_data, timed_out=False):
     """
-    Set step as failed and remove the scheduled task
+    Set step as failed/timed out and remove the scheduled task
     """
-    set_and_return_error(step, output_data)
-    logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
+    set_and_return_error(step, output_data, timed_out=timed_out)
+    logger.warning(
+        f"Step {step.id} {('timed out' if timed_out else 'failed')}. Removing periodic task {task_name}."
+    )
 
     try:
         remove_periodic_task_if_exists(task_name)

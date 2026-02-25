@@ -62,6 +62,16 @@ class Status(models.IntegerChoices):
     REJECTED = 6, "REJECTED"
     WAITING = 7, "WAITING"
     COMPLETED_WITH_WARNINGS = 8, "COMPLETED_WITH_WARNINGS"
+    TIMED_OUT = 9, "TIMED_OUT"
+
+
+RETRY_CONTINUE_STATUSES = [
+    Status.FAILED,
+    Status.TIMED_OUT,
+    Status.COMPLETED_WITH_WARNINGS,
+]
+FAILURE_STATUSES = [Status.FAILED, Status.TIMED_OUT]
+COMPLETED_STATUSES = [Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]
 
 
 class ArchiveState(models.IntegerChoices):
@@ -456,11 +466,7 @@ class Step(models.Model):
             if not self.initiated_by_harvest_batch:
                 return
 
-            is_terminal = status in {
-                Status.COMPLETED,
-                Status.COMPLETED_WITH_WARNINGS,
-                Status.FAILED,
-            }
+            is_terminal = status in (FAILURE_STATUSES + COMPLETED_STATUSES)
 
             is_progress_relevant = status == Status.IN_PROGRESS or (
                 status == Status.WAITING and self.celery_task_id
@@ -826,7 +832,7 @@ class HarvestBatch(models.Model):
             batch_status=models.Subquery(last_non_waiting_step)
         )
 
-        return archives_with_status.filter(batch_status=Status.FAILED).count()
+        return archives_with_status.filter(batch_status__in=FAILURE_STATUSES).count()
 
     @property
     def completed(self):
@@ -866,11 +872,8 @@ class HarvestBatch(models.Model):
         if step_status is not None:
             no_op = {
                 BatchStatus.IN_PROGRESS: {Status.IN_PROGRESS, Status.WAITING},
-                BatchStatus.FAILED: {Status.FAILED},
-                BatchStatus.COMPLETED: {
-                    Status.COMPLETED,
-                    Status.COMPLETED_WITH_WARNINGS,
-                },
+                BatchStatus.FAILED: set(FAILURE_STATUSES),
+                BatchStatus.COMPLETED: set(COMPLETED_STATUSES),
             }
             if step_status in no_op.get(self.status, ()):
                 return

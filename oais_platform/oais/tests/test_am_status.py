@@ -263,8 +263,8 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
 
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], "FAILED")
+        self.assertEqual(self.step.status, Status.TIMED_OUT)
+        self.assertEqual(step_output["status"], "TIMED_OUT")
         self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
         self.assertRaises(KeyError, lambda: step_output["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
@@ -293,7 +293,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
 
-        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.status, Status.TIMED_OUT)
         self.assertEqual(
             step_output["errormsg"],
             "Error: Archivematica processing time limit reached.",
@@ -356,11 +356,11 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
 
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], "FAILED")
-        self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
+        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(
+            step_output["microservice"], "Waiting for archivematica to respond"
+        )
         self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
@@ -474,11 +474,11 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
         step_output = json.loads(self.step.output_data)
 
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], "FAILED")
-        self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
+        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(
+            step_output["microservice"], "Waiting for archivematica to respond"
+        )
         self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")

@@ -139,13 +139,12 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
         logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
         logger.info(f"Error {e.response.status_code} for archivematica")
+        am_status = None
         if e.response.status_code == 400:
-            is_failed = True
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
                 executed_jobs = get_executed_jobs(am, uuid)
                 if executed_jobs > 0:
-                    is_failed = False
                     am_status = {
                         "status": "PROCESSING",
                         "microservice": "Waiting for archivematica to continue the processing",
@@ -160,7 +159,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                     f"Error {e.response.status_code} for archivematica retreiving jobs"
                 )
 
-            if is_failed and step.status == Status.WAITING:
+            if not am_status:
                 # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
                 # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
                 time_passed = (timezone.now() - step.start_date).total_seconds()
@@ -169,20 +168,15 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                     logger.info(
                         f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
                     )
+                    am_status = {
+                        "status": "TIMED_OUT",
+                        "errormsg": "Archivematica delayed to respond.",
+                    }
                 else:
-                    is_failed = False
                     am_status = {
                         "status": "WAITING",
                         "microservice": "Waiting for archivematica to respond",
                     }
-
-            # If step status is not waiting, then archivematica delayed to respond so package creation is considered failed.
-            # This is usually because archivematica may not have access to the file or the transfer source is not correct.
-            if is_failed:
-                am_status = {
-                    "status": "FAILED",
-                    "errormsg": "Archivematica delayed to respond.",
-                }
         else:
             # If there is other type of error code then archivematica connection could not be established.
             am_status = {
@@ -247,7 +241,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                 "Error: Archivematica processing time limit reached."
             )
             am_status["retry"] = True
-            remove_periodic_task_on_failure(task_name, step, am_status)
+            remove_periodic_task_on_failure(task_name, step, am_status, timed_out=True)
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
@@ -265,6 +259,9 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     elif status == "WAITING":
         step.set_status(Status.WAITING)
         step.set_output_data(am_status)
+    elif status == "TIMED_OUT":
+        am_status["retry"] = True
+        remove_periodic_task_on_failure(task_name, step, am_status, timed_out=True)
     else:
         logger.warning(
             f"Unknown status from Archivematica: {status}, for step {step.id}"
