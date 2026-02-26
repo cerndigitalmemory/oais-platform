@@ -42,6 +42,8 @@ from oais_platform.oais.exceptions import (
 )
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
+    FAILURE_STATUSES,
+    RETRY_CONTINUE_STATUSES,
     ApiKey,
     Archive,
     ArchiveState,
@@ -646,15 +648,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         stats = Archive.objects.filter(pk__in=archive_ids).aggregate(
             total=Count("id"),
             missing_step=Count("id", filter=Q(last_step__isnull=True)),
-            not_failed=Count("id", filter=~Q(last_step__status=Status.FAILED)),
+            not_failed=Count("id", filter=~Q(last_step__status__in=FAILURE_STATUSES)),
             not_failed_or_warned=Count(
                 "id",
-                filter=~Q(
-                    last_step__status__in=[
-                        Status.FAILED,
-                        Status.COMPLETED_WITH_WARNINGS,
-                    ]
-                ),
+                filter=~Q(last_step__status__in=RETRY_CONTINUE_STATUSES),
             ),
             empty_pipeline=Count("id", filter=Q(pipeline_steps=[])),
         )

@@ -9,7 +9,15 @@ from django.contrib.auth.models import User
 from django.db import models, transaction
 
 from oais_platform.celery import app
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    FAILURE_STATUSES,
+    RETRY_CONTINUE_STATUSES,
+    Archive,
+    Status,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.tasks.utils import create_step
 
 logger = get_task_logger(__name__)
@@ -110,12 +118,9 @@ def _create_retry_step(
     last_step = archive.last_step
     if not last_step:
         return {"errormsg": "Retry operation not permitted, no last step found."}
-    if last_step.status not in [
-        Status.FAILED,
-        Status.COMPLETED_WITH_WARNINGS,
-    ]:
+    if last_step.status not in RETRY_CONTINUE_STATUSES:
         return {
-            "errormsg": "Retry operation not permitted, last step is not failed or completed with warnings."
+            "errormsg": f"Retry operation not permitted, last step status is not one of {', '.join(status.label for status in RETRY_CONTINUE_STATUSES)}."
         }
     if step_name and last_step.step_type.name != step_name:
         return {
@@ -220,7 +225,7 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
 
 def manage_end_of_step(step):
     step_type = step.step_type
-    if step.status == Status.FAILED:
+    if step.status in FAILURE_STATUSES:
         step_type.increment_failed_count()
     output_data = json.loads(step.output_data) if step.output_data else {}
     incremented = output_data.get("incremented", True)
@@ -290,12 +295,9 @@ def create_pipeline(archive_id, steps, run_type, user):
                     pk=archive.last_step.id
                 )
 
-                if last_step.status not in [
-                    Status.FAILED,
-                    Status.COMPLETED_WITH_WARNINGS,
-                ]:
+                if last_step.status not in RETRY_CONTINUE_STATUSES:
                     raise Exception(
-                        "Continue operation not permitted, last step is not failed or completed with warnings."
+                        f"Continue operation not permitted, last step status is not one of {', '.join(status.label for status in RETRY_CONTINUE_STATUSES)}."
                     )
 
                 if not archive.pipeline_steps:

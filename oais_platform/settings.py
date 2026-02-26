@@ -45,6 +45,9 @@ def get_default_transfer_source():
         am.ss_api_key = AM_SS_API_KEY
 
         locations = am.list_storage_locations()
+        # Archivematica returns integers for errors
+        if not locations or not isinstance(locations, dict):
+            raise Exception("Invalid storage locations response.")
 
     except Exception as exc:
         raise ImproperlyConfigured(
