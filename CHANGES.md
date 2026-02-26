@@ -1,5 +1,11 @@
 # Changes
 
+## Version 2.9.0 (released 2026-02-26)
+- AM: add timed out status, process callback after timeout
+- API: optimize /actions, create bulk pipeline endpoint
+- CTA: avoid duplicate transfers
+- dependencies: bump bagit-create
+
 ## Version 2.8.3 (released 2026-02-12)
 - Pipeline: remove API key and input data propagation
 - CTA: fix task finalization in all cases
