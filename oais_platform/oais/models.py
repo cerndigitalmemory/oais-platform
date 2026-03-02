@@ -514,6 +514,21 @@ class Step(models.Model):
         super(Step, self).save(*args, **kwargs)
         self.archive.save()
 
+    def delete(self, *args, **kwargs):
+        if self.id in self.archive.pipeline_steps:
+            self.archive.pipeline_steps.remove(self.id)
+            self.archive.save()
+        super().delete(*args, **kwargs)
+
+    @property
+    def removable(self):
+        return (
+            self.status == Status.WAITING
+            and not self.celery_task_id
+            and self.archive.pipeline_steps
+            and self.id in self.archive.pipeline_steps
+        )
+
 
 class Resource(models.Model):
     """

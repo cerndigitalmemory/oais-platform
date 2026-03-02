@@ -119,6 +119,10 @@ class StepPermission(permissions.BasePermission):
         return request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        if view.action in ["delete_step"]:
+            return self.archive_perms._can_execute_steps(request.user, obj.archive)
         return self.archive_perms._can_view_archive(request.user, obj.archive)
 
 

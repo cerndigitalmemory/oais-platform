@@ -726,6 +726,18 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     return response
         return HttpResponse(status=404)
 
+    @action(detail=True, methods=["DELETE"], url_path="delete", url_name="delete")
+    def delete_step(self, request, pk=None):
+        """
+        Deletes the waiting Step in the pipeline
+        """
+        step = self.get_object()
+        if not step.removable:
+            raise BadRequest("Can only delete steps that are waiting in the pipeline.")
+        with transaction.atomic():
+            step.delete()
+        return Response("Step deleted.")
+
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """

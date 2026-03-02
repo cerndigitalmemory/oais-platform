@@ -127,6 +127,7 @@ class StepSerializer(serializers.ModelSerializer):
             "input_data",
             "input_step",
             "output_data",
+            "removable",
         ]
 
 
