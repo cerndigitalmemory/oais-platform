@@ -232,7 +232,7 @@ class Archive(models.Model):
             ).exists()
             is_aip = self.steps.filter(
                 step_type__has_aip=True,
-                status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
+                status__in=COMPLETED_STATUSES + [Status.OUTDATED],
             ).exists()
 
             if is_sip and is_aip:

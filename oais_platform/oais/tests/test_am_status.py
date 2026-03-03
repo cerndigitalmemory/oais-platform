@@ -92,6 +92,10 @@ class ArchivematicaStatusTests(APITestCase):
         aip_dependent_step2.refresh_from_db()
         self.assertEqual(aip_dependent_step.status, Status.OUTDATED)
         self.assertEqual(aip_dependent_step2.status, Status.OUTDATED)
+        output_data = json.loads(aip_dependent_step.output_data)
+        self.assertIn("outdated_at", output_data)
+        output_data2 = json.loads(aip_dependent_step2.output_data)
+        self.assertIn("outdated_at", output_data2)
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")

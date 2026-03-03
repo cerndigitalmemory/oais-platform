@@ -621,7 +621,11 @@ def outdate_aip_dependent_steps(archive):
         ],
         status__in=COMPLETED_STATUSES,
     )
-    steps.update(status=Status.OUTDATED)
+    for step in steps:
+        step.set_status(Status.OUTDATED)
+        output_data = json.loads(step.output_data) if step.output_data else {}
+        output_data["outdated_at"] = timezone.now().isoformat()
+        step.set_output_data(output_data)
     logger.info(
         f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
     )
