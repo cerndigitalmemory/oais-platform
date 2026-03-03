@@ -43,6 +43,75 @@ FILTER_TEST_CASES = [
         {"status": status.HTTP_200_OK, "size": 3},
     ),
     ({"access": "all"}, {"status": status.HTTP_400_BAD_REQUEST, "size": 0}),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "source": "test",
+                "step_filters": {
+                    "or": [{"name": StepName.HARVEST, "status": Status.COMPLETED}]
+                },
+            },
+        },
+        {"status": status.HTTP_200_OK, "size": 2},
+    ),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "step_filters": {
+                    "or": [
+                        {
+                            "and": [
+                                {"name": StepName.HARVEST, "status": Status.COMPLETED},
+                                {
+                                    "name": StepName.VALIDATION,
+                                    "status": Status.COMPLETED,
+                                    "exclude": True,
+                                },
+                            ]
+                        },
+                        {
+                            "name": StepName.EXTRACT_TITLE,
+                            "status": Status.COMPLETED,
+                            "last_step": True,
+                        },
+                    ]
+                }
+            },
+        },
+        {"status": status.HTTP_200_OK, "size": 1},
+    ),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "step_filters": {
+                    "or": [
+                        {
+                            "and": [
+                                {"name": StepName.HARVEST},
+                                {"name": StepName.VALIDATION},
+                                {"name": StepName.EXTRACT_TITLE, "exclude": True},
+                            ],
+                        },
+                        {"status": Status.COMPLETED},
+                    ]
+                }
+            },
+        },
+        {"status": status.HTTP_400_BAD_REQUEST},
+    ),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "source": "test",
+                "step_filters": {"or": [{"invalid_key": StepName.HARVEST}]},
+            },
+        },
+        {"status": status.HTTP_400_BAD_REQUEST},
+    ),
 ]
 
 
@@ -90,6 +159,33 @@ class ArchiveTests(APITestCase):
                 title=r[2],
             )
             self.public_archives.append(archive)
+
+    def create_steps(self):
+        Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.HARVEST,
+            status=Status.COMPLETED,
+        )
+        Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.VALIDATION,
+            status=Status.FAILED,
+        )
+        last_step = Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.EXTRACT_TITLE,
+            status=Status.COMPLETED,
+        )
+        self.private_archive.last_step = last_step
+        self.private_archive.save()
+
+        for p in self.public_archives:
+            Step.objects.create(
+                archive=p, step_name=StepName.HARVEST, status=Status.COMPLETED
+            )
+            last_step = Step.objects.create(
+                archive=p, step_name=StepName.VALIDATION, status=Status.COMPLETED
+            )
 
     def test_archive_list_public(self):
         url = reverse("archives-list")
@@ -179,10 +275,12 @@ class ArchiveTests(APITestCase):
 
     @parameterized.expand(FILTER_TEST_CASES)
     def test_archives_filtered(self, data, output):
+        self.create_steps()
         self._run_filter_test("archives-filter", "results", data, output)
 
     @parameterized.expand(FILTER_TEST_CASES)
     def test_archives_filtered_ids(self, data, output):
+        self.create_steps()
         self._run_filter_test("archives-filter-ids", "ids", data, output)
 
     def test_archive_details_requester(self):

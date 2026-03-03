@@ -109,7 +109,7 @@ from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
-    STEP_FILTER_COMBINATION_LIMIT,
+    STEP_FILTER_CONDITION_LIMIT,
 )
 
 
@@ -1452,7 +1452,7 @@ def get_app_config(request):
     return Response(
         {
             "max_file_size": FILE_UPLOAD_MAX_SIZE_BYTE,
-            "max_step_filter_combinations": STEP_FILTER_COMBINATION_LIMIT,
+            "max_step_filter_conditions": STEP_FILTER_CONDITION_LIMIT,
         }
     )
 

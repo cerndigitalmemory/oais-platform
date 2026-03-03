@@ -2,34 +2,32 @@ from django.db.models import Exists, OuterRef, Q
 
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.models import Step
-from oais_platform.settings import STEP_FILTER_COMBINATION_LIMIT
+from oais_platform.settings import STEP_FILTER_CONDITION_LIMIT
 
 
-def count_combines(group):
-    """
-    Recursively count total AND/OR groups in tree.
-    """
-    count = 0
-
+def count_conditions(group):
     if "and" in group:
-        count += 1
-        for item in group["and"]:
-            count += count_combines(item)
-
+        # Count all conditions within the AND group
+        return sum(count_conditions(item) for item in group["and"])
     elif "or" in group:
-        count += 1
-        for item in group["or"]:
-            count += count_combines(item)
-
-    return count
+        # Count all conditions within the OR group
+        return sum(count_conditions(item) for item in group["or"])
+    else:
+        return 1
 
 
 def validate_step_group(group):
-    total = count_combines(group)
-    if total > STEP_FILTER_COMBINATION_LIMIT:
+    total = count_conditions(group)
+    if total > STEP_FILTER_CONDITION_LIMIT:
         raise BadRequest(
-            f"Maximum {STEP_FILTER_COMBINATION_LIMIT} boolean combine groups allowed"
+            f"Maximum {STEP_FILTER_CONDITION_LIMIT} boolean combine groups allowed"
         )
+
+
+filters_map = {
+    "name": ["step_type__name"],
+    "status": ["status"],
+}
 
 
 def build_step_condition(condition):
@@ -38,27 +36,27 @@ def build_step_condition(condition):
     Returns a Q object ready to apply to Archive queryset.
     """
 
-    exclude = condition.get("exclude", False)
-    is_last_step = condition.get("last_step", False)
+    exclude = condition.pop("exclude", False)
+    is_last_step = condition.pop("last_step", False)
 
     if is_last_step:
         q = Q()
 
-        if "name" in condition:
-            q &= Q(last_step__step_type__name=condition["name"])
-
-        if "status" in condition:
-            q &= Q(last_step__status=condition["status"])
+        for key, value in condition.items():
+            if key not in filters_map:
+                raise KeyError(f"Invalid filter key: {key}")
+            for query_key in filters_map[key]:
+                q &= Q(**{f"last_step__{query_key}": value})
 
         return ~q if exclude else q
 
     subquery = Step.objects.filter(archive=OuterRef("pk"))
 
-    if "name" in condition:
-        subquery = subquery.filter(step_type__name=condition["name"])
-
-    if "status" in condition:
-        subquery = subquery.filter(status=condition["status"])
+    for key, value in condition.items():
+        if key not in filters_map:
+            raise KeyError(f"Invalid filter key: {key}")
+        for query_key in filters_map[key]:
+            subquery = subquery.filter(**{query_key: value})
 
     exists_q = Q(Exists(subquery))
 

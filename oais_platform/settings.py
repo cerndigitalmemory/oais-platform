@@ -418,7 +418,7 @@ PIPELINE_SIZE_LIMIT = 10
 ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeVhfvow=")
 
 # Step filtering limits
-STEP_FILTER_COMBINATION_LIMIT = 2
+STEP_FILTER_CONDITION_LIMIT = 3
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
