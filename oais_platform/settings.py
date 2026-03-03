@@ -320,6 +320,7 @@ sentry_sdk.init(
     # SHA as release, however you may want to set
     # something more human-readable.
     release=f"oais-platform@{APP_VERSION}",
+    environment=environ.get("SENTRY_ENVIRONMENT", "development"),
 )
 
 # Expire session after 12 hours - CERN Security requirement
