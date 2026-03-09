@@ -1,20 +1,13 @@
 import errno
-from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 from django.apps import apps
 from django.utils import timezone
-from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.settings import (
-    CTA_BASE_PATH,
-    FTS_SOURCE_BASE_PATH,
-    FTS_WAIT_IN_HOURS,
-    FTS_WAIT_LIMIT_IN_WEEKS,
-)
+from oais_platform.settings import CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
 
 
 class MockedGError(Exception):
@@ -43,17 +36,6 @@ class PushToCTATests(APITestCase):
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
 
-        self.wait_limit_archive = Archive.objects.create(path_to_aip=path_to_aip)
-        self.wait_limit_step = Step.objects.create(
-            archive=self.wait_limit_archive,
-            step_name=StepName.PUSH_TO_CTA,
-            start_date=timezone.now() - timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS),
-        )
-
-        self.schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=FTS_WAIT_IN_HOURS, period=IntervalSchedule.HOURS
-        )
-
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
         self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
 
@@ -79,7 +61,6 @@ class PushToCTATests(APITestCase):
 
     def test_push_to_cta_success(self, mock_gfal2):
         self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
@@ -90,80 +71,16 @@ class PushToCTATests(APITestCase):
             True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertTrue(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
+        self.assertEqual(self.step.get_output_data()["fts_job_id"], "test_job_id")
 
     def test_push_to_cta_exception(self, mock_gfal2):
         self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.side_effect = Exception()
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 2)
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertIsNotNone(self.step.finish_date)
-        self.assertFalse(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
-
-    def test_push_to_cta_wait(self, mock_gfal2):
-        self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.number_of_transfers.return_value = (
-            self.step.step_type.concurrency_limit + 1
-        )
-        push_to_cta.apply(args=[self.archive.id, self.step.id])
-        self.assertEqual(self.fts.number_of_transfers.call_count, 1)
-        self.assertEqual(self.fts.push_to_cta.call_count, 0)
-        self.assertTrue(
-            PeriodicTask.objects.filter(name=f"Push to CTA: {self.step.id}")
-        )
-
-    def test_push_to_cta_retry_after_wait(self, mock_gfal2):
-        self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.number_of_transfers.return_value = 0
-        self.fts.push_to_cta.return_value = "test_job_id"
-        PeriodicTask.objects.create(
-            interval=self.schedule,
-            name=f"Push to CTA: {self.step.id}",
-            task="push_to_cta",
-        )
-        push_to_cta.apply(args=[self.archive.id, self.step.id])
-        self.step.refresh_from_db()
-        self.assertEqual(self.fts.push_to_cta.call_count, 1)
-        self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertFalse(
-            PeriodicTask.objects.filter(name=f"Push to CTA: {self.step.id}").exists()
-        )
-        self.assertTrue(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
-
-    def test_push_to_cta_wait_limit(self, mock_gfal2):
-        self._setup_gfal2_mocks(mock_gfal2)
-        PeriodicTask.objects.create(
-            interval=self.schedule,
-            name=f"Push to CTA: {self.step.id}",
-            task="push_to_cta",
-        )
-        push_to_cta.apply(
-            args=[self.wait_limit_archive.id, self.wait_limit_step.id],
-        )
-        self.wait_limit_step.refresh_from_db()
-        self.assertEqual(self.wait_limit_step.status, Status.FAILED)
-        self.assertIsNotNone(self.wait_limit_step.finish_date)
-        self.assertEqual(self.fts.push_to_cta.call_count, 0)
-        self.assertFalse(
-            PeriodicTask.objects.filter(
-                name=f"Push to CTA: {self.wait_limit_step.id}"
-            ).exists()
-        )
 
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
@@ -178,11 +95,6 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.fts.push_to_cta.call_count, 0)
         self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertIsNotNone(self.step.finish_date)
-        self.assertFalse(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
 
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     def test_push_to_cta_file_exists_on_tape_different_size(
@@ -190,7 +102,6 @@ class PushToCTATests(APITestCase):
     ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
         mock_stat.return_value.st_size = 100
-        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
@@ -201,11 +112,6 @@ class PushToCTATests(APITestCase):
             True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertTrue(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
 
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
@@ -215,7 +121,6 @@ class PushToCTATests(APITestCase):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
         mock_stat.return_value.st_size = 100
         mock_checksum.return_value = "mismatching-checksum"
-        self.fts.number_of_transfers.return_value = 0
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
@@ -226,8 +131,3 @@ class PushToCTATests(APITestCase):
             True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertTrue(
-            PeriodicTask.objects.filter(
-                name=f"FTS job status for step: {self.step.id}"
-            ).exists()
-        )
