@@ -167,7 +167,7 @@ class PipelineTests(APITestCase):
             ),
             (
                 {
-                    "pipeline": [StepName.PUSH_TO_CTA],
+                    "pipeline": [StepName.INVENIO_RDM_PUSH],
                     "prev_step": StepName.ARCHIVE,
                 },
                 status.HTTP_200_OK,

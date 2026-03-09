@@ -119,6 +119,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "archive_failed_count_reset",
         "schedule": crontab(hour="*/2", minute=00),
     },
+    "cta-manager": {
+        "task": "cta_manager",
+        "schedule": crontab(minute="*/10"),
+        "options": {"expires": 600},
+    },
 }
 
 ## Authentication

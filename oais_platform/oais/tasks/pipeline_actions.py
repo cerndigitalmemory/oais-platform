@@ -68,6 +68,9 @@ def run_step(step, archive_id, return_signature=False):
         )
         return step, None
 
+    if step.step_type.name == StepName.PUSH_TO_CTA:
+        return step, None
+
     res = dispatch_task(step.step_type, archive_id, step.id, return_signature)
 
     return step, res

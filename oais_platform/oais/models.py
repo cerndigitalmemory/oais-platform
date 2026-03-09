@@ -500,6 +500,12 @@ class Step(models.Model):
         self.output_data = json.dumps(data)
         self.save()
 
+    def get_input_data(self):
+        return json.loads(self.input_data)
+
+    def get_output_data(self):
+        return json.loads(self.output_data)
+
     def set_finish_date(self):
         self.finish_date = timezone.now()
         self.save()
