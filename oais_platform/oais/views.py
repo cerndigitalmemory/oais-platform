@@ -16,7 +16,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, When
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -479,7 +479,17 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns all Steps of an identified Archive
         """
         archive = self.get_object()
-        steps = archive.steps.all().order_by("start_date", "create_date")
+        pipeline_ids = archive.pipeline_steps or []
+
+        steps = archive.steps.annotate(
+            in_pipeline=Case(
+                When(
+                    id__in=pipeline_ids, then=1
+                ),  # Deprioritize steps that are in the pipeline
+                default=0,
+                output_field=IntegerField(),
+            )
+        ).order_by("in_pipeline", "start_date", "create_date")
 
         serializer = StepSerializer(steps, many=True)
 

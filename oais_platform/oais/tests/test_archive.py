@@ -12,6 +12,7 @@ from oais_platform.oais.models import (
     ArchiveState,
     Collection,
     Resource,
+    Status,
     Step,
     StepName,
     StepType,
@@ -234,11 +235,26 @@ class ArchiveTests(APITestCase):
         self.assertEqual(len(response.data), 0)
 
         self.step1 = Step.objects.create(
-            archive=self.private_archive, step_name=StepName.VALIDATION
+            archive=self.private_archive,
+            step_name=StepName.VALIDATION,
+            status=Status.COMPLETED,
+            start_date="2024-01-01T00:00:00Z",
         )
         self.step2 = Step.objects.create(
-            archive=self.private_archive, step_name=StepName.ARCHIVE
+            archive=self.private_archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.FAILED,
+            start_date="2024-01-01T00:01:00Z",
         )
+        self.step3 = Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.NOTIFY_SOURCE,
+            status=Status.WAITING,
+        )
+        self.private_archive.last_step = self.step2
+        self.private_archive.last_completed_step = self.step1
+        self.private_archive.pipeline_steps = [self.step3.id]
+        self.private_archive.save()
 
         response = self.client.get(
             url,
@@ -246,7 +262,31 @@ class ArchiveTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data), 3)
+        self.assertEqual(response.data[0]["id"], self.step1.id)
+        self.assertEqual(response.data[1]["id"], self.step2.id)
+        self.assertEqual(response.data[2]["id"], self.step3.id)
+
+        # Create waiting retry step
+        self.step4 = Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.WAITING,
+        )
+        self.private_archive.last_step = self.step4
+        self.private_archive.save()
+
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 4)
+        self.assertEqual(response.data[0]["id"], self.step1.id)
+        self.assertEqual(response.data[1]["id"], self.step2.id)
+        self.assertEqual(response.data[2]["id"], self.step4.id)
+        self.assertEqual(response.data[3]["id"], self.step3.id)
 
     def test_record_check_none(self):
         self.client.force_authenticate(user=self.requester)
