@@ -33,8 +33,7 @@ class PushToCTATests(APITestCase):
             step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now(),
         )
-        self.step.step_type.concurrency_limit = 5
-        self.step.step_type.save()
+        self.step.set_input_data({"test": "test"})
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
         self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
@@ -73,14 +72,19 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
         self.assertEqual(self.step.get_output_data()["fts_job_id"], "test_job_id")
 
-    def test_push_to_cta_exception(self, mock_gfal2):
+    @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
+    def test_push_to_cta_exception(self, mock_retry_step, mock_gfal2):
         self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.push_to_cta.side_effect = Exception()
+        self.fts.push_to_cta.side_effect = Exception("FTS Service Down")
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
-        self.assertEqual(self.fts.push_to_cta.call_count, 2)
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertIsNotNone(self.step.finish_date)
+        output_data = self.step.get_output_data()
+        self.assertTrue(output_data["retrying"])
+        self.assertEqual(output_data["msg"], "FTS Service Down")
+        mock_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
@@ -119,7 +123,7 @@ class PushToCTATests(APITestCase):
         self, mock_checksum, mock_stat, mock_gfal2
     ):
         self._setup_gfal2_mocks(mock_gfal2, error=False)
-        mock_stat.return_value.st_size = 100
+        mock_stat.return_value.st_size = 123456
         mock_checksum.return_value = "mismatching-checksum"
         self.fts.push_to_cta.return_value = "test_job_id"
         push_to_cta.apply(args=[self.archive.id, self.step.id])

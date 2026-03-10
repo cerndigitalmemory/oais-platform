@@ -20,7 +20,6 @@ from oais_platform.settings import (
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
-    FTS_WAIT_IN_HOURS,
     FTS_WAIT_LIMIT_IN_WEEKS,
 )
 
@@ -51,14 +50,7 @@ def cta_manager(self):
     _trigger_new_transfers(amount)
 
 
-@shared_task(
-    name="push_to_cta",
-    bind=True,
-    ignore_result=True,
-    autoretry_for=(Exception,),
-    max_retries=1,
-    retry_kwargs={"countdown": FTS_WAIT_IN_HOURS * 60 * 60},
-)
+@shared_task(name="push_to_cta", bind=True, ignore_result=True)
 def push_to_cta(self, archive_id, step_id):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
@@ -125,11 +117,11 @@ def push_to_cta(self, archive_id, step_id):
             )
 
     except Exception as e:
-        if self.request.retries >= self.max_retries:
-            set_and_return_error(step, str(e))
-            return 1
-        logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
-        raise e
+        error = {"msg": str(e)}
+        input_data = step.get_input_data()
+        error["retry_count"] = _get_retry_count(step.input_step, input_data)
+        error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
+        set_and_return_error(step, error)
 
 
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
@@ -222,7 +214,6 @@ def _trigger_new_transfers(amount):
 
 
 def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path):
-    # logger.info(f"FTS job status for Step {step_id} returned: FINISHED.")
     cta_artifact = {
         "artifact_name": "CTA",
         "artifact_localpath": cta_file_path,
@@ -243,36 +234,39 @@ def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path)
 
 
 def _handle_failed_fts_job(step, status):
-    # logger.info(f"FTS job status for Step {step_id} returned: FAILED.")
     result = {"FTS status": status}
     input_data = step.get_input_data()
     output_data = step.get_output_data()
 
-    if output_data["artifact"]:
+    if output_data.get("artifact"):
         result["artifact"] = output_data["artifact"]
 
-    retry_count = 0
-    if step.input_step and step.input_step.step_type.name == StepName.PUSH_TO_CTA:
-        retry_count = input_data.get("retry_count", -1) + 1
-    result["retry_count"] = retry_count
-
-    if result["retry_count"] < FTS_MAX_RETRY_COUNT:
-        logger.info(
-            f"Retrying pushing archive {step.archive.id} to CTA (attempt {result['retry_count'] + 1})"
-        )
-        result["retrying"] = True
-        # TODO this does not seem to work as intended atm
-        create_retry_step.apply_async(
-            args=(step.archive.id, None, True, StepName.PUSH_TO_CTA),
-            eta=timezone.now() + timedelta(hours=1),
-        )
-    else:
-        logger.info(
-            f"Quitting retrying pushing archive {step.archive.id} to CTA after {result['retry_count']} attempts"
-        )
-        result["retrying"] = False
+    result["retry_count"] = _get_retry_count(step.input_step, input_data)
+    result["retrying"] = _retry_push_to_cta(step.archive.id, result["retry_count"])
 
     set_and_return_error(step, result)
+
+
+def _get_retry_count(input_step, input_data):
+    if input_step and input_step.step_type.name == StepName.PUSH_TO_CTA:
+        return input_data.get("retry_count", -1) + 1
+    return 0
+
+
+def _retry_push_to_cta(archive_id, retry_count):
+    if retry_count < FTS_MAX_RETRY_COUNT:
+        logger.info(
+            f"Retrying pushing archive {archive_id} to CTA (attempt {retry_count + 1})"
+        )
+        create_retry_step.apply_async(
+            args=(archive_id, None, True, StepName.PUSH_TO_CTA),
+            eta=timezone.now() + timedelta(hours=1),
+        )
+        return True
+    logger.info(
+        f"Quitting retrying pushing archive {archive_id} to CTA after {retry_count} attempts"
+    )
+    return False
 
 
 def _verify_file(aip_path, cta_filename):
