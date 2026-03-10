@@ -70,7 +70,7 @@ class FTS:
         return fts3.get_job_status(self.context, job_id, list_files=True)
 
     def job_statuses(self, job_ids):
-        result = fts3.get_jobs_statuses(self.context, job_ids)
+        result = fts3.get_jobs_statuses(self.context, job_ids, list_files=True)
         return [result] if isinstance(result, dict) else result
 
     def number_of_transfers(self):
