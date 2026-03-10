@@ -94,7 +94,7 @@ class CTAManagerTests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertIn(
-            "Retry limit reached", self.step.get_output_data().get("errormsg", "")
+            "Wait limit reached", self.step.get_output_data().get("errormsg", "")
         )
 
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
