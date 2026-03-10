@@ -63,6 +63,7 @@ def push_to_cta(self, archive_id, step_id):
 
     if step.status == Status.IN_PROGRESS:
         logger.warning(f"Step {step.id} already in progress")
+        return
 
     if not archive.path_to_aip:
         set_and_return_error(
@@ -159,12 +160,10 @@ def _check_in_progress_jobs(self):
         else:
             set_and_return_error(step, "Step has no fts_job_id")
 
-    print(f"Active jobs: {list(steps_by_job_id.keys())}")
     try:
         logger.info("Checking statuses of ongoing transfers...")
         fts = apps.get_app_config("oais").get_fts_client()
         current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
-        print(f"Current jobs: {current_jobs}")
     except Exception as e:
         logger.error(f"Failed to check ongoing FTS transfers: {e}")
         raise e
