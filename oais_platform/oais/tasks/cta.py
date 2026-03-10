@@ -200,10 +200,10 @@ def _trigger_new_transfers(amount):
         if step.id != step.archive.last_step_id:
             continue
 
-        # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
+        # Fail task after FTS_WAIT_LIMIT_IN_WEEKS
         if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
-            logger.info(f"Retry limit reached for step {step.id}, setting it to FAILED")
-            set_and_return_error(step, {"status": 1, "errormsg": "Retry limit reached"})
+            logger.info(f"Wait limit reached for step {step.id}, setting it to FAILED")
+            set_and_return_error(step, {"status": 1, "errormsg": "Wait limit reached"})
             continue
 
         push_to_cta.delay(step.archive.id, step.id)
