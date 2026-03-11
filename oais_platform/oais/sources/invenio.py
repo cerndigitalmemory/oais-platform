@@ -13,7 +13,7 @@ from oais_platform.oais.exceptions import (
     RetryableException,
     ServiceUnavailable,
 )
-from oais_platform.oais.models import FilterType, Status, StepName
+from oais_platform.oais.models import COMPLETED_STATUSES, FilterType, Status, StepName
 from oais_platform.oais.sources.abstract_source import AbstractSource
 
 
@@ -161,7 +161,10 @@ class Invenio(AbstractSource):
 
         archive_time = (
             archive.steps.all()
-            .filter(step_name=StepName.ARCHIVE, status=Status.COMPLETED)
+            .filter(
+                step_name=StepName.ARCHIVE,
+                status__in=COMPLETED_STATUSES,
+            )
             .order_by("-start_date")
             .first()
             .start_date

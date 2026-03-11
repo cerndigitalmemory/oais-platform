@@ -38,6 +38,19 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_completed(
         self, periodic_tasks, get_unit_status, get_package_details, get_jobs
     ):
+        aip_dependent_step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.PUSH_TO_CTA,
+            status=Status.COMPLETED,
+            finish_date=timezone.now(),
+        )
+        aip_dependent_step2 = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.INVENIO_RDM_PUSH,
+            status=Status.COMPLETED_WITH_WARNINGS,
+            finish_date=timezone.now(),
+        )
+
         get_jobs.return_value = [
             {
                 "name": "Normalize for preservation",
@@ -75,6 +88,14 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(step_output.get("retry", None))
         self.assertIsNone(step_output.get("errormsg", None))
         self.assertTrue(periodic_tasks.delete.called)
+        aip_dependent_step.refresh_from_db()
+        aip_dependent_step2.refresh_from_db()
+        self.assertEqual(aip_dependent_step.status, Status.OUTDATED)
+        self.assertEqual(aip_dependent_step2.status, Status.OUTDATED)
+        output_data = json.loads(aip_dependent_step.output_data)
+        self.assertIn("outdated_at", output_data)
+        output_data2 = json.loads(aip_dependent_step2.output_data)
+        self.assertIn("outdated_at", output_data2)
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")

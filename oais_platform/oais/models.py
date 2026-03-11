@@ -63,6 +63,7 @@ class Status(models.IntegerChoices):
     WAITING = 7, "WAITING"
     COMPLETED_WITH_WARNINGS = 8, "COMPLETED_WITH_WARNINGS"
     TIMED_OUT = 9, "TIMED_OUT"
+    OUTDATED = 10, "OUTDATED"
 
 
 RETRY_CONTINUE_STATUSES = [
@@ -231,7 +232,7 @@ class Archive(models.Model):
             ).exists()
             is_aip = self.steps.filter(
                 step_type__has_aip=True,
-                status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS],
+                status__in=COMPLETED_STATUSES + [Status.OUTDATED],
             ).exists()
 
             if is_sip and is_aip:
