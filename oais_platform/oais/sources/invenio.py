@@ -6,6 +6,8 @@ import os
 import urllib.parse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from oais_platform.oais.exceptions import (
     ConfigFileUnavailable,
@@ -65,8 +67,20 @@ class Invenio(AbstractSource):
         url = f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
         if sort:
             url += f"&sort={sort}"
+
+        retry_strategy = Retry(
+            total=1,
+            status_forcelist=[502, 503, 504, 429, 408],
+            backoff_factor=3,
+            allowed_methods=["GET"],
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("https://", adapter)
+
         try:
-            req = requests.get(url, headers=self.headers)
+            req = session.get(url, headers=self.headers)
         except Exception as e:
             logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
@@ -92,8 +106,19 @@ class Invenio(AbstractSource):
     def search_by_id(self, recid):
         result = []
 
+        retry_strategy = Retry(
+            total=1,
+            status_forcelist=[502, 503, 504, 429, 408],
+            backoff_factor=3,
+            allowed_methods=["GET"],
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("https://", adapter)
+
         try:
-            req = requests.get(self.get_record_url(recid), headers=self.headers)
+            req = session.get(self.get_record_url(recid), headers=self.headers)
         except Exception as e:
             logging.exception(f"Error while performing search: {str(e)}")
             raise ServiceUnavailable("Cannot perform search")
@@ -219,11 +244,14 @@ class Invenio(AbstractSource):
     def fetch_records_in_chunks(self, start, end, size, filter_type):
         result = self.get_records_in_range(start, end, 1, 1, filter_type)
         total = result["total_num_hits"]
+        logging.info(
+            f"Total records to fetch for {start.strftime('%Y-%m-%dT%H:%M:%S') if start else '*'}–{end.strftime('%Y-%m-%dT%H:%M:%S')}: {total}."
+        )
         if total <= 0:
             yield [], end
         elif total <= self.max_results:
             logging.info(
-                f"Fetching records for {start.strftime('%Y-%m-%dT%H:%M:%S') if start else '*'}–{end.strftime('%Y-%m-%dT%H:%M:%S')} with {total} results."
+                f"Total less than max results ({self.max_results}), fetching records..."
             )
             initial_total = total
             current_total = 0
@@ -258,6 +286,9 @@ class Invenio(AbstractSource):
                     f"Cannot get consistent ids for {start}–{end}..."
                 )
         else:
+            logging.info(
+                f"Total exceeds max results ({self.max_results}), splitting the time range."
+            )
             result = self.get_records_in_range(
                 start, end, self.max_results, 1, filter_type
             )
