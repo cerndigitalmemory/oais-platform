@@ -40,6 +40,7 @@ from oais_platform.oais.exceptions import (
     InternalServerError,
     PayloadTooLarge,
 )
+from oais_platform.oais.filters import build_step_group, validate_step_group
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
     FAILURE_STATUSES,
@@ -108,6 +109,7 @@ from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
+    STEP_FILTER_CONDITION_LIMIT,
 )
 
 
@@ -337,8 +339,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "source": ["source"],
         "tag": ["archive_collections__id"],
         "exclude_tag": ["archive_collections__id"],
-        "step_name": ["last_step__step_type__name"],
-        "step_status": ["last_step__status"],
         "query": ["title__icontains", "recid__icontains"],
     }
 
@@ -372,6 +372,8 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns an Archive list based on the given filters set
         """
         result = self.get_queryset()
+        step_filters = filters.pop("step_filters", [])
+
         try:
             query = Q()
             exclude_query = Q()
@@ -387,11 +389,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 exclude_query &= exclude_subquery
                 query &= subquery
 
-            return (
-                result.filter(query)
-                .exclude(exclude_query)
-                .order_by("-last_modification_timestamp")
-            )
+            result = result.filter(query).exclude(exclude_query)
+
+            if step_filters:
+                validate_step_group(step_filters)
+                step_q = build_step_group(step_filters)
+                result = result.filter(step_q)
+
+            return result.order_by("-last_modification_timestamp")
         except KeyError:
             raise BadRequest("Invalid filter")
         except Exception:
@@ -1447,6 +1452,7 @@ def get_app_config(request):
     return Response(
         {
             "max_file_size": FILE_UPLOAD_MAX_SIZE_BYTE,
+            "max_step_filter_conditions": STEP_FILTER_CONDITION_LIMIT,
         }
     )
 

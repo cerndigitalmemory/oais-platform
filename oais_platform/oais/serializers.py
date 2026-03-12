@@ -404,6 +404,9 @@ class ConfigurationSerializer(serializers.Serializer):
     max_file_size = serializers.IntegerField(
         help_text="Maximum allowed file size for uploads (in bytes)"
     )
+    max_step_filter_combinations = serializers.IntegerField(
+        help_text="Maximum allowed boolean combine groups in step filters"
+    )
 
 
 class LogoutSerializer(serializers.Serializer):
