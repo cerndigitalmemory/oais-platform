@@ -500,11 +500,19 @@ class Step(models.Model):
         self.output_data = json.dumps(data)
         self.save()
 
+    def _load_json(self, data):
+        if not data:
+            return
+        try:
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Failed to load data for Step {self.id}: {e}")
+
     def get_input_data(self):
-        return json.loads(self.input_data)
+        return self._load_json(self.input_data)
 
     def get_output_data(self):
-        return json.loads(self.output_data)
+        return self._load_json(self.output_data)
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
