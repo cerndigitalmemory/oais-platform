@@ -240,6 +240,7 @@ class CollectionSerializer(serializers.ModelSerializer):
             "creator",
             "timestamp",
             "last_modification_date",
+            "internal",
             "archives_count",
             "archives_summary",
             "archives_sip_count",
