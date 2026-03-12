@@ -32,6 +32,7 @@ class PushToCTATests(APITestCase):
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now(),
+            status=Status.WAITING,
         )
         self.step.set_input_data({"test": "test"})
 
@@ -83,7 +84,7 @@ class PushToCTATests(APITestCase):
         self.assertIsNotNone(self.step.finish_date)
         output_data = self.step.get_output_data()
         self.assertTrue(output_data["retrying"])
-        self.assertEqual(output_data["msg"], "FTS Service Down")
+        self.assertEqual(output_data["errormsg"], "FTS Service Down")
         mock_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.cta.Path.stat")

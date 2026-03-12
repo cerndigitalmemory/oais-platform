@@ -7,7 +7,7 @@ import gfal2
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.apps import apps
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from oais_utils.validate import compute_hash
 
@@ -35,11 +35,12 @@ def cta_manager(self):
      - create tasks to submit new jobs
     """
     logger.info("Checking ongoing FTS transfers...")
-    step_type = StepType.objects.filter(name=StepName.PUSH_TO_CTA).first()
+    step_type = StepType.objects.get(name=StepName.PUSH_TO_CTA)
 
     try:
         current_transfers_count = _check_in_progress_jobs(self)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to check ongoing FTS transfers: {e}")
         return
 
     if current_transfers_count >= step_type.concurrency_limit:
@@ -61,8 +62,10 @@ def push_to_cta(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
 
-    if step.status == Status.IN_PROGRESS:
-        logger.warning(f"Step {step.id} already in progress")
+    if step.status != Status.WAITING:
+        logger.warning(
+            f"Step {step.id} is in status {step.status}, not triggering a transfer"
+        )
         return
 
     if not archive.path_to_aip:
@@ -118,7 +121,7 @@ def push_to_cta(self, archive_id, step_id):
             )
 
     except Exception as e:
-        error = {"msg": str(e)}
+        error = {"errormsg": str(e)}
         input_data = step.get_input_data()
         error["retry_count"] = _get_retry_count(step.input_step, input_data)
         error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
@@ -160,13 +163,9 @@ def _check_in_progress_jobs(self):
         else:
             set_and_return_error(step, "Step has no fts_job_id")
 
-    try:
-        logger.info("Checking statuses of ongoing transfers...")
-        fts = apps.get_app_config("oais").get_fts_client()
-        current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
-    except Exception as e:
-        logger.error(f"Failed to check ongoing FTS transfers: {e}")
-        raise e
+    logger.info("Checking statuses of ongoing transfers...")
+    fts = apps.get_app_config("oais").get_fts_client()
+    current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
 
     for job in current_jobs:
         step = steps_by_job_id.get(job["job_id"])
@@ -185,21 +184,20 @@ def _check_in_progress_jobs(self):
 
 
 def _trigger_new_transfers(amount):
-    waiting_steps = (
-        Step.objects.filter(step_name=StepName.PUSH_TO_CTA, status=Status.WAITING)
-        .order_by("create_date")
-        .all()[:amount]
-    )
+    # Fetch waiting push_to_cta steps for which the archive doesn't have previous steps in the pipeline
+    waiting_steps = Step.objects.filter(
+        step_name=StepName.PUSH_TO_CTA,
+        status=Status.WAITING,
+        archive__last_step_id=models.F("pk"),
+    ).order_by("create_date")[:amount]
+
     if not waiting_steps:
+        logger.info("No valid waiting push to CTA steps found.")
         return
 
     logger.info(f"Attempting to submit {len(waiting_steps)} new transfers")
     new_transfer_count = 0
     for step in waiting_steps:
-        # Check whether there are previous steps in the pipeline waiting
-        if step.id != step.archive.last_step_id:
-            continue
-
         # Fail task after FTS_WAIT_LIMIT_IN_WEEKS
         if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
             logger.info(f"Wait limit reached for step {step.id}, setting it to FAILED")
