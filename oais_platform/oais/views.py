@@ -761,26 +761,47 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     serializer_class = CollectionSerializer
     permission_classes = [TagPermission]
 
+    filters_map = {
+        "query": ["title__icontains"],
+        "username": ["creator__username"],
+    }
+
     def get_queryset(self):
         page_size = self.request.GET.get("size", None)
         if page_size is not None:
             self.pagination_class.page_size = page_size
         internal = self.request.GET.get("internal")
+        qs = super().get_queryset()
+        for key, value in self.filters_map.items():
+            if key in self.request.GET:
+                filter_kwargs = {
+                    f"{query_arg}": self.request.GET[key] for query_arg in value
+                }
+                qs = qs.filter(**filter_kwargs)
         if internal == "only":
-            return filter_collections(
-                super().get_queryset(), self.request.user, internal=True
-            )
+            return filter_collections(qs, self.request.user, internal=True)
         elif internal == "false":
-            return filter_collections(
-                super().get_queryset(), self.request.user, internal=False
-            )
+            return filter_collections(qs, self.request.user, internal=False)
         else:
-            return filter_collections(super().get_queryset(), self.request.user)
+            return filter_collections(qs, self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = CollectionSerializer(instance)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="usernames", url_name="usernames")
+    def get_usernames(self, request):
+        """
+        Returns all usernames for visible tags
+        """
+        qs = filter_collections(Collection.objects.all(), self.request.user)
+        usernames = (
+            qs.values_list("creator__username", flat=True)
+            .distinct()
+            .order_by("creator__username")
+        )
+        return Response(usernames)
 
     @action(detail=False, methods=["POST"], url_path="create", url_name="create")
     def create_tag(self, request):
