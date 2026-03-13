@@ -1,2 +1,0 @@
-click==8.2.1
-gfal2-python==1.13.0
