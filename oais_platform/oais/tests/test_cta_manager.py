@@ -63,6 +63,7 @@ class CTAManagerTests(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         mock_retry.assert_called_once()
+        self.assertTrue(self.step.get_output_data()["retrying"])
 
     @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
     def test_cta_manager_concurrency_limit(self, mock_push_to_cta):
@@ -81,26 +82,6 @@ class CTAManagerTests(APITestCase):
 
         cta_manager.apply()
         self.assertEqual(mock_push_to_cta.call_count, 2)
-
-    @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
-    def test_cta_manager_retry(self, mock_retry_task):
-        self.step.status = Status.IN_PROGRESS
-        self.step.set_output_data({"fts_job_id": "job_id"})
-        self.step.save()
-
-        self.fts.job_statuses.return_value = [
-            {
-                "job_id": "job_id",
-                "job_state": "FAILED",
-            }
-        ]
-
-        cta_manager.apply()
-
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
-        mock_retry_task.assert_called_once()
-        self.assertTrue(self.step.get_output_data()["retrying"])
 
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     def test_cta_manager_max_retry_count(self, mock_retry_task):
