@@ -66,11 +66,9 @@ class FTS:
         submitted_job = fts3.submit(job=job, context=self.context)
         return submitted_job
 
-    def job_status(self, job_id):
-        return fts3.get_job_status(self.context, job_id, list_files=True)
-
-    def number_of_transfers(self):
-        return len(fts3.list_jobs(self.context, user_dn=self.user_dn))
+    def job_statuses(self, job_ids):
+        result = fts3.get_jobs_statuses(self.context, job_ids, list_files=True)
+        return [result] if isinstance(result, dict) else result
 
     def delegate(self):
         logging.info("Delegating certificate")

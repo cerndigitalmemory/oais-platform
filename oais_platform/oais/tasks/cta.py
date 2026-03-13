@@ -1,5 +1,4 @@
 import errno
-import json
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -8,74 +7,77 @@ import gfal2
 from celery import shared_task, states
 from celery.utils.log import get_task_logger
 from django.apps import apps
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
-from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from oais_utils.validate import compute_hash
 
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
-from oais_platform.oais.tasks.utils import (
-    get_interval_schedule,
-    remove_periodic_task_if_exists,
-    remove_periodic_task_on_failure,
-    set_and_return_error,
-)
+from oais_platform.oais.tasks.utils import set_and_return_error
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
-    FTS_WAIT_IN_HOURS,
-    FTS_WAIT_LIMIT_IN_WEEKS,
 )
 
 logger = get_task_logger(__name__)
 
 
-@shared_task(
-    name="push_to_cta",
-    bind=True,
-    ignore_result=True,
-    autoretry_for=(Exception,),
-    max_retries=1,
-    retry_kwargs={"countdown": FTS_WAIT_IN_HOURS * 60 * 60},
-)
+@shared_task(name="cta_manager", bind=True, ignore_result=True)
+def cta_manager(self):
+    """
+    Manage the tasks needed for pushing archives to CTA:
+     - check the number of transfers currently in progress
+     - create tasks to check the statuses of finished FTS jobs
+     - create tasks to submit new jobs
+    """
+    logger.info("Checking ongoing FTS transfers...")
+    step_type = StepType.objects.get(name=StepName.PUSH_TO_CTA)
+
+    try:
+        current_transfers_count = _check_in_progress_jobs(self)
+    except Exception as e:
+        logger.error(f"Failed to check ongoing FTS transfers: {e}")
+        return
+
+    if current_transfers_count >= step_type.concurrency_limit:
+        logger.info("Maximum number of transfers currently in progress.")
+        return
+
+    amount = step_type.concurrency_limit - current_transfers_count
+    _trigger_new_transfers(amount)
+
+
+@shared_task(name="push_to_cta", bind=True, ignore_result=True)
 def push_to_cta(self, archive_id, step_id):
     """
     Push the AIP of the given Archive to CTA, preparing the FTS Job,
     locations etc, then saving the details of the operation as the output
-    artifact. Once done, set up another periodic task to check on
-    the status of the transfer.
+    artifact.
     """
     logger.info(f"Pushing Archive {archive_id} to CTA")
-
-    task_name = f"Push to CTA: {step_id}"
-
-    with transaction.atomic():
-        step = Step.objects.select_for_update().get(pk=step_id)
-        if step.status in [Status.IN_PROGRESS, Status.COMPLETED]:
-            logger.info(f"Step {step_id} is already in progress or completed")
-            remove_periodic_task_if_exists(task_name)
-            return
-        step.set_status(Status.IN_PROGRESS)
-        step.set_task(self.request.id)
-
     archive = Archive.objects.get(pk=archive_id)
+    step = Step.objects.get(pk=step_id)
+
+    if step.status != Status.WAITING:
+        logger.warning(
+            f"Step {step.id} is in status {step.status}, not triggering a transfer"
+        )
+        return
+
     if not archive.path_to_aip:
-        remove_periodic_task_if_exists(task_name)
         set_and_return_error(
             step,
             {"status": 1, "errormsg": "AIP path not found for the given archive."},
         )
         return
 
-    cta_folder_name = _get_cta_path(archive)
+    cta_file_path = _get_cta_path(archive)
 
     try:
-        if _verify_file(archive.path_to_aip, cta_folder_name):
-            remove_periodic_task_if_exists(task_name)
+        if _verify_file(archive.path_to_aip, cta_file_path):
             finalize(
                 self=self,
                 current_status=states.SUCCESS,
@@ -95,91 +97,34 @@ def push_to_cta(self, archive_id, step_id):
         logger.warning(f"Error while verifing file on tape: {e}")
         overwrite = False
 
-    # Stop retrying after FTS_WAIT_LIMIT_IN_WEEKS
-    if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
-        logger.info(f"Retry limit reached for step {step_id}, setting it to FAILED")
-        remove_periodic_task_on_failure(
-            task_name, step, {"status": 1, "errormsg": "Retry limit reached"}
-        )
-        return
-
-    try:
-        submitted_job = _submit_fts_job(
-            archive, step, cta_folder_name, overwrite, task_name
-        )
-        if not submitted_job:
-            step.set_status(Status.WAITING)
-            return
-
-    except Exception as e:
-        if self.request.retries >= self.max_retries:
-            if PeriodicTask.objects.filter(name=task_name).exists():
-                remove_periodic_task_on_failure(task_name, step, str(e))
-            else:
-                set_and_return_error(step, str(e))
-            return 1
-
-        logger.warning(f"Retrying pushing archive {archive_id} to CTA: {e}")
-        step.set_status(Status.WAITING)
-        raise e
-
-    _handle_submitted_fts_job(archive, step, cta_folder_name, submitted_job)
-    remove_periodic_task_if_exists(task_name)
-
-
-@shared_task(name="check_fts_job_status", bind=True, ignore_result=True)
-def check_fts_job_status(self, archive_id, step_id, job_id, folder_name):
-    """
-    Check the status of a FTS job.
-    If finished, set the corresponding step as completed and remove the
-    periodic task.
-    """
-    logger.info(f"Checking job status for Step {step_id} and job {job_id}")
-    step = Step.objects.get(pk=step_id)
-    task_name = f"FTS job status for step: {step.id}"
-
     try:
         fts = apps.get_app_config("oais").get_fts_client()
-        status = fts.job_status(job_id)
+        submitted_job = fts.push_to_cta(
+            f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
+            f"{CTA_BASE_PATH}{cta_file_path}",
+            overwrite,
+        )
+        with transaction.atomic():
+            step.set_status(Status.IN_PROGRESS)
+            step.set_task(self.request.id)
+            step.set_output_data(
+                {
+                    "status": 0,
+                    "artifact": {
+                        "artifact_name": "FTS Job",
+                        "artifact_path": cta_file_path,
+                        "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
+                    },
+                    "fts_job_id": submitted_job,
+                }
+            )
+
     except Exception as e:
-        logger.warning(str(e))
-        remove_periodic_task_on_failure(
-            task_name, step, {"status": 1, "errormsg": str(e)}
-        )
-
-    logger.info(f"FTS job status for Step {step_id} returned: {status['job_state']}.")
-
-    if status["job_state"] == "FINISHED":
-        _handle_completed_fts_job(
-            self, task_name, step, archive_id, job_id, folder_name
-        )
-    elif status["job_state"] == "FAILED":
-        result = {"FTS status": status}
-        input_data = json.loads(step.input_data)
-        output_data = json.loads(step.output_data)
-        if output_data["artifact"]:
-            result["artifact"] = output_data["artifact"]
-        retry_count = 0
-        if step.input_step and step.input_step.step_type.name == StepName.PUSH_TO_CTA:
-            retry_count = input_data.get("retry_count", -1) + 1
-        result["retry_count"] = retry_count
-
-        if result["retry_count"] < FTS_MAX_RETRY_COUNT:
-            logger.info(
-                f"Retrying pushing archive {archive_id} to CTA (attempt {result['retry_count'] + 1})"
-            )
-            result["retrying"] = True
-            create_retry_step.apply_async(
-                args=(archive_id, None, True, StepName.PUSH_TO_CTA),
-                eta=timezone.now() + timedelta(hours=1),
-            )
-        else:
-            logger.info(
-                f"Quitting retrying pushing archive {archive_id} to CTA after {result['retry_count']} attempts"
-            )
-            result["retrying"] = False
-
-        remove_periodic_task_on_failure(task_name, step, result)
+        error = {"errormsg": str(e)}
+        input_data = step.get_input_data()
+        error["retry_count"] = _get_retry_count(step.input_step, input_data)
+        error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
+        set_and_return_error(step, error)
 
 
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
@@ -202,69 +147,63 @@ def _get_cta_path(archive):
         return os.path.join("aips", os.path.basename(archive.path_to_aip))
 
 
-def _submit_fts_job(archive, step, cta_path, overwrite, task_name):
-    fts = apps.get_app_config("oais").get_fts_client()
+def _check_in_progress_jobs(self):
+    in_progress_steps = Step.objects.filter(
+        step_name=StepName.PUSH_TO_CTA, status=Status.IN_PROGRESS
+    ).all()
+    if not in_progress_steps:
+        return 0
 
-    # If already maximum number of transfers ongoing, create a periodic task for trying again
-    if fts.number_of_transfers() >= step.step_type.concurrency_limit:
-        logger.info(
-            f"Waiting for current transfers to finish before pushing archive {archive.id} to CTA"
-        )
-        if not PeriodicTask.objects.filter(name=task_name).exists():
-            schedule = get_interval_schedule(FTS_WAIT_IN_HOURS, IntervalSchedule.HOURS)
-            PeriodicTask.objects.get_or_create(
-                interval=schedule,
-                name=task_name,
-                task="push_to_cta",
-                args=json.dumps([archive.id, step.id]),
-                expire_seconds=FTS_WAIT_IN_HOURS * 60 * 60,
-                last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
+    steps_by_job_id = {}
+    for step in in_progress_steps:
+        job_id = step.get_output_data().get("fts_job_id")
+        if job_id:
+            steps_by_job_id[job_id] = step
+        else:
+            set_and_return_error(step, "Step has no fts_job_id")
+
+    logger.info("Checking statuses of ongoing transfers...")
+    fts = apps.get_app_config("oais").get_fts_client()
+    current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
+
+    for job in current_jobs:
+        step = steps_by_job_id.get(job["job_id"])
+        logger.info(f"FTS job status for Step {step.id} returned: {job['job_state']}.")
+
+        if job["job_state"] == "FINISHED":
+            cta_file_path = _get_cta_path(step.archive)
+            _handle_successful_fts_job(
+                self, step.id, step.archive.id, job["job_id"], cta_file_path
             )
+
+        elif job["job_state"] == "FAILED":
+            _handle_failed_fts_job(step, job)
+
+    return len(current_jobs)
+
+
+def _trigger_new_transfers(amount):
+    # Fetch waiting push_to_cta steps for which the archive doesn't have previous steps in the pipeline
+    waiting_steps = Step.objects.filter(
+        step_name=StepName.PUSH_TO_CTA,
+        status=Status.WAITING,
+        archive__last_step_id=models.F("pk"),
+    ).order_by("create_date")[:amount]
+
+    if not waiting_steps:
+        logger.info("No valid waiting push to CTA steps found.")
         return
 
-    return fts.push_to_cta(
-        f"{FTS_SOURCE_BASE_PATH}/{archive.path_to_aip}",
-        f"{CTA_BASE_PATH}{cta_path}",
-        overwrite,
-    )
+    for step in waiting_steps:
+        push_to_cta.delay(step.archive.id, step.id)
+    logger.info(f"Created tasks to submit {len(waiting_steps)} new transfers.")
 
 
-def _handle_submitted_fts_job(archive, step, cta_path, submitted_job):
-    schedule = get_interval_schedule(1, IntervalSchedule.HOURS)
-    # Spawn a periodic task to check for the status of the job
-    PeriodicTask.objects.create(
-        interval=schedule,
-        name=f"FTS job status for step: {step.id}",
-        task="check_fts_job_status",
-        args=json.dumps([archive.id, step.id, submitted_job, cta_path]),
-        expire_seconds=3600.0,
-        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
-    )
-    step.set_output_data(
-        {
-            "status": 0,
-            "artifact": {
-                "artifact_name": "FTS Job",
-                "artifact_path": cta_path,
-                "artifact_url": f"{FTS_STATUS_INSTANCE}/fts3/ftsmon/#/job/{submitted_job}",
-            },
-            "fts_job_id": submitted_job,
-        }
-    )
-
-
-def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, folder_name):
-    try:
-        periodic_task = PeriodicTask.objects.get(name=task_name)
-        logger.info("FTS transfer succeded, removing periodic task")
-        periodic_task.delete()
-    except Exception as e:
-        logger.warning(e)
-
+def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path):
     cta_artifact = {
         "artifact_name": "CTA",
-        "artifact_localpath": folder_name,
-        "artifact_url": f"{CTA_BASE_PATH}{folder_name}",
+        "artifact_localpath": cta_file_path,
+        "artifact_url": f"{CTA_BASE_PATH}{cta_file_path}",
         "fts_id": job_id,
     }
 
@@ -274,10 +213,46 @@ def _handle_completed_fts_job(self, task_name, step, archive_id, job_id, folder_
         current_status=states.SUCCESS,
         retval=status,
         task_id=None,
-        args=[archive_id, step.id, None],
+        args=[archive_id, step_id, None],
         kwargs=None,
         einfo=None,
     )
+
+
+def _handle_failed_fts_job(step, status):
+    result = {"FTS status": status}
+    input_data = step.get_input_data()
+    output_data = step.get_output_data()
+
+    if output_data.get("artifact"):
+        result["artifact"] = output_data["artifact"]
+
+    result["retry_count"] = _get_retry_count(step.input_step, input_data)
+    result["retrying"] = _retry_push_to_cta(step.archive.id, result["retry_count"])
+
+    set_and_return_error(step, result)
+
+
+def _get_retry_count(input_step, input_data):
+    if input_step and input_step.step_type.name == StepName.PUSH_TO_CTA:
+        return input_data.get("retry_count", -1) + 1
+    return 0
+
+
+def _retry_push_to_cta(archive_id, retry_count):
+    if retry_count < FTS_MAX_RETRY_COUNT:
+        logger.info(
+            f"Retrying pushing archive {archive_id} to CTA (attempt {retry_count + 1})"
+        )
+        create_retry_step.apply_async(
+            args=(archive_id, None, True, StepName.PUSH_TO_CTA),
+            eta=timezone.now() + timedelta(hours=1),
+        )
+        return True
+    logger.info(
+        f"Quitting retrying pushing archive {archive_id} to CTA after {retry_count} attempts"
+    )
+    return False
 
 
 def _verify_file(aip_path, cta_filename):
