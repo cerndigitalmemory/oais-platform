@@ -239,14 +239,16 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
             )
             return {"status": 1, "errormsg": error_msg}
         elif any(key in error_msg for key in retry_codes):
-            logger.error(
+            logger.warning(
                 next(retry_codes[key] for key in retry_codes if key in error_msg)
             )
             retry = True
 
         if retry:
             if task.request.retries >= task.max_retries:
-                return {"status": 1, "errormsg": "Max retries exceeded."}
+                message = f"Max retries exceeded for harvesting Archive {archive_id}. Details: {error_msg}"
+                logger.error(message)
+                return {"status": 1, "errormsg": message}
 
             step.set_status(Status.WAITING)
             step.set_output_data(
@@ -259,6 +261,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
                 exc=Exception(error_msg), countdown=RETRY_INTERVAL_MINUTES * 60
             )
 
+        logger.error(f"Harvesting error for Archive {archive_id}: {error_msg}")
         return {"status": 1, "errormsg": error_msg}
 
     return
