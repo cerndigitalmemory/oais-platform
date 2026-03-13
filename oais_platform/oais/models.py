@@ -420,6 +420,7 @@ class Step(models.Model):
 
     celery_task_id = models.CharField(max_length=50, null=True, default=None)
     input_data = models.TextField(null=True, default=None)
+    input_data_json = models.JSONField(null=True, default=None)
     input_step = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -428,6 +429,7 @@ class Step(models.Model):
         blank=True,
     )
     output_data = models.TextField(null=True, default=None)
+    output_data_json = models.JSONField(null=True, default=None)
 
     objects = StepManager()
 
