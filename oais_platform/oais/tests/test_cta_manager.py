@@ -1,4 +1,3 @@
-from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.apps import apps
@@ -7,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import cta_manager
-from oais_platform.settings import FTS_MAX_RETRY_COUNT, FTS_WAIT_LIMIT_IN_WEEKS
+from oais_platform.settings import FTS_MAX_RETRY_COUNT
 
 
 class CTAManagerTests(APITestCase):
@@ -82,20 +81,6 @@ class CTAManagerTests(APITestCase):
 
         cta_manager.apply()
         self.assertEqual(mock_push_to_cta.call_count, 2)
-
-    def test_cta_manager_wait_limit(self):
-        self.step.start_date = timezone.now() - timedelta(
-            weeks=FTS_WAIT_LIMIT_IN_WEEKS + 1
-        )
-        self.step.save()
-
-        cta_manager.apply()
-
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertIn(
-            "Wait limit reached", self.step.get_output_data().get("errormsg", "")
-        )
 
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     def test_cta_manager_retry(self, mock_retry_task):

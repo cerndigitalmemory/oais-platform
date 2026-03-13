@@ -20,7 +20,6 @@ from oais_platform.settings import (
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
     FTS_STATUS_INSTANCE,
-    FTS_WAIT_LIMIT_IN_WEEKS,
 )
 
 logger = get_task_logger(__name__)
@@ -195,19 +194,9 @@ def _trigger_new_transfers(amount):
         logger.info("No valid waiting push to CTA steps found.")
         return
 
-    logger.info(f"Attempting to submit {len(waiting_steps)} new transfers")
-    new_transfer_count = 0
     for step in waiting_steps:
-        # Fail task after FTS_WAIT_LIMIT_IN_WEEKS
-        if timezone.now() - step.start_date > timedelta(weeks=FTS_WAIT_LIMIT_IN_WEEKS):
-            logger.info(f"Wait limit reached for step {step.id}, setting it to FAILED")
-            set_and_return_error(step, {"status": 1, "errormsg": "Wait limit reached"})
-            continue
-
         push_to_cta.delay(step.archive.id, step.id)
-        new_transfer_count += 1
-
-    logger.info(f"Created tasks to submit {new_transfer_count} new transfers.")
+    logger.info(f"Created tasks to submit {len(waiting_steps)} new transfers.")
 
 
 def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path):

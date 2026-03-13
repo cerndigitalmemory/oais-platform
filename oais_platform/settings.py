@@ -393,7 +393,6 @@ FTS_SOURCE_BASE_PATH = environ.get(
     "FTS_SOURCE_BASE_PATH", "https://eosproject-p.cern.ch:8444"
 )
 FTS_MAX_RETRY_COUNT = 1
-FTS_WAIT_LIMIT_IN_WEEKS = 2
 
 # GRID Certificate used to authenticate
 # Public part
