@@ -107,16 +107,6 @@ services:
     environment:
       <<: *common-variables
       DATABASE_URL: postgres://postgres:postgres@db:5433/web_dev
-  scripts:
-    container_name: oais_scripts
-    build:
-      context: .
-      dockerfile: ./scripts/Dockerfile
-    volumes:
-      - ./scripts:/scripts
-    restart: unless-stopped
-    tty: true
-    stdin_open: true
 
   web:
     container_name: oais_web
