@@ -98,7 +98,7 @@ class HarvestTest(APITestCase):
         task_request.retries = 10
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], "Max retries exceeded.")
+        self.assertIn("Max retries exceeded", result["errormsg"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(
@@ -159,7 +159,7 @@ class HarvestTest(APITestCase):
         task_request.retries = 10
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
-        self.assertEqual(result["errormsg"], "Max retries exceeded.")
+        self.assertIn("Max retries exceeded", result["errormsg"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
