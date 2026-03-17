@@ -68,18 +68,8 @@ class Invenio(AbstractSource):
         if sort:
             url += f"&sort={sort}"
 
-        retry_strategy = Retry(
-            total=1,
-            status_forcelist=[502, 503, 504, 429, 408],
-            backoff_factor=3,
-            allowed_methods=["GET"],
-        )
-
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session = requests.Session()
-        session.mount("https://", adapter)
-
         try:
+            session = self._get_session()
             req = session.get(url, headers=self.headers)
         except Exception as e:
             logging.exception(f"Error while performing search: {str(e)}")
@@ -106,18 +96,8 @@ class Invenio(AbstractSource):
     def search_by_id(self, recid):
         result = []
 
-        retry_strategy = Retry(
-            total=1,
-            status_forcelist=[502, 503, 504, 429, 408],
-            backoff_factor=3,
-            allowed_methods=["GET"],
-        )
-
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session = requests.Session()
-        session.mount("https://", adapter)
-
         try:
+            session = self._get_session()
             req = session.get(self.get_record_url(recid), headers=self.headers)
         except Exception as e:
             logging.exception(f"Error while performing search: {str(e)}")
@@ -128,6 +108,19 @@ class Invenio(AbstractSource):
             result.append(self.parse_record(record))
 
         return {"result": result}
+
+    def _get_session(self):
+        retry_strategy = Retry(
+            total=1,
+            status_forcelist=[502, 503, 504, 429, 408],
+            backoff_factor=3,
+            allowed_methods=["GET"],
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        return session
 
     def parse_record(self, record):
         recid_key_list = self.config["recid"].split(",")
