@@ -1,5 +1,15 @@
 # Changes
 
+## Version 2.10.0 (released 2026-03-18)
+- API: add delete step endpoint
+- Add Sentry environment
+- Pipeline: override order for retry steps, add outdated status, step filters for any step
+- Scripts: added script to calculate average step duration per day, removed separate scripts pod
+- CTA: rework queueing of tasks
+- Scheduled harvest improvements
+- Management: add database clean up command
+- Dependencies: bump bagit-create
+
 ## Version 2.9.0 (released 2026-02-26)
 - AM: add timed out status, process callback after timeout
 - API: optimize /actions, create bulk pipeline endpoint
