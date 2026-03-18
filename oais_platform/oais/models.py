@@ -211,20 +211,6 @@ class Archive(models.Model):
         # Normal logic of the save method
         super(Archive, self).save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        # delete all steps related to this archive
-        if self.last_completed_step:
-            self.last_completed_step.delete()
-        if self.last_step:
-            self.last_step.delete()
-        for id in self.pipeline_steps:
-            try:
-                step = Step.objects.get(id=id)
-                step.delete()
-            except Exception:
-                pass
-        super().delete(*args, **kwargs)
-
     def set_state(self):
         try:
             is_sip = self.steps.filter(
