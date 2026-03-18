@@ -66,3 +66,8 @@ class Command(BaseCommand):
             PeriodicTask.objects.filter(task="check_am_status").all().delete()
 
         self.stdout.write(self.style.SUCCESS("Clean up completed successfully."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Make sure the clean up the file system in case there are any remaining files."
+            )
+        )
