@@ -13,11 +13,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="step",
             name="input_data_json",
-            field=models.JSONField(default=None, null=True),
+            field=models.JSONField(default=dict, null=True),
         ),
         migrations.AddField(
             model_name="step",
             name="output_data_json",
-            field=models.JSONField(default=None, null=True),
+            field=models.JSONField(default=dict, null=True),
         ),
     ]
