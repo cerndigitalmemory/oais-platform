@@ -1,6 +1,5 @@
 import errno
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -532,7 +531,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 step_name=StepName.EDIT_MANIFEST,
                 input_step=archive.last_completed_step,
                 status=Status.IN_PROGRESS,
-                input_data=archive.manifest,
+                input_data_json=archive.manifest,
                 initiated_by_user=request.user,
             )
 
@@ -708,15 +707,14 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
     def download_artifact(self, request, pk=None):
         step = self.get_object()
 
-        output_data = json.loads(step.output_data)
         # If this step has an "Artifact" in the output
-        if "artifact" in output_data:
+        if "artifact" in step.output_data_json:
             # If this artifact has a path
             # FIXME: It shouldn't be needed to have different behaviours based on the type of the artifact
-            if "artifact_localpath" in output_data["artifact"]:
-                if output_data["artifact"]["artifact_name"] == "SIP":
+            if "artifact_localpath" in step.output_data_json["artifact"]:
+                if step.output_data_json["artifact"]["artifact_name"] == "SIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
-                    files_path = output_data["artifact"]["artifact_localpath"]
+                    files_path = step.output_data_json["artifact"]["artifact_localpath"]
                     file_name = f"{pk}-sip.zip"
                     path_to_zip = make_archive(files_path, "zip", files_path)
                     response = HttpResponse(
@@ -727,9 +725,9 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                         'attachment; filename="{filename}"'.format(filename=file_name)
                     )
                     return response
-                elif output_data["artifact"]["artifact_name"] == "AIP":
+                elif step.output_data_json["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
-                    files_path = output_data["artifact"]["artifact_path"]
+                    files_path = step.output_data_json["artifact"]["artifact_path"]
                     file_name = f"{pk}-aip.7z"
                     response = HttpResponse(
                         FileWrapper(open(files_path, "rb")),

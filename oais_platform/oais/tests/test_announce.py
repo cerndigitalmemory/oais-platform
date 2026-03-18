@@ -1,6 +1,4 @@
-import json
 import logging
-import ntpath
 import os
 import tempfile
 from unittest import skip
@@ -108,9 +106,8 @@ class AnnounceTests(APITestCase):
             latest_step.id,
             False,
         )
-        input_data = json.loads(latest_step.input_data)
-        self.assertEqual(input_data["announce_path"], path_to_sip)
-        self.assertEqual(input_data["foldername"], foldername)
+        self.assertEqual(latest_step.input_data_json["announce_path"], path_to_sip)
+        self.assertEqual(latest_step.input_data_json["foldername"], foldername)
         self.assertEqual(latest_step.step_type.name, StepName.ANNOUNCE)
         self.assertEqual(latest_step.initiated_by_user, self.user)
         self.assertEqual(latest_step.initiated_by_harvest_batch, None)

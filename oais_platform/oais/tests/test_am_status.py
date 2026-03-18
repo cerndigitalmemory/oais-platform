@@ -1,4 +1,3 @@
-import json
 from unittest.mock import Mock, patch
 
 import requests
@@ -76,26 +75,26 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.COMPLETED)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertTrue(step_output["artifact"])
-        self.assertIsNone(step_output.get("retry_count", None))
-        self.assertIsNone(step_output.get("retry", None))
-        self.assertIsNone(step_output.get("errormsg", None))
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertTrue(self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIsNone(self.step.output_data_json.get("errormsg", None))
         self.assertTrue(periodic_tasks.delete.called)
         aip_dependent_step.refresh_from_db()
         aip_dependent_step2.refresh_from_db()
         self.assertEqual(aip_dependent_step.status, Status.OUTDATED)
         self.assertEqual(aip_dependent_step2.status, Status.OUTDATED)
-        output_data = json.loads(aip_dependent_step.output_data)
-        self.assertIn("outdated_at", output_data)
-        output_data2 = json.loads(aip_dependent_step2.output_data)
-        self.assertIn("outdated_at", output_data2)
+        self.assertIn("outdated_at", aip_dependent_step.output_data_json)
+        self.assertIn("outdated_at", aip_dependent_step2.output_data_json)
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")
@@ -109,17 +108,19 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertIsNone(step_output.get("retry_count", None))
-        self.assertIsNone(step_output.get("retry", None))
-        self.assertIsNone(step_output.get("errormsg", None))
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIsNone(self.step.output_data_json.get("errormsg", None))
         self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_package_details")
@@ -138,18 +139,20 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertEqual(step_output["package_retry"], 1)
-        self.assertIsNone(step_output.get("retry_count", None))
-        self.assertIsNone(step_output.get("retry", None))
-        self.assertIsNone(step_output.get("errormsg", None))
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertEqual(self.step.output_data_json["package_retry"], 1)
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIsNone(self.step.output_data_json.get("errormsg", None))
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_package_details")
@@ -169,13 +172,15 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertIsNone(step_output.get("retry_count", None))
-        self.assertIsNone(step_output.get("retry", None))
-        self.assertIn("AIP package with UUID 5678 not found", step_output["errormsg"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIn(
+            "AIP package with UUID 5678 not found",
+            self.step.output_data_json["errormsg"],
+        )
         self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_unit_status")
@@ -189,17 +194,19 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertIsNone(step_output.get("retry_count", None))
-        self.assertIsNone(step_output.get("retry", None))
-        self.assertIsNone(step_output.get("errormsg", None))
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIsNone(self.step.output_data_json.get("errormsg", None))
         self.assertFalse(periodic_tasks.delete.called)
 
     @patch("django_celery_beat.models.PeriodicTask.objects")
@@ -222,11 +229,10 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], "FAILED")
-        self.assertEqual(step_output["errormsg"], exception_msg)
+        self.assertEqual(self.step.output_data_json["status"], "FAILED")
+        self.assertEqual(self.step.output_data_json["errormsg"], exception_msg)
         self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_jobs")
@@ -249,14 +255,14 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
-        self.assertEqual(step_output["status"], "WAITING")
+        self.assertEqual(self.step.output_data_json["status"], "WAITING")
         self.assertEqual(
-            step_output["microservice"], "Waiting for archivematica to respond"
+            self.step.output_data_json["microservice"],
+            "Waiting for archivematica to respond",
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertFalse(periodic_tasks.delete.called)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
@@ -283,13 +289,14 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.TIMED_OUT)
-        self.assertEqual(step_output["status"], "TIMED_OUT")
-        self.assertEqual(step_output["retry"], True)
-        self.assertEqual(step_output["errormsg"], "Archivematica delayed to respond.")
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertEqual(self.step.output_data_json["status"], "TIMED_OUT")
+        self.assertEqual(self.step.output_data_json["retry"], True)
+        self.assertEqual(
+            self.step.output_data_json["errormsg"], "Archivematica delayed to respond."
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
@@ -315,15 +322,14 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.TIMED_OUT)
         self.assertEqual(
-            step_output["errormsg"],
+            self.step.output_data_json["errormsg"],
             "Error: Archivematica processing time limit reached.",
         )
-        self.assertEqual(step_output["retry"], True)
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertEqual(self.step.output_data_json["retry"], True)
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
@@ -347,15 +353,14 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertEqual(step_output["status"], "PROCESSING")
+        self.assertEqual(self.step.output_data_json["status"], "PROCESSING")
         self.assertEqual(
-            step_output["microservice"],
+            self.step.output_data_json["microservice"],
             "Waiting for archivematica to continue the processing",
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_jobs")
@@ -378,13 +383,13 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
         self.assertEqual(
-            step_output["microservice"], "Waiting for archivematica to respond"
+            self.step.output_data_json["microservice"],
+            "Waiting for archivematica to respond",
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
@@ -438,19 +443,21 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertEqual(len(step_output["errormsg"]), 3)
-        self.assertEqual(step_output["retry"], True)
-        self.assertEqual(step_output["retry_count"], 1)
         self.assertEqual(
-            step_output["errormsg"][0],
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertEqual(len(self.step.output_data_json["errormsg"]), 3)
+        self.assertEqual(self.step.output_data_json["retry"], True)
+        self.assertEqual(self.step.output_data_json["retry_count"], 1)
+        self.assertEqual(
+            self.step.output_data_json["errormsg"][0],
             {
                 "task": "Normalize for preservation",
                 "microservice": "Normalize",
@@ -458,7 +465,7 @@ class ArchivematicaStatusTests(APITestCase):
             },
         )
         self.assertEqual(
-            step_output["errormsg"][1],
+            self.step.output_data_json["errormsg"][1],
             {
                 "task": "Extract technical metadata",
                 "microservice": "Unzipping file",
@@ -466,7 +473,7 @@ class ArchivematicaStatusTests(APITestCase):
             },
         )
         self.assertEqual(
-            step_output["errormsg"][2],
+            self.step.output_data_json["errormsg"][2],
             {
                 "task": "SIP Creation",
                 "microservice": "Exception occured",
@@ -496,13 +503,13 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.WAITING)
         self.assertEqual(
-            step_output["microservice"], "Waiting for archivematica to respond"
+            self.step.output_data_json["microservice"],
+            "Waiting for archivematica to respond",
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
 
     @patch("amclient.AMClient.get_unit_status")
     @patch("django_celery_beat.models.PeriodicTask.objects")
@@ -517,14 +524,14 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], "FAILED")
+        self.assertEqual(self.step.output_data_json["status"], "FAILED")
         self.assertEqual(
-            step_output["errormsg"], "Error: Could not connect to archivematica"
+            self.step.output_data_json["errormsg"],
+            "Error: Could not connect to archivematica",
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertTrue(periodic_tasks.delete.called)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
@@ -542,7 +549,7 @@ class ArchivematicaStatusTests(APITestCase):
         get_task,
         mock_create_retry_step,
     ):
-        self.step.input_data = json.dumps({"retry_count": 1})
+        self.step.set_input_data({"retry_count": 1})
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
@@ -583,19 +590,21 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 6789}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.COMPLETED_WITH_WARNINGS)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertTrue(step_output["artifact"])
-        self.assertEqual(step_output["retry_count"], 2)
-        self.assertEqual(step_output["retry"], True)
-        self.assertEqual(len(step_output["errormsg"]), 1)
         self.assertEqual(
-            step_output["errormsg"][0],
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertTrue(self.step.output_data_json["artifact"])
+        self.assertEqual(self.step.output_data_json["retry_count"], 2)
+        self.assertEqual(self.step.output_data_json["retry"], True)
+        self.assertEqual(len(self.step.output_data_json["errormsg"]), 1)
+        self.assertEqual(
+            self.step.output_data_json["errormsg"][0],
             {
                 "task": "Normalize for preservation",
                 "filename": "failed.txt",
@@ -619,16 +628,18 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertEqual(step_output["retry"], True)
-        self.assertEqual(step_output["retry_count"], 1)
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertEqual(self.step.output_data_json["retry"], True)
+        self.assertEqual(self.step.output_data_json["retry_count"], 1)
         self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
@@ -638,7 +649,7 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_retry_exceeded(
         self, periodic_tasks, get_unit_status, create_retry_step
     ):
-        self.step.input_data = json.dumps({"retry_count": AM_RETRY_LIMIT})
+        self.step.set_input_data({"retry_count": AM_RETRY_LIMIT})
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
@@ -654,16 +665,18 @@ class ArchivematicaStatusTests(APITestCase):
         check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], get_unit_status.return_value["status"])
         self.assertEqual(
-            step_output["microservice"], get_unit_status.return_value["microservice"]
+            self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
-        self.assertRaises(KeyError, lambda: step_output["artifact"])
-        self.assertEqual(step_output["retry"], False)
-        self.assertEqual(step_output["retry_limit_exceeded"], True)
+        self.assertEqual(
+            self.step.output_data_json["microservice"],
+            get_unit_status.return_value["microservice"],
+        )
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertEqual(self.step.output_data_json["retry"], False)
+        self.assertEqual(self.step.output_data_json["retry_limit_exceeded"], True)
         self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_not_called()
 

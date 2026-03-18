@@ -1,5 +1,4 @@
 import hashlib
-import json
 import os
 from pathlib import Path
 from urllib.parse import urljoin
@@ -29,14 +28,11 @@ def create_step(
     archive: target Archive
     input_step_id: (optional) step to set as "input" for the new one
     """
-    if input_data is not None and isinstance(input_data, dict):
-        input_data = json.dumps(input_data)
-
     return Step.objects.create(
         archive=archive,
         step_name=step_name,
         input_step_id=input_step_id,
-        input_data=input_data,
+        input_data_json=input_data,
         status=Status.WAITING,
         initiated_by_user=user,
         initiated_by_harvest_batch=harvest_batch,

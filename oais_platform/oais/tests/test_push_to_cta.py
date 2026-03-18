@@ -71,7 +71,7 @@ class PushToCTATests(APITestCase):
             True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
-        self.assertEqual(self.step.get_output_data()["fts_job_id"], "test_job_id")
+        self.assertEqual(self.step.output_data_json["fts_job_id"], "test_job_id")
 
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     def test_push_to_cta_exception(self, mock_retry_step, mock_gfal2):
@@ -82,7 +82,7 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.fts.push_to_cta.call_count, 1)
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertIsNotNone(self.step.finish_date)
-        output_data = self.step.get_output_data()
+        output_data = self.step.output_data_json
         self.assertTrue(output_data["retrying"])
         self.assertEqual(output_data["errormsg"], "FTS Service Down")
         mock_retry_step.assert_called_once()

@@ -124,9 +124,9 @@ class StepSerializer(serializers.ModelSerializer):
             "finish_date",
             "status",
             "celery_task_id",
-            "input_data",
+            "input_data_json",
             "input_step",
-            "output_data",
+            "output_data_json",
             "removable",
         ]
 

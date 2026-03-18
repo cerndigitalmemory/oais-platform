@@ -67,12 +67,11 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         errormsg = f"AM create returned error {create_package.return_value}"
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], 1)
-        self.assertIn(errormsg, step_output["errormsg"])
+        self.assertEqual(self.step.output_data_json["status"], 1)
+        self.assertIn(errormsg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(errormsg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
@@ -89,12 +88,11 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         errormsg = f"status code {unauthorized_request.status_code}"
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], 1)
-        self.assertIn(errormsg, step_output["errormsg"])
+        self.assertEqual(self.step.output_data_json["status"], 1)
+        self.assertIn(errormsg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(errormsg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
@@ -109,12 +107,11 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         errormsg = f"status code {bad_request.status_code}"
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], 1)
-        self.assertIn(errormsg, step_output["errormsg"])
+        self.assertEqual(self.step.output_data_json["status"], 1)
+        self.assertIn(errormsg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(errormsg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
@@ -128,11 +125,10 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
 
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(step_output["status"], 1)
-        self.assertIn(exception_msg, step_output["errormsg"])
+        self.assertEqual(self.step.output_data_json["status"], 1)
+        self.assertIn(exception_msg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(exception_msg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
@@ -146,10 +142,9 @@ class ArchivematicaCreateTests(APITestCase):
         archivematica.apply(args=[self.archive.id, self.step.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         msg = "Archivematica is busy"
         self.assertEqual(self.step.status, Status.WAITING)
-        self.assertIn(msg, step_output["message"])
+        self.assertIn(msg, self.step.output_data_json["message"])
         self.assertEqual(
             self.step.step_type.current_count, self.step.step_type.concurrency_limit
         )
@@ -161,10 +156,9 @@ class ArchivematicaCreateTests(APITestCase):
         archivematica.apply(args=[self.archive.id, self.step.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         msg = "SIP exceeds the Archivematica file size limit"
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertIn(msg, step_output["errormsg"])
+        self.assertIn(msg, self.step.output_data_json["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
@@ -177,10 +171,9 @@ class ArchivematicaCreateTests(APITestCase):
         archivematica.apply(args=[self.archive.id, self.step.id])
 
         self.step.refresh_from_db()
-        step_output = json.loads(self.step.output_data)
         msg = "Archivematica is busy"
         self.assertEqual(self.step.status, Status.WAITING)
-        self.assertIn(msg, step_output["message"])
+        self.assertIn(msg, self.step.output_data_json["message"])
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(
             self.step.step_type.current_size_bytes,

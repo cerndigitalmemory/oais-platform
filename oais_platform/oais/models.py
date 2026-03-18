@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import secrets
 from pathlib import Path
@@ -480,26 +479,24 @@ class Step(models.Model):
         self.save()
 
     def set_input_data(self, data):
-        self.input_data = json.dumps(data)
-        self.save()
+        self.input_data_json = data
+        self.save(update_fields=["input_data_json"])
+
+    def set_input_data_field(self, key, value):
+        data = self.input_data_json or {}
+        data[key] = value
+        self.input_data_json = data
+        self.save(update_fields=["input_data_json"])
 
     def set_output_data(self, data):
-        self.output_data = json.dumps(data)
-        self.save()
+        self.output_data_json = data
+        self.save(update_fields=["output_data_json"])
 
-    def _load_json(self, data):
-        if not data:
-            return
-        try:
-            return json.loads(data)
-        except Exception as e:
-            logging.error(f"Failed to load data for Step {self.id}: {e}")
-
-    def get_input_data(self):
-        return self._load_json(self.input_data)
-
-    def get_output_data(self):
-        return self._load_json(self.output_data)
+    def set_output_data_field(self, key, value):
+        data = self.output_data_json or {}
+        data[key] = value
+        self.output_data_json = data
+        self.save(update_fields=["output_data_json"])
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
