@@ -43,7 +43,7 @@ def run_step(step, archive_id, return_signature=False):
     archive_id: ID of target Archive
     """
     # If no input_data, set the output of the input_step
-    if step.input_data_json is None and step.input_step is not None:
+    if not step.input_data_json and step.input_step is not None:
         step.input_data_json = step.input_step.output_data_json
 
     # Set step execution start date
