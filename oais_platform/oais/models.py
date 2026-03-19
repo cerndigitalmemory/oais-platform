@@ -364,9 +364,8 @@ class StepType(models.Model):
         self.save()
 
     def decrement_current_size(self, size):
-        if self.current_size_bytes >= size:
-            self.current_size_bytes -= size
-            self.save()
+        self.current_size_bytes = max(0, self.current_size_bytes - size)
+        self.save()
 
 
 class StepQuerySet(models.QuerySet):

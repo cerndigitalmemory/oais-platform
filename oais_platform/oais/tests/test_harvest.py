@@ -175,4 +175,4 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Error")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.step_type.current_size_bytes, 50)
+        self.assertEqual(self.step.step_type.current_size_bytes, 0)
