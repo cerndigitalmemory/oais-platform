@@ -25,7 +25,7 @@ def try_parse_json(value):
     try:
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
-        return value
+        return {"data": value}
 
 
 class Migration(migrations.Migration):
