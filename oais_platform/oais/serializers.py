@@ -1,18 +1,26 @@
 from django.contrib.auth.models import User
 from django.db.models import (
+    Avg,
     CharField,
     Count,
     DateTimeField,
+    DurationField,
+    ExpressionWrapper,
+    F,
     IntegerField,
     Max,
     Min,
+    OuterRef,
+    Subquery,
     Value,
 )
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
 
+from oais_platform.oais.enums import Status
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -232,6 +240,7 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_sip_count = serializers.SerializerMethodField()
     archives_aip_count = serializers.SerializerMethodField()
     archives_no_package_count = serializers.SerializerMethodField()
+    archives_failure_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -248,6 +257,7 @@ class CollectionSerializer(serializers.ModelSerializer):
             "archives_sip_count",
             "archives_aip_count",
             "archives_no_package_count",
+            "archives_failure_summary",
         ]
 
     @extend_schema_field(serializers.IntegerField)
@@ -262,33 +272,37 @@ class CollectionSerializer(serializers.ModelSerializer):
     def get_archives_no_package_count(self, obj):
         return obj.archives.filter(state=ArchiveState.NONE).count()
 
+    def _get_latest_step_subquery(self):
+        return (
+            Step.objects.filter(
+                archive=OuterRef("archive"), step_type=OuterRef("step_type")
+            )
+            .order_by("-start_date", "-create_date")
+            .values("id")[:1]
+        )
+
     @extend_schema_field(serializers.DictField())
     def get_archives_summary(self, obj):
+        latest_step_subquery = self._get_latest_step_subquery()
         qs = (
-            obj.archives.annotate(
-                step_name=Coalesce(
-                    "last_step__step_type__name",
-                    Value("not_defined"),
-                    output_field=CharField(),
-                ),
-                step_status=Coalesce(
-                    "last_step__status",
-                    Value(0),
-                    output_field=IntegerField(),
-                ),
-                step_ts=Coalesce(
-                    "last_step__start_date",
-                    Value(None),
-                    output_field=DateTimeField(),
+            Step.objects.filter(
+                archive__in=obj.archives.all(), id=Subquery(latest_step_subquery)
+            )
+            .annotate(
+                step_name=F("step_type__name"),
+                step_status=F("status"),
+                duration=ExpressionWrapper(
+                    Coalesce(
+                        F("finish_date") - F("start_date"),
+                        timezone.now() - F("start_date"),
+                    ),
+                    output_field=DurationField(),
                 ),
             )
             .values("step_name", "step_status")
-            .annotate(
-                count=Count("id"),
-                min_last_update=Min("step_ts"),
-                max_last_update=Max("step_ts"),
-            )
+            .annotate(count=Count("id"), avg_duration=Avg("duration"))
         )
+
         summary = {}
         for row in qs:
             step = row["step_name"]
@@ -296,9 +310,34 @@ class CollectionSerializer(serializers.ModelSerializer):
 
             summary.setdefault(step, {})[status] = {
                 "count": row["count"],
-                "min_last_update": row["min_last_update"],
-                "max_last_update": row["max_last_update"],
+                "avg_duration": (
+                    float(f"{row['avg_duration'].total_seconds():.2f}")
+                    if row["avg_duration"]
+                    else None
+                ),
             }
+
+        return summary
+
+    @extend_schema_field(serializers.DictField())
+    def get_archives_failure_summary(self, obj):
+        latest_step_subquery = self._get_latest_step_subquery()
+        qs = (
+            Step.objects.filter(
+                archive__in=obj.archives.all(),
+                id=Subquery(latest_step_subquery),
+                status=Status.FAILED,
+            )
+            .values("step_type__name", "failure_type")
+            .annotate(count=Count("id"))
+        )
+
+        summary = {}
+        for row in qs:
+            step_name = row["step_type__name"]
+            failure_type = row["failure_type"] or "Unknown"
+
+            summary.setdefault(step_name, {})[failure_type] = {"count": row["count"]}
 
         return summary
 

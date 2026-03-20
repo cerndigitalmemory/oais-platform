@@ -34,6 +34,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import (
     BadRequest,
     InternalServerError,
@@ -42,7 +43,6 @@ from oais_platform.oais.exceptions import (
 from oais_platform.oais.filters import build_step_group, validate_step_group
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
-    FAILURE_STATUSES,
     RETRY_CONTINUE_STATUSES,
     ApiKey,
     Archive,
@@ -101,7 +101,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     run_bulk_pipeline,
     run_step,
 )
-from oais_platform.oais.upload import handle_failed_upload
+from oais_platform.oais.tasks.utils import set_and_return_error
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     FILE_UPLOAD_MAX_SIZE_BYTE,
@@ -662,7 +662,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         stats = Archive.objects.filter(pk__in=archive_ids).aggregate(
             total=Count("id"),
             missing_step=Count("id", filter=Q(last_step__isnull=True)),
-            not_failed=Count("id", filter=~Q(last_step__status__in=FAILURE_STATUSES)),
+            not_failed=Count("id", filter=~Q(last_step__status=Status.FAILED)),
             not_failed_or_warned=Count(
                 "id",
                 filter=~Q(last_step__status__in=RETRY_CONTINUE_STATUSES),
@@ -1049,6 +1049,7 @@ def upload_file(request):
         status=Status.NOT_RUN,
         initiated_by_user=request.user,
     )
+    archive.set_last_step(step.id)
 
     try:
         original_filename = sanitize_filename(os.path.basename(file.name))
@@ -1061,16 +1062,19 @@ def upload_file(request):
         if e.errno == errno.ENOSPC:
             error_msg = f"Upload storage is full. Cannot complete file move: {e}"
             user_message = "Upload storage is full. Please contact the admins."
+            step.set_failure_type(StepFailureType.STORAGE_FULL)
         else:
             error_msg = (
                 f"An operating system error occurred while processing the file: {e}"
             )
             user_message = "Error occurred while processing the file, please try again or contact the admins."
-        handle_failed_upload(archive, step, error_msg)
+        error = {"status": 1, "errormsg": error_msg, "archive_id": archive.id}
+        set_and_return_error(step, error)
         raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        handle_failed_upload(archive, step, error_msg)
+        error = {"status": 1, "errormsg": error_msg, "archive_id": archive.id}
+        set_and_return_error(step, error)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
         )
@@ -1171,17 +1175,22 @@ def upload_sip(request):
                 "msg": "SIP uploaded, see Archives page",
             }
         )
-    except zipfile.BadZipFile:
+    except zipfile.BadZipFile as e:
+        logging.error(f"Error processing uploaded SIP: {e}")
         raise BadRequest({"status": 1, "msg": "Check the zip file for errors"})
-    except TypeError:
+    except TypeError as e:
+        logging.error(f"Error processing uploaded SIP: {e}")
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
     except Exception as e:
+        logging.error(f"Error while processing SIP upload: {e}")
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         if step:
             step.set_status(Status.FAILED)
+            step.set_finish_date()
+            archive.set_last_step(step.id)
         raise BadRequest({"status": 1, "msg": e})
 
 

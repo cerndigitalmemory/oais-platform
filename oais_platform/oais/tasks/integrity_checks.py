@@ -5,6 +5,7 @@ from celery.utils.log import get_task_logger
 from fs.errors import ResourceNotFound
 from oais_utils.validate import compute_hash, validate_sip
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.pipeline_actions import finalize
 
@@ -22,21 +23,24 @@ def validate(self, archive_id, step_id):
 
     logger.info(f"Starting SIP validation {sip_folder_name}")
 
-    current_step = Step.objects.get(pk=step_id)
-    current_step.set_status(Status.IN_PROGRESS)
+    step = Step.objects.get(pk=step_id)
+    step.set_status(Status.IN_PROGRESS)
 
     # Checking registry = checking if the folder exists
     sip_exists = os.path.exists(sip_folder_name)
 
     if not sip_exists:
+        step.set_failure_type(StepFailureType.PATH_NOT_FOUND)
         return {"status": 1, "errormsg": "SIP does not exist"}
 
     # Runs validate_sip from oais_utils
     try:
         result = validate_sip(sip_folder_name)
         if not result:
+            step.set_failure_type(StepFailureType.INVALID_SCHEMA)
             return {"status": 1, "errormsg": "SIP validation failed."}
     except Exception as e:
+        step.set_failure_type(StepFailureType.INVALID_SCHEMA)
         logger.error(f"SIP validation failed with exception: {str(e)}")
         return {
             "status": 1,
@@ -71,6 +75,7 @@ def validate(self, archive_id, step_id):
         err_msg = "Manifest file does not exist"
 
     if err_msg:
+        step.set_failure_type(StepFailureType.CHECKSUM_MISMATCH)
         logger.error(f"Archive {archive_id}, step {step_id}: {err_msg}")
         return {"status": 1, "errormsg": err_msg}
 

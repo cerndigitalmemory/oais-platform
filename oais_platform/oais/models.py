@@ -14,8 +14,29 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 
+from oais_platform.oais.enums import (
+    COMPLETED_STATUSES,
+    RETRY_CONTINUE_STATUSES,
+    ArchiveState,
+    BatchStatus,
+    FilterType,
+    Status,
+    StepFailureType,
+    StepName,
+)
 from oais_platform.oais.sources.abstract_source import AbstractSource
 from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
+
+# re-export for backwards compatibility
+__all__ = [
+    "ArchiveState",
+    "BatchStatus",
+    "FilterType",
+    "Status",
+    "StepName",
+    "COMPLETED_STATUSES",
+    "RETRY_CONTINUE_STATUSES",
+]
 
 
 class Profile(models.Model):
@@ -50,34 +71,6 @@ def create_user_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
-
-
-class Status(models.IntegerChoices):
-    NOT_RUN = 1, "NOT_RUN"
-    IN_PROGRESS = 2, "IN_PROGRESS"
-    FAILED = 3, "FAILED"
-    COMPLETED = 4, "COMPLETED"
-    WAITING_APPROVAL = 5, "WAITING_APPROVAL"
-    REJECTED = 6, "REJECTED"
-    WAITING = 7, "WAITING"
-    COMPLETED_WITH_WARNINGS = 8, "COMPLETED_WITH_WARNINGS"
-    TIMED_OUT = 9, "TIMED_OUT"
-    OUTDATED = 10, "OUTDATED"
-
-
-RETRY_CONTINUE_STATUSES = [
-    Status.FAILED,
-    Status.TIMED_OUT,
-    Status.COMPLETED_WITH_WARNINGS,
-]
-FAILURE_STATUSES = [Status.FAILED, Status.TIMED_OUT]
-COMPLETED_STATUSES = [Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]
-
-
-class ArchiveState(models.IntegerChoices):
-    NONE = 1, "NONE"
-    SIP = 2, "SIP"
-    AIP = 3, "AIP"
 
 
 class Archive(models.Model):
@@ -281,20 +274,6 @@ class Archive(models.Model):
         ).exists()
 
 
-class StepName(models.TextChoices):
-    FILE_UPLOAD = "FILE_UPLOAD"
-    SIP_UPLOAD = "SIP_UPLOAD"
-    HARVEST = "HARVEST"
-    VALIDATION = "VALIDATION"
-    ARCHIVE = "ARCHIVE"
-    EDIT_MANIFEST = "EDIT_MANIFEST"
-    INVENIO_RDM_PUSH = "INVENIO_RDM_PUSH"
-    ANNOUNCE = "ANNOUNCE"
-    PUSH_TO_CTA = "PUSH_TO_CTA"
-    EXTRACT_TITLE = "EXTRACT_TITLE"
-    NOTIFY_SOURCE = "NOTIFY_SOURCE"
-
-
 def get_task_names():
     return [
         (task, task)
@@ -429,6 +408,9 @@ class Step(models.Model):
     )
     output_data = models.TextField(null=True, default=None)
     output_data_json = models.JSONField(default=dict, null=True)
+    failure_type = models.CharField(
+        max_length=50, choices=StepFailureType.choices, null=True, default=None
+    )
 
     objects = StepManager()
 
@@ -446,14 +428,17 @@ class Step(models.Model):
         if self.status == status:
             return
 
+        if status == Status.FAILED and self.failure_type is None:
+            self.failure_type = StepFailureType.OTHER
+
         with transaction.atomic():
             self.status = status
-            self.save(update_fields=["status"])
+            self.save(update_fields=["status", "failure_type"])
 
             if not self.initiated_by_harvest_batch:
                 return
 
-            is_terminal = status in (FAILURE_STATUSES + COMPLETED_STATUSES)
+            is_terminal = status in ([Status.FAILED] + COMPLETED_STATUSES)
 
             is_progress_relevant = status == Status.IN_PROGRESS or (
                 status == Status.WAITING and self.celery_task_id
@@ -507,6 +492,10 @@ class Step(models.Model):
             self.start_date = None
         else:
             self.start_date = timezone.now()
+        self.save()
+
+    def set_failure_type(self, failure_type):
+        self.failure_type = failure_type
         self.save()
 
     def save(self, *args, **kwargs):
@@ -701,11 +690,6 @@ class PersonalAccessToken(models.Model):
         return secrets.token_urlsafe(32)
 
 
-class FilterType(models.TextChoices):
-    CREATED = "created"
-    UPDATED = "updated"
-
-
 class ScheduledHarvest(models.Model):
     """
     This model represents a scheduled harvest job that can be periodically executed.
@@ -799,15 +783,6 @@ class HarvestRun(models.Model):
         return sum(batch.skipped_count for batch in self.batches.all())
 
 
-class BatchStatus(models.TextChoices):
-    PENDING = "PENDING"
-    IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
-    BLOCKED = "BLOCKED"
-    PARTIALLY_FAILED = "PARTIALLY_FAILED"
-    FAILED = "FAILED"
-
-
 class HarvestBatch(models.Model):
     """
     This model represents a single batch of records to be harvested in a HarvestRun.
@@ -846,7 +821,7 @@ class HarvestBatch(models.Model):
             batch_status=models.Subquery(last_non_waiting_step)
         )
 
-        return archives_with_status.filter(batch_status__in=FAILURE_STATUSES).count()
+        return archives_with_status.filter(batch_status=Status.FAILED).count()
 
     @property
     def completed(self):
@@ -886,7 +861,7 @@ class HarvestBatch(models.Model):
         if step_status is not None:
             no_op = {
                 BatchStatus.IN_PROGRESS: {Status.IN_PROGRESS, Status.WAITING},
-                BatchStatus.FAILED: set(FAILURE_STATUSES),
+                BatchStatus.FAILED: {Status.FAILED},
                 BatchStatus.COMPLETED: set(COMPLETED_STATUSES),
             }
             if step_status in no_op.get(self.status, ()):

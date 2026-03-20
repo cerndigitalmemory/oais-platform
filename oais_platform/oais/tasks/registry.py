@@ -4,8 +4,10 @@ import requests
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.pipeline_actions import finalize
+from oais_platform.oais.tasks.utils import get_failure_type_from_status_code
 from oais_platform.settings import BASE_URL, INVENIO_API_TOKEN, INVENIO_SERVER_URL
 
 logger = get_task_logger(__name__)
@@ -57,6 +59,15 @@ def invenio(self, archive_id, step_id):
             req.raise_for_status()
         except Exception as err:
             logger.error(f"The request didn't succeed:{err}")
+            if (
+                isinstance(err, requests.exceptions.HTTPError)
+                and err.response is not None
+            ):
+                step.set_failure_type(
+                    get_failure_type_from_status_code(err.response.status_code)
+                )
+            elif isinstance(err, ConnectionResetError):
+                step.set_failure_type(StepFailureType.CONNECTION_ERROR)
             step.set_status(Status.FAILED)
             return {"status": 1, "errormsg": err}
 

@@ -9,8 +9,8 @@ from django.contrib.auth.models import User
 from django.db import models, transaction
 
 from oais_platform.celery import app
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import (
-    FAILURE_STATUSES,
     RETRY_CONTINUE_STATUSES,
     Archive,
     Status,
@@ -55,6 +55,7 @@ def run_step(step, archive_id, return_signature=False):
         archive.set_last_step(step.id)
 
     if not step.step_type.enabled:
+        step.set_failure_type(StepFailureType.STEP_DISABLED)
         step.set_status(Status.FAILED)
         step.set_output_data(
             {
@@ -228,7 +229,7 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
 
 def manage_end_of_step(step):
     step_type = step.step_type
-    if step.status in FAILURE_STATUSES:
+    if step.status == Status.FAILED:
         step_type.increment_failed_count()
     incremented = step.output_data_json.get("incremented", True)
     if incremented:

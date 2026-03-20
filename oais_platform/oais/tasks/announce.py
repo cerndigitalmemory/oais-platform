@@ -7,6 +7,7 @@ from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize, run_step
@@ -105,6 +106,7 @@ def copy_sip(self, archive_id, step_id):
     archive = Archive.objects.get(pk=archive_id)
 
     if not step.input_data_json:
+        step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
 
     foldername = step.input_data_json.get("foldername")
@@ -120,6 +122,7 @@ def copy_sip(self, archive_id, step_id):
         os.mkdir(target_path)
     except FileExistsError:
         cleanup_empty_path(target_path, SIP_UPSTREAM_BASEPATH, archive.source)
+        step.set_failure_type(StepFailureType.FILE_ALREADY_EXISTS)
         return {
             "status": 1,
             "errormsg": "The SIP couldn't be copied to the platform \
