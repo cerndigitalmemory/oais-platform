@@ -1,18 +1,12 @@
 from django.contrib.auth.models import User
 from django.db.models import (
     Avg,
-    CharField,
     Count,
-    DateTimeField,
     DurationField,
     ExpressionWrapper,
     F,
-    IntegerField,
-    Max,
-    Min,
     OuterRef,
     Subquery,
-    Value,
 )
 from django.db.models.functions import Coalesce
 from django.utils import timezone

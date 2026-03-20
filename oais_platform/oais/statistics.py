@@ -10,7 +10,7 @@ from django.db.models import (
 from django.db.models.functions import TruncDate
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
+from oais_platform.oais.models import Archive, Collection, Status, Step
 
 
 def count_archives_by_steps(category):

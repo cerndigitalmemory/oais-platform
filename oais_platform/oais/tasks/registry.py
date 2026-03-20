@@ -3,6 +3,7 @@ import json
 import requests
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from requests.exceptions import RetryError
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step
@@ -66,7 +67,7 @@ def invenio(self, archive_id, step_id):
                 step.set_failure_type(
                     get_failure_type_from_status_code(err.response.status_code)
                 )
-            elif isinstance(err, ConnectionResetError):
+            elif isinstance(err, (ConnectionResetError, ConnectionError, RetryError)):
                 step.set_failure_type(StepFailureType.CONNECTION_ERROR)
             step.set_status(Status.FAILED)
             return {"status": 1, "errormsg": err}
