@@ -240,6 +240,8 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
             )
             am_status["errormsg"] = errors
             am_status["retry"] = True
+        if failure_type == StepFailureType.TIMEOUT:
+            am_status["retry"] = True
         remove_periodic_task_on_failure(
             task_name, step, am_status, failure_type=failure_type
         )

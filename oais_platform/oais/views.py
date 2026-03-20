@@ -751,6 +751,19 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
             step.delete()
         return Response("Step deleted.")
 
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="failure-types",
+        url_name="failure-types",
+    )
+    def get_failure_types(self, request):
+        """
+        Returns the possible failure types for Steps
+        """
+        failures = Step.objects.values_list("failure_type", flat=True).distinct()
+        return Response(failures)
+
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
@@ -1068,12 +1081,12 @@ def upload_file(request):
                 f"An operating system error occurred while processing the file: {e}"
             )
             user_message = "Error occurred while processing the file, please try again or contact the admins."
-        error = {"status": 1, "errormsg": error_msg, "archive_id": archive.id}
+        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
         set_and_return_error(step, error)
         raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        error = {"status": 1, "errormsg": error_msg, "archive_id": archive.id}
+        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
         set_and_return_error(step, error)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
