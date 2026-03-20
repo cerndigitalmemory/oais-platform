@@ -761,8 +761,13 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Returns the possible failure types for Steps
         """
-        failures = Step.objects.values_list("failure_type", flat=True).distinct()
-        return Response(failures)
+        failures = (
+            Step.objects.values_list("failure_type", flat=True)
+            .exclude(failure_type__isnull=True)
+            .distinct()
+            .order_by("failure_type")
+        )
+        return Response(list(failures))
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
@@ -810,11 +815,12 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         qs = filter_collections(Collection.objects.all(), self.request.user)
         usernames = (
-            qs.values_list("creator__username", flat=True)
+            qs.filter(creator__isnull=False)
+            .values_list("creator__username", flat=True)
             .distinct()
             .order_by("creator__username")
         )
-        return Response(usernames)
+        return Response(list(usernames))
 
     @action(detail=False, methods=["POST"], url_path="create", url_name="create")
     def create_tag(self, request):

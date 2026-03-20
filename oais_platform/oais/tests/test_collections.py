@@ -442,3 +442,34 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 0)
+
+    def test_get_creator_names(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        response = self.client.get(
+            reverse("tags-usernames"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data, ["superuser"])
+
+    def test_get_creator_names_empty(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.get(
+            reverse("tags-usernames"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+        Collection.objects.create(title="test", internal=False, creator=self.other_user)
+
+        response = self.client.get(
+            reverse("tags-usernames"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data, ["other"])
