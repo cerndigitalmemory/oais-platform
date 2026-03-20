@@ -3,6 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 
 
@@ -136,3 +137,45 @@ class StepViewTests(APITestCase):
 
         response = self.client.delete(reverse("steps-delete", kwargs={"pk": 999}))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_get_failure_types_empty(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        response = self.client.get(reverse("steps-failure-types"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_get_failure_types(self):
+        Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.HARVEST,
+            status=Status.FAILED,
+            failure_type=StepFailureType.HTTP_403,
+        )
+
+        Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.FAILED,
+            failure_type=StepFailureType.TIMEOUT,
+        )
+
+        Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.PUSH_TO_CTA,
+            status=Status.FAILED,
+            failure_type=StepFailureType.CONNECTION_ERROR,
+        )
+
+        self.client.force_authenticate(user=self.superuser)
+
+        response = self.client.get(reverse("steps-failure-types"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            [
+                StepFailureType.CONNECTION_ERROR,
+                StepFailureType.HTTP_403,
+                StepFailureType.TIMEOUT,
+            ],
+        )
