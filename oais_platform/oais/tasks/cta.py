@@ -11,6 +11,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from oais_utils.validate import compute_hash
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import set_and_return_error
@@ -68,6 +69,7 @@ def push_to_cta(self, archive_id, step_id):
         return
 
     if not archive.path_to_aip:
+        step.set_failure_type(StepFailureType.PATH_NOT_FOUND)
         set_and_return_error(
             step,
             {"status": 1, "errormsg": "AIP path not found for the given archive."},
@@ -122,6 +124,8 @@ def push_to_cta(self, archive_id, step_id):
     except Exception as e:
         error = {"errormsg": str(e)}
         error["retry_count"] = _get_retry_count(step)
+        if isinstance(e, ConnectionResetError):
+            step.set_failure_type(StepFailureType.CONNECTION_ERROR)
         error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
         set_and_return_error(step, error)
 
@@ -159,6 +163,7 @@ def _check_in_progress_jobs(self):
         if job_id:
             steps_by_job_id[job_id] = step
         else:
+            step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
             set_and_return_error(step, "Step has no fts_job_id")
 
     logger.info("Checking statuses of ongoing transfers...")

@@ -290,8 +290,8 @@ class ArchivematicaStatusTests(APITestCase):
 
         self.step.refresh_from_db()
 
-        self.assertEqual(self.step.status, Status.TIMED_OUT)
-        self.assertEqual(self.step.output_data_json["status"], "TIMED_OUT")
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.output_data_json["status"], "FAILED")
         self.assertEqual(self.step.output_data_json["retry"], True)
         self.assertEqual(
             self.step.output_data_json["errormsg"], "Archivematica delayed to respond."
@@ -323,7 +323,7 @@ class ArchivematicaStatusTests(APITestCase):
 
         self.step.refresh_from_db()
 
-        self.assertEqual(self.step.status, Status.TIMED_OUT)
+        self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(
             self.step.output_data_json["errormsg"],
             "Error: Archivematica processing time limit reached.",
