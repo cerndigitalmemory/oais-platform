@@ -265,7 +265,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
             step_failure_type = get_failure_type_from_status_code(match.group(1))
             step.set_failure_type(step_failure_type)
 
-        logger.error(f"Harvesting error for Archive {archive_id}: {error_msg}")
+        logger.warning(f"Harvesting error for Archive {archive_id}: {error_msg}")
         return {"status": 1, "errormsg": error_msg}
 
     return

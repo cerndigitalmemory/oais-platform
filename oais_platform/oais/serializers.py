@@ -20,7 +20,7 @@ from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
 
-from oais_platform.oais.enums import Status
+from oais_platform.oais.enums import Status, StepName
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -32,6 +32,7 @@ from oais_platform.oais.models import (
     Step,
     StepType,
 )
+from oais_platform.oais.statistics import avg_duration_per_day
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -245,6 +246,7 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_aip_count = serializers.SerializerMethodField()
     archives_no_package_count = serializers.SerializerMethodField()
     archives_failure_summary = serializers.SerializerMethodField()
+    execution_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -262,6 +264,7 @@ class CollectionSerializer(serializers.ModelSerializer):
             "archives_aip_count",
             "archives_no_package_count",
             "archives_failure_summary",
+            "execution_summary",
         ]
 
     @extend_schema_field(serializers.IntegerField)
@@ -343,6 +346,16 @@ class CollectionSerializer(serializers.ModelSerializer):
 
             summary.setdefault(step_name, {})[failure_type] = {"count": row["count"]}
 
+        return summary
+
+    @extend_schema_field(serializers.DictField())
+    def get_execution_summary(self, obj):
+        summary = {}
+        step_names = [StepName.ARCHIVE, StepName.PUSH_TO_CTA]
+        for step_name in step_names:
+            summary[step_name] = avg_duration_per_day(
+                collection_id=obj.id, step_name=step_name
+            )
         return summary
 
 
