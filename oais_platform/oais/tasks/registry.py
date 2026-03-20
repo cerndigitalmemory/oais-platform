@@ -172,15 +172,14 @@ def prepare_invenio_payload(archive):
     invenio_artifacts = []
 
     for step in steps:
-        if "artifact" in step.output_data:
-            out_data = json.loads(step.output_data)
-            artifact_name = out_data["artifact"]["artifact_name"]
+        if "artifact" in step.output_data_json:
+            artifact_name = step.output_data_json["artifact"]["artifact_name"]
             if artifact_name in ["SIP", "AIP"]:
                 invenio_artifacts.append(
                     {
                         "type": artifact_name,
                         "link": f"{BASE_URL}/api/steps/{step.id}/download-artifact",
-                        "path": out_data["artifact"]["artifact_path"],
+                        "path": step.output_data_json["artifact"]["artifact_path"],
                         "add_details": {
                             "SIP": "Submission Information Package as harvested by the platform from the upstream digital repository.",
                             "AIP": "Archival Information Package, as processed by Archivematica.",
@@ -193,7 +192,7 @@ def prepare_invenio_payload(archive):
                     {
                         "type": artifact_name,
                         "link": None,
-                        "path": out_data["artifact"]["artifact_url"],
+                        "path": step.output_data_json["artifact"]["artifact_url"],
                         "add_details": "Archival Information Package pushed to the CERN Tape Archive.",
                         "timestamp": step.finish_date.strftime("%m/%d/%Y, %H:%M:%S"),
                     }

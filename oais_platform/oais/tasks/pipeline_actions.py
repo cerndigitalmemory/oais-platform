@@ -43,8 +43,8 @@ def run_step(step, archive_id, return_signature=False):
     archive_id: ID of target Archive
     """
     # If no input_data, set the output of the input_step
-    if step.input_data is None and step.input_step is not None:
-        step.input_data = step.input_step.output_data
+    if not step.input_data_json and step.input_step is not None:
+        step.input_data_json = step.input_step.output_data_json
 
     # Set step execution start date
     step.set_start_date()
@@ -133,7 +133,7 @@ def _create_retry_step(
         step_name=last_step.step_type.name,
         archive=archive,
         input_step_id=last_step.id,
-        input_data=last_step.output_data,
+        input_data=last_step.output_data_json,
         user=User.objects.get(pk=user_id) if user_id else None,
         harvest_batch=last_step.initiated_by_harvest_batch,  # Keep tracking the batch to update batch status
     )
@@ -230,8 +230,7 @@ def manage_end_of_step(step):
     step_type = step.step_type
     if step.status in FAILURE_STATUSES:
         step_type.increment_failed_count()
-    output_data = json.loads(step.output_data) if step.output_data else {}
-    incremented = output_data.get("incremented", True)
+    incremented = step.output_data_json.get("incremented", True)
     if incremented:
         with transaction.atomic():
             step_type = StepType.objects.select_for_update().get(pk=step_type.id)

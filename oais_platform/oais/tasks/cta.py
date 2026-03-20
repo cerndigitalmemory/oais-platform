@@ -121,8 +121,7 @@ def push_to_cta(self, archive_id, step_id):
 
     except Exception as e:
         error = {"errormsg": str(e)}
-        input_data = step.get_input_data()
-        error["retry_count"] = _get_retry_count(step.input_step, input_data)
+        error["retry_count"] = _get_retry_count(step)
         error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
         set_and_return_error(step, error)
 
@@ -156,7 +155,7 @@ def _check_in_progress_jobs(self):
 
     steps_by_job_id = {}
     for step in in_progress_steps:
-        job_id = step.get_output_data().get("fts_job_id")
+        job_id = step.output_data_json.get("fts_job_id")
         if job_id:
             steps_by_job_id[job_id] = step
         else:
@@ -221,21 +220,19 @@ def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path)
 
 def _handle_failed_fts_job(step, status):
     result = {"FTS status": status}
-    input_data = step.get_input_data()
-    output_data = step.get_output_data()
 
-    if output_data.get("artifact"):
-        result["artifact"] = output_data["artifact"]
+    if step.output_data_json.get("artifact"):
+        result["artifact"] = step.output_data_json["artifact"]
 
-    result["retry_count"] = _get_retry_count(step.input_step, input_data)
+    result["retry_count"] = _get_retry_count(step)
     result["retrying"] = _retry_push_to_cta(step.archive.id, result["retry_count"])
 
     set_and_return_error(step, result)
 
 
-def _get_retry_count(input_step, input_data):
-    if input_step and input_step.step_type.name == StepName.PUSH_TO_CTA:
-        return input_data.get("retry_count", -1) + 1
+def _get_retry_count(step):
+    if step.input_step and step.input_step.step_type.name == StepName.PUSH_TO_CTA:
+        return step.input_data_json.get("retry_count", -1) + 1
     return 0
 
 

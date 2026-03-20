@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import shutil
@@ -9,15 +8,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
-from oais_platform.oais.models import (
-    ApiKey,
-    Archive,
-    Profile,
-    Status,
-    Step,
-    StepName,
-    StepType,
-)
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
     cleanup_empty_path,
@@ -151,9 +142,8 @@ def upload(self, archive_id, step_id):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
 
-    if not step.input_data:
+    if not step.input_data_json:
         return {"status": 1, "errormsg": "Missing input data for step"}
-    input_data = json.loads(step.input_data)
 
     sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
     try:
@@ -162,8 +152,8 @@ def upload(self, archive_id, step_id):
             source=archive.source,
             loglevel=logging.WARNING,
             target=sip_path,
-            source_path=input_data.get("tmp_dir"),
-            author=input_data.get("author"),
+            source_path=step.input_data_json.get("tmp_dir"),
+            author=step.input_data_json.get("author"),
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
@@ -171,8 +161,8 @@ def upload(self, archive_id, step_id):
         return {
             "status": 1,
             "errormsg": str(e),
-            "tmp_dir": input_data.get("tmp_dir"),
-            "author": input_data.get("author"),
+            "tmp_dir": step.input_data_json.get("tmp_dir"),
+            "author": step.input_data_json.get("author"),
         }
 
     logger.info(bagit_result)
@@ -181,11 +171,11 @@ def upload(self, archive_id, step_id):
         return {
             "status": 1,
             "errormsg": str(bagit_result["errormsg"]),
-            "tmp_dir": input_data.get("tmp_dir"),
-            "author": input_data.get("author"),
+            "tmp_dir": step.input_data_json.get("tmp_dir"),
+            "author": step.input_data_json.get("author"),
         }
 
-    _delete_local_upload(input_data.get("tmp_dir"))
+    _delete_local_upload(step.input_data_json.get("tmp_dir"))
 
     return _handle_successful_bagit(archive, bagit_result, sip_path)
 

@@ -1,4 +1,3 @@
-import json
 import os
 import shutil
 from pathlib import Path
@@ -33,9 +32,7 @@ class UploadTaskTest(APITestCase):
             archive=self.archive,
             step_name=StepName.FILE_UPLOAD,
             status=Status.NOT_RUN,
-            input_data=json.dumps(
-                {"tmp_dir": self.tmp_dir, "author": self.author_name}
-            ),
+            input_data_json={"tmp_dir": self.tmp_dir, "author": self.author_name},
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
@@ -76,7 +73,7 @@ class UploadTaskTest(APITestCase):
         self.assertTrue(expected_path.exists())
 
     def test_upload_missing_input_data(self, bagit_create):
-        self.step.input_data = None
+        self.step.set_input_data(None)
         self.step.save()
         result = upload.apply(args=[self.archive.id, self.step.id], throw=True).get()
         self.assertEqual(result["status"], 1)
@@ -174,7 +171,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.NOT_RUN)
         self.assertEqual(
-            json.loads(step.input_data),
+            step.input_data_json,
             {
                 "tmp_dir": self.expected_tmp_dir,
                 "author": author,
@@ -216,7 +213,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.NOT_RUN)
         self.assertEqual(
-            json.loads(step.input_data),
+            step.input_data_json,
             {
                 "tmp_dir": self.expected_tmp_dir,
                 "author": author,
@@ -246,7 +243,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.NOT_RUN)
         self.assertEqual(
-            json.loads(step.input_data),
+            step.input_data_json,
             {
                 "tmp_dir": self.expected_tmp_dir,
                 "author": self.user.username,
@@ -292,7 +289,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(step.step_type.name, StepName.FILE_UPLOAD)
         self.assertEqual(step.status, Status.FAILED)
         self.assertEqual(
-            json.loads(step.output_data),
+            step.output_data_json,
             {
                 "status": 1,
                 "errormsg": f"Error occurred while processing file: {error_message}",

@@ -1,4 +1,3 @@
-import json
 import ntpath
 import os
 import shutil
@@ -105,12 +104,11 @@ def copy_sip(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
     archive = Archive.objects.get(pk=archive_id)
 
-    if not step.input_data:
+    if not step.input_data_json:
         return {"status": 1, "errormsg": "Missing input data for step"}
-    input_data = json.loads(step.input_data)
 
-    foldername = input_data["foldername"]
-    announce_path = input_data["announce_path"]
+    foldername = step.input_data_json.get("foldername")
+    announce_path = step.input_data_json.get("announce_path")
 
     if SIP_UPSTREAM_BASEPATH:
         target_path = os.path.join(

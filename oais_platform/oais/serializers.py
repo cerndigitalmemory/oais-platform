@@ -112,6 +112,8 @@ class StepTypeMinimalSerializer(serializers.ModelSerializer):
 class StepSerializer(serializers.ModelSerializer):
     archive = serializers.IntegerField(source="archive.id")
     step_type = StepTypeMinimalSerializer()
+    input_data = serializers.JSONField(source="input_data_json")
+    output_data = serializers.JSONField(source="output_data_json")
 
     class Meta:
         model = Step

@@ -105,7 +105,7 @@ def archivematica(self, archive_id, step_id):
                 }
             )
             create_check_am_status(package["id"], current_step, archive_id)
-            return current_step.output_data
+            return current_step.output_data_json
     except requests.HTTPError as e:
         return set_and_return_error(
             current_step,
@@ -278,8 +278,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     if am_status.get("retry", False):
         retry_count = 0
         if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
-            input_data = json.loads(step.input_data) if step.input_data else {}
-            retry_count = input_data.get("retry_count", 0)
+            retry_count = step.input_data_json.get("retry_count", 0)
         if retry_count + 1 > AM_RETRY_LIMIT:
             logger.warning("Max retries exceeded for failed Archivematica jobs.")
             am_status["retry_count"] = retry_count
@@ -576,10 +575,7 @@ def handle_completed_am_package(self, task_name, am, step, am_status, archive_id
             logger.error(e)
     else:
         retry_limit = 5
-        output_data = {}
-        if step.output_data:
-            output_data = json.loads(step.output_data)
-        retry_count = output_data.get("package_retry", 0)
+        retry_count = step.output_data_json.get("package_retry", 0)
         if retry_count + 1 > retry_limit:
             error_msg = f"AIP package with UUID {uuid} not found on {AM_SS_URL} after retrying {retry_limit} times."
             logger.error(error_msg)
@@ -623,9 +619,7 @@ def outdate_aip_dependent_steps(archive):
     )
     for step in steps:
         step.set_status(Status.OUTDATED)
-        output_data = json.loads(step.output_data) if step.output_data else {}
-        output_data["outdated_at"] = timezone.now().isoformat()
-        step.set_output_data(output_data)
+        step.set_output_data_field("outdated_at", timezone.now().isoformat())
     logger.info(
         f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
     )

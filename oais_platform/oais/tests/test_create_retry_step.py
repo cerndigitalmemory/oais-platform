@@ -1,5 +1,3 @@
-import json
-
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
@@ -14,7 +12,7 @@ class CreateRetryStepTests(APITestCase):
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             status=Status.FAILED,
-            output_data=json.dumps({"test": True}),
+            output_data_json={"test": True},
         )
         self.archive.set_last_step(self.step.id)
         self.user = User.objects.create_superuser("user", "", "pw")
