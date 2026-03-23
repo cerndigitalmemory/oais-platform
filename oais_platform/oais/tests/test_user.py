@@ -278,19 +278,6 @@ class UserTests(APITestCase):
         apikey = ApiKey.objects.filter(user=self.test_user, source=self.source)
         self.assertEqual(apikey.count(), 0)
 
-    def test_users_get_tags(self):
-        """
-        Test getting user tags.
-        """
-        self.client.force_authenticate(user=self.test_user)
-
-        url = reverse("users-me-tags")
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        tag = response.data[0]
-        self.assertEqual(tag["id"], self.regular_tag.id)
-
     def test_users_get_add_staging_area(self):
         """
         Test adding records to the staging area.

@@ -71,6 +71,7 @@ from oais_platform.oais.serializers import (
     ArchiveWithDuplicatesSerializer,
     BatchAnnounceSerializer,
     CallbackSerializer,
+    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
     ConfigurationSerializer,
@@ -194,17 +195,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 user_data["api_key"].append(entry)
 
             return Response(user_data)
-
-    @action(detail=False, url_path="me/tags", url_name="me-tags")
-    def get_tags(self, request):
-        """
-        Returns all not internal Tags accessible by the User
-        """
-        user = request.user
-
-        tags = filter_collections(Collection.objects.all(), user, internal=False)
-        serializer = CollectionSerializer(tags, many=True)
-        return Response(serializer.data)
 
     @action(
         detail=False,
@@ -506,7 +496,22 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         collections = filter_collections(archive.get_collections(), request.user)
-        return self.make_paginated_response(collections, CollectionSerializer)
+        return self.make_paginated_response(collections, CollectionMinimalSerializer)
+
+    @action(
+        detail=False, methods=["POST"], url_path="collections", url_name="collections"
+    )
+    def archive_collections(self, request):
+        """
+        Returns Collections that contain the passed Archives
+        """
+        archive_ids = request.data.get("archives")
+        if not archive_ids:
+            return BadRequest("No archive IDs provided.")
+
+        collections = Collection.objects.filter(archives__in=archive_ids).distinct()
+        collections = filter_collections(collections, request.user)
+        return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
     @action(
         detail=True,
@@ -576,7 +581,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             # Step is auto-approved and harvest step runs
             run_step(step, archive.id)
 
-        serializer = CollectionSerializer(
+        serializer = CollectionMinimalSerializer(
             job_tag,
             many=False,
         )
@@ -776,7 +781,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionSerializer
+    serializer_class = CollectionMinimalSerializer
     permission_classes = [TagPermission]
 
     filters_map = {
@@ -845,7 +850,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             if archives:
                 tag.archives.set(archives)
 
-            serializer = CollectionSerializer(tag, many=False)
+            serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
@@ -867,7 +872,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 tag.set_description(description)
                 tag.set_modification_timestamp()
 
-            serializer = CollectionSerializer(tag, many=False)
+            serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
