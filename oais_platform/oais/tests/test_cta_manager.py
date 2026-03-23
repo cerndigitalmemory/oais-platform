@@ -4,6 +4,7 @@ from django.apps import apps
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import cta_manager
 from oais_platform.settings import FTS_MAX_RETRY_COUNT
@@ -116,3 +117,16 @@ class CTAManagerTests(APITestCase):
         cta_manager.apply()
 
         mock_push_to_cta.assert_not_called()
+
+    def test_cta_manager_handles_missing_job_id(self):
+        self.step.status = Status.IN_PROGRESS
+        self.step.set_output_data({"fts_job_id": None})
+        self.step.save()
+
+        self.fts.job_statuses.return_value = []
+
+        cta_manager.apply()
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_INPUT_DATA)

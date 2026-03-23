@@ -1,10 +1,12 @@
 import errno
 from unittest.mock import MagicMock, Mock, patch
 
+import requests
 from django.apps import apps
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
 from oais_platform.settings import CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
@@ -136,3 +138,43 @@ class PushToCTATests(APITestCase):
             True,
         )
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+
+    def test_push_to_cta_no_aip_path(self, mock_gfal2):
+        self.archive.path_to_aip = None
+        self.archive.save()
+
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 0)
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.PATH_NOT_FOUND)
+
+    @patch("oais_platform.oais.tasks.cta.Path.stat")
+    @patch("oais_platform.oais.tasks.cta.compute_hash")
+    def test_push_to_cta_http_error(self, mock_checksum, mock_stat, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
+        mock_stat.return_value.st_size = 123456
+        mock_checksum.return_value = "test-checksum"
+        bad_request = requests.Response()
+        bad_request.status_code = 400
+        self.fts.push_to_cta.side_effect = requests.exceptions.HTTPError(
+            response=bad_request
+        )
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.HTTP_400)
+
+    @patch("oais_platform.oais.tasks.cta.Path.stat")
+    @patch("oais_platform.oais.tasks.cta.compute_hash")
+    def test_push_to_cta_connection_error(self, mock_checksum, mock_stat, mock_gfal2):
+        self._setup_gfal2_mocks(mock_gfal2)
+        mock_stat.return_value.st_size = 123456
+        mock_checksum.return_value = "test-checksum"
+        self.fts.push_to_cta.side_effect = ConnectionError("Something went wrong")
+        push_to_cta.apply(args=[self.archive.id, self.step.id])
+        self.step.refresh_from_db()
+        self.assertEqual(self.fts.push_to_cta.call_count, 1)
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.CONNECTION_ERROR)

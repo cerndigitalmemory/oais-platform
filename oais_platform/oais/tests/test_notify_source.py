@@ -1,6 +1,10 @@
+from unittest.mock import Mock, patch
+
+import requests
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -62,6 +66,8 @@ class NotifySourceTests(APITestCase):
         self.assertEqual(
             result["errormsg"], f"Archive {self.archive.id} is not an AIP."
         )
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.failure_type, StepFailureType.PATH_NOT_FOUND)
 
     def test_notify_source_no_source_obj(self):
         self.setup_aip()
@@ -121,3 +127,33 @@ class NotifySourceTests(APITestCase):
 
         self.assertEqual(result["status"], 0)
         self.assertEqual(result["errormsg"], None)
+
+    @patch("oais_platform.oais.tasks.notify_source.get_source")
+    def test_notify_source_raises_http_error(self, mock_get_source):
+        self.setup_aip()
+        response = requests.Response()
+        response.status_code = 502
+        mock_source = Mock()
+        mock_source.notify_source.side_effect = requests.exceptions.HTTPError(
+            response=response
+        )
+        mock_get_source.return_value = mock_source
+
+        result = notify_source(self.archive.id, self.step.id)
+
+        self.assertEqual(result["status"], 1)
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.failure_type, StepFailureType.HTTP_502)
+
+    @patch("oais_platform.oais.tasks.notify_source.get_source")
+    def test_notify_source_raises_http_error(self, mock_get_source):
+        self.setup_aip()
+        mock_source = Mock()
+        mock_source.notify_source.side_effect = ConnectionResetError()
+        mock_get_source.return_value = mock_source
+
+        result = notify_source(self.archive.id, self.step.id)
+
+        self.assertEqual(result["status"], 1)
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.failure_type, StepFailureType.CONNECTION_ERROR)
