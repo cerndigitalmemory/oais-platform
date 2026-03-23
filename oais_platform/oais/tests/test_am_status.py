@@ -4,6 +4,7 @@ import requests
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.archivematica import (
     archive_failed_count_reset,
@@ -141,6 +142,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.IN_PROGRESS)
+        self.assertIsNone(self.step.failure_type)
         self.assertEqual(
             self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )
@@ -174,6 +176,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.PACKAGE_NOT_FOUND)
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
@@ -291,6 +294,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.TIMEOUT)
         self.assertEqual(self.step.output_data_json["status"], "FAILED")
         self.assertEqual(self.step.output_data_json["retry"], True)
         self.assertEqual(
@@ -324,6 +328,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.TIMEOUT)
         self.assertEqual(
             self.step.output_data_json["errormsg"],
             "Error: Archivematica processing time limit reached.",
@@ -526,6 +531,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.CONNECTION_ERROR)
         self.assertEqual(self.step.output_data_json["status"], "FAILED")
         self.assertEqual(
             self.step.output_data_json["errormsg"],
@@ -630,6 +636,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.USER_INPUT_REQUIRED)
         self.assertEqual(
             self.step.output_data_json["status"], get_unit_status.return_value["status"]
         )

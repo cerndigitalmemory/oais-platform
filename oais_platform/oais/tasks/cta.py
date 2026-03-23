@@ -74,10 +74,10 @@ def push_to_cta(self, archive_id, step_id):
         return
 
     if not archive.path_to_aip:
-        step.set_failure_type(StepFailureType.PATH_NOT_FOUND)
         set_and_return_error(
             step,
             {"status": 1, "errormsg": "AIP path not found for the given archive."},
+            failure_type=StepFailureType.PATH_NOT_FOUND,
         )
         return
 
@@ -129,14 +129,13 @@ def push_to_cta(self, archive_id, step_id):
     except Exception as e:
         error = {"errormsg": str(e)}
         error["retry_count"] = _get_retry_count(step)
+        failure_type = None
         if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
-            step.set_failure_type(
-                get_failure_type_from_status_code(e.response.status_code)
-            )
+            failure_type = get_failure_type_from_status_code(e.response.status_code)
         elif isinstance(e, (ConnectionResetError, ConnectionError, RetryError)):
-            step.set_failure_type(StepFailureType.CONNECTION_ERROR)
+            failure_type = StepFailureType.CONNECTION_ERROR
         error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
-        set_and_return_error(step, error)
+        set_and_return_error(step, error, failure_type=failure_type)
 
 
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
@@ -172,8 +171,11 @@ def _check_in_progress_jobs(self):
         if job_id:
             steps_by_job_id[job_id] = step
         else:
-            step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
-            set_and_return_error(step, "Step has no fts_job_id")
+            set_and_return_error(
+                step,
+                "Step has no fts_job_id",
+                failure_type=StepFailureType.MISSING_INPUT_DATA,
+            )
 
     logger.info("Checking statuses of ongoing transfers...")
     fts = apps.get_app_config("oais").get_fts_client()

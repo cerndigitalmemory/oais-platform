@@ -509,7 +509,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         if not archive_ids:
             return BadRequest("No archive IDs provided.")
 
-        collections = Collection.objects.filter(archives__in=archive_ids).distinct()
+        collections = (
+            Collection.objects.filter(archives__in=archive_ids)
+            .annotate(
+                matched_archives=Count(
+                    "archives",
+                    filter=Q(archives__in=archive_ids),
+                    distinct=True,
+                )
+            )
+            .filter(matched_archives=len(archive_ids))
+            .order_by("id")
+        )
+
         collections = filter_collections(collections, request.user)
         return self.make_paginated_response(collections, CollectionMinimalSerializer)
 

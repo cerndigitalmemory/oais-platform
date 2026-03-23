@@ -5,6 +5,7 @@ import requests
 from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica, get_task_name
 
@@ -97,6 +98,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertIn(errormsg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertEqual(self.step.failure_type, StepFailureType.HTTP_403)
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_httperror(self, create_package):
@@ -116,6 +118,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertIn(errormsg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertEqual(self.step.failure_type, StepFailureType.HTTP_400)
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_exception(self, create_package):
@@ -158,6 +161,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.step.refresh_from_db()
         msg = "SIP exceeds the Archivematica file size limit"
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.SIZE_EXCEEDED)
         self.assertIn(msg, self.step.output_data_json["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)

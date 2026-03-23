@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from celery.exceptions import Retry
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import harvest
 from oais_platform.settings import SIP_UPSTREAM_BASEPATH
@@ -70,6 +71,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Record is too large to be harvested.")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.SIZE_EXCEEDED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_harvest_aggr_file_size_exceeded(self):
@@ -101,6 +103,7 @@ class HarvestTest(APITestCase):
         self.assertIn("Max retries exceeded", result["errormsg"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.AGGR_SIZE_EXCEEDED)
         self.assertEqual(
             self.step.step_type.current_size_bytes,
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1,
@@ -162,6 +165,7 @@ class HarvestTest(APITestCase):
         self.assertIn("Max retries exceeded", result["errormsg"])
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.HTTP_502)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     @patch("bagit_create.main.process")

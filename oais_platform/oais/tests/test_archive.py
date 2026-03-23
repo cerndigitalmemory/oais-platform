@@ -491,6 +491,36 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 2)
 
+    def test_archive_tags_common_collection(self):
+        other_archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.requester,
+            restricted=True,
+        )
+        self.client.force_authenticate(user=self.requester)
+
+        url = reverse("archives-collections")
+        response = self.client.post(
+            url,
+            {"archives": [self.private_archive.id, other_archive.id]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 0)
+
+        self.private_tag.add_archive(other_archive)
+        response = self.client.post(
+            url,
+            {"archives": [self.private_archive.id, other_archive.id]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["id"], self.private_tag.id)
+
     def test_archive_mlt_unstage_forbidden(self):
         self.client.force_authenticate(user=self.requester)
 
