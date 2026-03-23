@@ -231,6 +231,24 @@ class ArchiveMinimalSerializer(serializers.ModelSerializer):
         ]
 
 
+class CollectionMinimalSerializer(serializers.ModelSerializer):
+    creator = UserMinimalSerializer()
+    archives_count = serializers.IntegerField(source="archives.count", read_only=True)
+
+    class Meta:
+        model = Collection
+        fields = [
+            "id",
+            "title",
+            "description",
+            "creator",
+            "timestamp",
+            "last_modification_date",
+            "internal",
+            "archives_count",
+        ]
+
+
 class CollectionSerializer(serializers.ModelSerializer):
     archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
@@ -338,7 +356,12 @@ class CollectionSerializer(serializers.ModelSerializer):
             step_name = row["step_type__name"]
             failure_type = row["failure_type"] or "Unknown"
 
-            summary.setdefault(step_name, {})[failure_type] = {"count": row["count"]}
+            summary.setdefault(step_name, []).append(
+                {
+                    "failure_type": failure_type,
+                    "count": row["count"],
+                }
+            )
 
         return summary
 
