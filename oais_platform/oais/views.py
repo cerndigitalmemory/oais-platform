@@ -109,6 +109,7 @@ from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
     PIPELINE_SIZE_LIMIT,
+    SIP_UPSTREAM_BASEPATH,
     STEP_FILTER_CONDITION_LIMIT,
 )
 
@@ -1143,63 +1144,61 @@ def upload_sip(request):
     if not serializer.is_valid(raise_exception=False):
         raise BadRequest("File missing")
     file = serializer.validated_data["file"]
-    step = None
+
+    # Create a new Archive instance
+    archive = Archive.objects.create(
+        recid="N/A",
+        source="N/A",
+        source_url="N/A",
+        title=file.name,
+        requester=request.user,
+        approver=request.user,
+    )
+
+    step = Step.objects.create(
+        archive=archive,
+        step_name=StepName.SIP_UPLOAD,
+        status=Status.IN_PROGRESS,
+        initiated_by_user=request.user,
+    )
+    archive.set_last_step(step.id)
+    step.set_start_date()
+    compressed_path = None
 
     try:
-        # Settings must be imported from django.conf.settings in order to be overridable from the tests
-        if settings.SIP_UPSTREAM_BASEPATH:
-            base_path = settings.SIP_UPSTREAM_BASEPATH
-        else:
-            base_path = os.getcwd()
         # Save compressed SIP
+        base_path = os.path.join(SIP_UPSTREAM_BASEPATH, "upload")
+        os.makedirs(base_path, exist_ok=True)
         compressed_path = os.path.join(base_path, f"compressed_{file.name}")
-        destination = open(compressed_path, "wb+")
-        for chunk in file.chunks():
-            destination.write(chunk)
-        destination.close()
+        with open(compressed_path, "wb+") as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
 
+        sip_path = os.path.join(base_path, f"Archive-{archive.id}")
         # Extract it and get the top directory folder
         with zipfile.ZipFile(compressed_path, "r") as compressed:
-            compressed.extractall(base_path)
-            top = [item.split("/")[0] for item in compressed.namelist()]
+            compressed.extractall(sip_path)
         os.remove(compressed_path)
 
         # Get the folder location and the sip_json using oais utils
-        folder_location = top[0]
-        sip_json = get_manifest(os.path.join(base_path, folder_location))
-        sip_location = os.path.join(base_path, folder_location)
+        sip_json = get_manifest(sip_path)
 
-        source = sip_json["source"]
-        recid = sip_json["recid"]
+        source = sip_json.get("source", "N/A")
+        recid = sip_json.get("recid", "N/A")
+        recid = sip_json.get("recid", "N/A")
         url = get_source(source).get_record_url(recid)
-
-        # Create a new Archive instance
-        archive = Archive.objects.create(
-            recid=recid,
-            source=source,
-            source_url=url,
-            requester=request.user,
-        )
-
-        step = Step.objects.create(
-            archive=archive,
-            step_name=StepName.SIP_UPLOAD,
-            status=Status.IN_PROGRESS,
-            initiated_by_user=request.user,
-        )
-        step.set_start_date()
+        archive.source = source
+        archive.recid = recid
+        archive.source_url = url
+        archive.path_to_sip = sip_path
+        archive.save()
 
         # Uploading completed
         step.set_status(Status.COMPLETED)
         step.set_finish_date()
 
         # Set Archive's last step info
-        archive.set_last_step(step.id)
         archive.set_last_completed_step(step.id)
-
-        # Save path and change status of the archive
-        archive.path_to_sip = sip_location
-        archive.save()
 
         # run next step
         execute_pipeline(archive.id)
@@ -1211,23 +1210,20 @@ def upload_sip(request):
                 "msg": "SIP uploaded, see Archives page",
             }
         )
-    except zipfile.BadZipFile as e:
-        logging.error(f"Error processing uploaded SIP: {e}")
-        raise BadRequest({"status": 1, "msg": "Check the zip file for errors"})
-    except TypeError as e:
-        logging.error(f"Error processing uploaded SIP: {e}")
-        if os.path.exists(compressed_path):
-            os.remove(compressed_path)
-        raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
     except Exception as e:
         logging.error(f"Error while processing SIP upload: {e}")
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         if step:
-            step.set_status(Status.FAILED)
-            step.set_finish_date()
-            archive.set_last_step(step.id)
-        raise BadRequest({"status": 1, "msg": e})
+            set_and_return_error(step, {"status": 1, "errormsg": str(e)})
+            return Response(
+                {
+                    "status": 1,
+                    "archive": archive.id,
+                    "msg": "SIP upload failed, see Archives page",
+                }
+            )
+        raise BadRequest("Error while processing SIP upload")
 
 
 @extend_schema(
