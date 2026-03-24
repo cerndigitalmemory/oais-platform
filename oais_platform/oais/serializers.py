@@ -1,12 +1,15 @@
 from django.contrib.auth.models import User
 from django.db.models import (
     Avg,
+    Case,
     Count,
     DurationField,
     ExpressionWrapper,
     F,
+    IntegerField,
     OuterRef,
     Subquery,
+    When,
 )
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -296,6 +299,17 @@ class CollectionSerializer(serializers.ModelSerializer):
             .values("id")[:1]
         )
 
+    STEP_ORDER_CASE = Case(
+        When(step_type__has_sip=True, then=0),
+        When(step_type__name=StepName.VALIDATION, then=1),
+        When(step_type__name=StepName.EXTRACT_TITLE, then=2),
+        When(step_type__name=StepName.ARCHIVE, then=3),
+        When(step_type__name=StepName.NOTIFY_SOURCE, then=4),
+        When(step_type__name=StepName.PUSH_TO_CTA, then=5),
+        default=99,
+        output_field=IntegerField(),
+    )
+
     @extend_schema_field(serializers.DictField())
     def get_archives_summary(self, obj):
         latest_step_subquery = self._get_latest_step_subquery()
@@ -315,7 +329,12 @@ class CollectionSerializer(serializers.ModelSerializer):
                 ),
             )
             .values("step_name", "step_status")
-            .annotate(count=Count("id"), avg_duration=Avg("duration"))
+            .annotate(
+                count=Count("id"),
+                avg_duration=Avg("duration"),
+                order_index=self.STEP_ORDER_CASE,
+            )
+            .order_by("order_index")
         )
 
         summary = {}
@@ -344,7 +363,11 @@ class CollectionSerializer(serializers.ModelSerializer):
                 status=Status.FAILED,
             )
             .values("step_type__name", "failure_type")
-            .annotate(count=Count("id"))
+            .annotate(
+                count=Count("id"),
+                order_index=self.STEP_ORDER_CASE,
+            )
+            .order_by("order_index")
         )
 
         summary = {}
