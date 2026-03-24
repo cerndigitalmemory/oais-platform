@@ -76,9 +76,7 @@ def avg_duration_per_day(
     )
 
     if collection_id:
-        collection = Collection.objects.get(pk=collection_id)
-        steps = steps.filter(archive__in=collection.archives.all())
-
+        steps = steps.filter(archive__archive_collections__id=collection_id)
     return (
         steps.exclude(start_date__isnull=True, finish_date__isnull=True)
         .annotate(

@@ -164,6 +164,13 @@ class StepViewTests(APITestCase):
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             status=Status.FAILED,
+            failure_type=StepFailureType.TIMEOUT,
+        )
+
+        Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.PUSH_TO_CTA,
+            status=Status.FAILED,
             failure_type=StepFailureType.CONNECTION_ERROR,
         )
 
