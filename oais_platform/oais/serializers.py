@@ -184,21 +184,25 @@ class ArchiveWithDuplicatesSerializer(ArchiveSerializer):
         fields = ArchiveSerializer.Meta.fields + ["duplicates"]
 
     def get_duplicates(self, obj):
-        duplicates = self.context.get("duplicates").filter(resource__id=obj.resource.id)
-        results = []
-        for d in duplicates:
-            timestamp_match = (
-                obj.version_timestamp == d.version_timestamp
-                and obj.version_timestamp is not None
+        duplicates_ctx = self.context.get("duplicates")
+        if duplicates_ctx is not None:
+            duplicates = duplicates_ctx.filter(resource__id=obj.resource.id)
+        else:
+            duplicates = Archive.objects.filter(resource__id=obj.resource.id).exclude(
+                id=obj.id
             )
-            results.append(
-                {
-                    "id": d.id,
-                    "timestamp": d.timestamp,
-                    "timestamp_match": timestamp_match,
-                }
-            )
-        return results
+
+        return [
+            {
+                "id": d.id,
+                "timestamp": d.timestamp,
+                "timestamp_match": (
+                    obj.version_timestamp == d.version_timestamp
+                    and obj.version_timestamp is not None
+                ),
+            }
+            for d in duplicates
+        ]
 
 
 class ArchiveMinimalSerializer(serializers.ModelSerializer):

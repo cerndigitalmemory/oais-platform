@@ -330,7 +330,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Archive.objects.all()
-    serializer_class = ArchiveSerializer
     permission_classes = [ArchivePermission]
     default_page_size = 10
     filters_map = {
@@ -340,6 +339,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         "exclude_tag": ["archive_collections__id"],
         "query": ["title__icontains", "recid__icontains"],
     }
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return ArchiveWithDuplicatesSerializer
+        return ArchiveSerializer
 
     def get_queryset(self):
         """
