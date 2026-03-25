@@ -21,7 +21,7 @@ def add_sources(apps, schema_editor):
     Source.objects.create(name="inveniordm", longname="InvenioRDM SANDBOX", api_url="https://inveniordm.web.cern.ch/api", classname="Invenio", enabled=False, has_restricted_records=False)
     Source.objects.create(name="cod", longname="CERN OpenData Portal", api_url="https://opendata.cern.ch/api", classname="Invenio", enabled=False, has_restricted_records=False)
     Source.objects.create(name="indico", longname="CERN Indico", api_url="https://indico.cern.ch", classname="Indico",
-                          how_to_get_key="From your browser, login to the Indico instance, go to \"Preferences\" and then \"API Token\". Create new token, name can be anything. Select (at least) Everything (all methods) and Classic API (read only) as scopes. Note down the token and paste it here.")
+                          how_to_get_key="From your browser, login to the Indico instance, go to \"Preferences\" and then \"API Token\". Create new token, name can be anything. Select (at least) Everything (only GET) and Classic API (read only) as scopes. Note down the token and paste it here.")
     Source.objects.create(name="codimd", longname="CERN CodiMD", api_url="https://codimd.web.cern.ch", classname="CodiMD", has_public_records=False,
                           how_to_get_key="From your browser, login to the CodiMD instance and after the redirect to the main page open your browser's developer tools (CTRL+SHIFT+I), go to the \"Storage\" tab and under cookies copy the value of the connect.sid cookie. The Record ID for CodiMD document is the part of the url that follows the main domain address (e.g. in https://codimd.web.cern.ch/KabpdG3TTHKOsig2lq8tnw# the recid is KabpdG3TTHKOsig2lq8tnw).")
 

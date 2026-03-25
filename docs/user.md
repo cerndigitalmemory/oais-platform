@@ -166,7 +166,7 @@ To set API and auth tokens, go in your user settings page.
 
 ### CodiMD
 
-From your browser, login to the Indico instance, go to "Preferences" and then "API Token". Create new token, name can be anything. Select (at least) Everything (all methods) and Classic API (read only) as scopes. Note down the token and paste it there.
+From your browser, login to the Indico instance, go to "Preferences" and then "API Token". Create new token, name can be anything. Select (at least) Everything (only GET) and Classic API (read only) as scopes. Note down the token and paste it there.
 
 ### Indico
 
