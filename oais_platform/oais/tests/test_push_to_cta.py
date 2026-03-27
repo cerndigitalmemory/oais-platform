@@ -78,11 +78,12 @@ class PushToCTATests(APITestCase):
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     def test_push_to_cta_exception(self, mock_retry_step, mock_gfal2):
         self._setup_gfal2_mocks(mock_gfal2)
-        self.fts.push_to_cta.side_effect = Exception("FTS Service Down")
+        self.fts.push_to_cta.side_effect = ConnectionError("FTS Service Down")
         push_to_cta.apply(args=[self.archive.id, self.step.id])
         self.step.refresh_from_db()
         self.assertEqual(self.fts.push_to_cta.call_count, 1)
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.CONNECTION_ERROR)
         self.assertIsNotNone(self.step.finish_date)
         output_data = self.step.output_data_json
         self.assertTrue(output_data["retrying"])
@@ -165,16 +166,3 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.fts.push_to_cta.call_count, 1)
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_400)
-
-    @patch("oais_platform.oais.tasks.cta.Path.stat")
-    @patch("oais_platform.oais.tasks.cta.compute_hash")
-    def test_push_to_cta_connection_error(self, mock_checksum, mock_stat, mock_gfal2):
-        self._setup_gfal2_mocks(mock_gfal2)
-        mock_stat.return_value.st_size = 123456
-        mock_checksum.return_value = "test-checksum"
-        self.fts.push_to_cta.side_effect = ConnectionError("Something went wrong")
-        push_to_cta.apply(args=[self.archive.id, self.step.id])
-        self.step.refresh_from_db()
-        self.assertEqual(self.fts.push_to_cta.call_count, 1)
-        self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.failure_type, StepFailureType.CONNECTION_ERROR)
