@@ -1,6 +1,16 @@
-from django.db.models import Exists, OuterRef
+from django.db.models import (
+    Avg,
+    Count,
+    DurationField,
+    Exists,
+    ExpressionWrapper,
+    F,
+    OuterRef,
+)
+from django.db.models.functions import TruncDate
 
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.enums import COMPLETED_STATUSES
+from oais_platform.oais.models import Archive, Collection, Status, Step
 
 
 def count_archives_by_steps(category):
@@ -52,3 +62,34 @@ def count_excluded_archives(statistics):
     :param statistics: A dictionary containing the counts for each category.
     """
     return Archive.objects.all().count() - sum(statistics.values())
+
+
+def avg_duration_per_day(
+    collection_id=None, step_name=None, statuses=COMPLETED_STATUSES
+):
+    """
+    Calculate the average duration of completed steps per day for a specific collection.
+    """
+    steps = Step.objects.filter(
+        step_name=step_name,
+        status__in=statuses,
+    )
+
+    if collection_id:
+        steps = steps.filter(archive__archive_collections__id=collection_id)
+    return (
+        steps.exclude(start_date__isnull=True, finish_date__isnull=True)
+        .annotate(
+            day=TruncDate("start_date"),
+            duration=ExpressionWrapper(
+                F("finish_date") - F("start_date"), output_field=DurationField()
+            ),
+        )
+        .values("day")
+        .annotate(
+            avg_duration=Avg("duration"),
+            count=Count("id"),
+            avg_size=Avg("archive__sip_size"),
+        )
+        .order_by("day")
+    )

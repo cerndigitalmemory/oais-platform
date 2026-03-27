@@ -34,6 +34,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import (
     BadRequest,
     InternalServerError,
@@ -42,7 +43,6 @@ from oais_platform.oais.exceptions import (
 from oais_platform.oais.filters import build_step_group, validate_step_group
 from oais_platform.oais.mixins import PaginationMixin
 from oais_platform.oais.models import (
-    FAILURE_STATUSES,
     RETRY_CONTINUE_STATUSES,
     ApiKey,
     Archive,
@@ -71,6 +71,7 @@ from oais_platform.oais.serializers import (
     ArchiveWithDuplicatesSerializer,
     BatchAnnounceSerializer,
     CallbackSerializer,
+    CollectionMinimalSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
     ConfigurationSerializer,
@@ -101,7 +102,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     run_bulk_pipeline,
     run_step,
 )
-from oais_platform.oais.upload import handle_failed_upload
+from oais_platform.oais.tasks.utils import set_and_return_error
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     FILE_UPLOAD_MAX_SIZE_BYTE,
@@ -194,17 +195,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 user_data["api_key"].append(entry)
 
             return Response(user_data)
-
-    @action(detail=False, url_path="me/tags", url_name="me-tags")
-    def get_tags(self, request):
-        """
-        Returns all not internal Tags accessible by the User
-        """
-        user = request.user
-
-        tags = filter_collections(Collection.objects.all(), user, internal=False)
-        serializer = CollectionSerializer(tags, many=True)
-        return Response(serializer.data)
 
     @action(
         detail=False,
@@ -510,7 +500,34 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         collections = filter_collections(archive.get_collections(), request.user)
-        return self.make_paginated_response(collections, CollectionSerializer)
+        return self.make_paginated_response(collections, CollectionMinimalSerializer)
+
+    @action(
+        detail=False, methods=["POST"], url_path="collections", url_name="collections"
+    )
+    def archive_collections(self, request):
+        """
+        Returns Collections that contain the passed Archives
+        """
+        archive_ids = request.data.get("archives")
+        if not archive_ids:
+            return BadRequest("No archive IDs provided.")
+
+        collections = (
+            Collection.objects.filter(archives__in=archive_ids)
+            .annotate(
+                matched_archives=Count(
+                    "archives",
+                    filter=Q(archives__in=archive_ids),
+                    distinct=True,
+                )
+            )
+            .filter(matched_archives=len(archive_ids))
+            .order_by("id")
+        )
+
+        collections = filter_collections(collections, request.user)
+        return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
     @action(
         detail=True,
@@ -580,7 +597,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             # Step is auto-approved and harvest step runs
             run_step(step, archive.id)
 
-        serializer = CollectionSerializer(
+        serializer = CollectionMinimalSerializer(
             job_tag,
             many=False,
         )
@@ -666,7 +683,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         stats = Archive.objects.filter(pk__in=archive_ids).aggregate(
             total=Count("id"),
             missing_step=Count("id", filter=Q(last_step__isnull=True)),
-            not_failed=Count("id", filter=~Q(last_step__status__in=FAILURE_STATUSES)),
+            not_failed=Count("id", filter=~Q(last_step__status=Status.FAILED)),
             not_failed_or_warned=Count(
                 "id",
                 filter=~Q(last_step__status__in=RETRY_CONTINUE_STATUSES),
@@ -755,6 +772,24 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
             step.delete()
         return Response("Step deleted.")
 
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="failure-types",
+        url_name="failure-types",
+    )
+    def get_failure_types(self, request):
+        """
+        Returns the possible failure types for Steps
+        """
+        failures = (
+            Step.objects.values_list("failure_type", flat=True)
+            .exclude(failure_type__isnull=True)
+            .distinct()
+            .order_by("failure_type")
+        )
+        return Response(list(failures))
+
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
@@ -762,29 +797,51 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
 
     queryset = Collection.objects.all()
-    serializer_class = CollectionSerializer
+    serializer_class = CollectionMinimalSerializer
     permission_classes = [TagPermission]
+
+    filters_map = {
+        "query": ["title__icontains"],
+        "username": ["creator__username"],
+    }
 
     def get_queryset(self):
         page_size = self.request.GET.get("size", None)
         if page_size is not None:
             self.pagination_class.page_size = page_size
         internal = self.request.GET.get("internal")
+        qs = super().get_queryset()
+        for key, value in self.filters_map.items():
+            if key in self.request.GET:
+                filter_kwargs = {
+                    f"{query_arg}": self.request.GET[key] for query_arg in value
+                }
+                qs = qs.filter(**filter_kwargs)
         if internal == "only":
-            return filter_collections(
-                super().get_queryset(), self.request.user, internal=True
-            )
+            return filter_collections(qs, self.request.user, internal=True)
         elif internal == "false":
-            return filter_collections(
-                super().get_queryset(), self.request.user, internal=False
-            )
+            return filter_collections(qs, self.request.user, internal=False)
         else:
-            return filter_collections(super().get_queryset(), self.request.user)
+            return filter_collections(qs, self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = CollectionSerializer(instance)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["GET"], url_path="usernames", url_name="usernames")
+    def get_usernames(self, request):
+        """
+        Returns all usernames for visible tags
+        """
+        qs = filter_collections(Collection.objects.all(), self.request.user)
+        usernames = (
+            qs.filter(creator__isnull=False)
+            .values_list("creator__username", flat=True)
+            .distinct()
+            .order_by("creator__username")
+        )
+        return Response(list(usernames))
 
     @action(detail=False, methods=["POST"], url_path="create", url_name="create")
     def create_tag(self, request):
@@ -809,7 +866,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             if archives:
                 tag.archives.set(archives)
 
-            serializer = CollectionSerializer(tag, many=False)
+            serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
@@ -831,7 +888,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 tag.set_description(description)
                 tag.set_modification_timestamp()
 
-            serializer = CollectionSerializer(tag, many=False)
+            serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
@@ -1032,6 +1089,7 @@ def upload_file(request):
         status=Status.NOT_RUN,
         initiated_by_user=request.user,
     )
+    archive.set_last_step(step.id)
 
     try:
         original_filename = sanitize_filename(os.path.basename(file.name))
@@ -1044,16 +1102,19 @@ def upload_file(request):
         if e.errno == errno.ENOSPC:
             error_msg = f"Upload storage is full. Cannot complete file move: {e}"
             user_message = "Upload storage is full. Please contact the admins."
+            step.set_failure_type(StepFailureType.STORAGE_FULL)
         else:
             error_msg = (
                 f"An operating system error occurred while processing the file: {e}"
             )
             user_message = "Error occurred while processing the file, please try again or contact the admins."
-        handle_failed_upload(archive, step, error_msg)
+        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
+        set_and_return_error(step, error)
         raise InternalServerError(user_message)
     except Exception as e:
         error_msg = f"Error occurred while processing file: {e}"
-        handle_failed_upload(archive, step, error_msg)
+        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
+        set_and_return_error(step, error)
         raise InternalServerError(
             "Error occurred while processing the file, please try again or contact the admins."
         )
@@ -1154,17 +1215,22 @@ def upload_sip(request):
                 "msg": "SIP uploaded, see Archives page",
             }
         )
-    except zipfile.BadZipFile:
+    except zipfile.BadZipFile as e:
+        logging.error(f"Error processing uploaded SIP: {e}")
         raise BadRequest({"status": 1, "msg": "Check the zip file for errors"})
-    except TypeError:
+    except TypeError as e:
+        logging.error(f"Error processing uploaded SIP: {e}")
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         raise BadRequest({"status": 1, "msg": "Check your SIP structure"})
     except Exception as e:
+        logging.error(f"Error while processing SIP upload: {e}")
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         if step:
             step.set_status(Status.FAILED)
+            step.set_finish_date()
+            archive.set_last_step(step.id)
         raise BadRequest({"status": 1, "msg": e})
 
 

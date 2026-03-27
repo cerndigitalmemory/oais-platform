@@ -1,11 +1,17 @@
+import requests
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from requests.exceptions import RetryError
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import RetryableException
 from oais_platform.oais.models import Archive, ArchiveState, Source, Status, Step
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize
-from oais_platform.oais.tasks.utils import get_api_key_for_step
+from oais_platform.oais.tasks.utils import (
+    get_api_key_for_step,
+    get_failure_type_from_status_code,
+)
 
 # Logger to be used inside Celery tasks
 logger = get_task_logger(__name__)
@@ -27,7 +33,8 @@ def notify_source(self, archive_id, step_id):
         f"Starting to notify the upstream source({archive.source}) for Archive {archive.id}"
     )
 
-    if archive.state != ArchiveState.AIP:
+    if archive.state != ArchiveState.AIP or archive.path_to_aip is None:
+        step.set_failure_type(StepFailureType.PATH_NOT_FOUND)
         return {"status": 1, "errormsg": f"Archive {archive.id} is not an AIP."}
 
     try:
@@ -59,8 +66,18 @@ def notify_source(self, archive_id, step_id):
             "errormsg": None,
         }
     except RetryableException as e:
+        logger.warning(
+            f"Retryable error while notifying source for Archive {archive.id}: {e}. Retrying..."
+        )
         self.retry(exc=e, countdown=60)
     except Exception as e:
+        if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+            step.set_failure_type(
+                get_failure_type_from_status_code(e.response.status_code)
+            )
+        elif isinstance(e, (ConnectionResetError, ConnectionError, RetryError)):
+            step.set_failure_type(StepFailureType.CONNECTION_ERROR)
+        logger.warning(f"Error while notifying source for Archive {archive.id}: {e}.")
         return {
             "status": 1,
             "errormsg": str(e),

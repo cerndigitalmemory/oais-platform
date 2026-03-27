@@ -12,6 +12,8 @@ from django.db import transaction
 from django.utils import timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
+from oais_platform.oais.enums import StepFailureType
+from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
     COMPLETED_STATUSES,
     Archive,
@@ -23,6 +25,7 @@ from oais_platform.oais.models import (
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
+    get_failure_type_from_status_code,
     get_interval_schedule,
     remove_periodic_task_on_failure,
     set_and_return_error,
@@ -111,6 +114,7 @@ def archivematica(self, archive_id, step_id):
             current_step,
             f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
             extra_log=f"HTTPError: {e}",
+            failure_type=get_failure_type_from_status_code(e.request.status_code),
         )
     except Exception as e:
         return set_and_return_error(
@@ -135,6 +139,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     am = get_am_client()
 
     try:
+        failure_type = None
         if ingest_retry:
             logger.info(
                 f"Retrying to check status for package with uuid {uuid} for step {step_id}"
@@ -147,6 +152,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     except requests.HTTPError as e:
         logger.info(f"Error {e.response.status_code} for archivematica")
         am_status = None
+        failure_type = get_failure_type_from_status_code(e.response.status_code)
         if e.response.status_code == 400:
             try:
                 # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
@@ -176,9 +182,10 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                         f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
                     )
                     am_status = {
-                        "status": "TIMED_OUT",
+                        "status": "FAILED",
                         "errormsg": "Archivematica delayed to respond.",
                     }
+                    failure_type = StepFailureType.TIMEOUT
                 else:
                     am_status = {
                         "status": "WAITING",
@@ -190,6 +197,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                 "status": "FAILED",
                 "errormsg": "Error: Could not connect to archivematica",
             }
+            failure_type = StepFailureType.CONNECTION_ERROR
     except Exception as e:
         """
         In any other case make task fail (Archivematica crashed or not responding)
@@ -211,8 +219,13 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
             )
+            if isinstance(e, MaxRetriesExceeded):
+                failure_type = StepFailureType.PACKAGE_NOT_FOUND
             remove_periodic_task_on_failure(
-                task_name, step, {"status": "FAILED", "errormsg": str(e)}
+                task_name,
+                step,
+                {"status": "FAILED", "errormsg": str(e)},
+                failure_type=failure_type,
             )
 
     elif status == "FAILED" or status == "REJECTED":
@@ -227,7 +240,11 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
             )
             am_status["errormsg"] = errors
             am_status["retry"] = True
-        remove_periodic_task_on_failure(task_name, step, am_status)
+        if failure_type == StepFailureType.TIMEOUT:
+            am_status["retry"] = True
+        remove_periodic_task_on_failure(
+            task_name, step, am_status, failure_type=failure_type
+        )
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
@@ -236,7 +253,9 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
         )
         am_status["errormsg"] = "Error: Archivematica requires user input."
         am_status["retry"] = True
-        remove_periodic_task_on_failure(task_name, step, am_status)
+        remove_periodic_task_on_failure(
+            task_name, step, am_status, failure_type=StepFailureType.USER_INPUT_REQUIRED
+        )
 
     elif status == "PROCESSING" or status == "COMPLETE":
         time_passed = (timezone.now() - step.start_date).total_seconds()
@@ -248,7 +267,9 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                 "Error: Archivematica processing time limit reached."
             )
             am_status["retry"] = True
-            remove_periodic_task_on_failure(task_name, step, am_status, timed_out=True)
+            remove_periodic_task_on_failure(
+                task_name, step, am_status, failure_type=StepFailureType.TIMEOUT
+            )
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
@@ -266,9 +287,6 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
     elif status == "WAITING":
         step.set_status(Status.WAITING)
         step.set_output_data(am_status)
-    elif status == "TIMED_OUT":
-        am_status["retry"] = True
-        remove_periodic_task_on_failure(task_name, step, am_status, timed_out=True)
     else:
         logger.warning(
             f"Unknown status from Archivematica: {status}, for step {step.id}"
@@ -312,6 +330,7 @@ def resource_check(task, current_step, archive):
                 "errormsg": f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
                 "incremented": False,
             },
+            failure_type=StepFailureType.SIZE_EXCEEDED,
         )
     with transaction.atomic():
         locked_archive_step_type = StepType.objects.select_for_update().get(
@@ -579,7 +598,7 @@ def handle_completed_am_package(self, task_name, am, step, am_status, archive_id
         if retry_count + 1 > retry_limit:
             error_msg = f"AIP package with UUID {uuid} not found on {AM_SS_URL} after retrying {retry_limit} times."
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise MaxRetriesExceeded(error_msg)
         else:
             logger.warning(
                 f"AIP package with UUID {uuid} not found on {AM_SS_URL}, retrying..."

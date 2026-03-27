@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import ApiKey, Profile, Status, Step
 from oais_platform.settings import FILES_URL
 
@@ -59,16 +60,17 @@ def create_path_artifact(name, path, localpath):
     }
 
 
-def set_and_return_error(step, errormsg, extra_log=None, timed_out=False):
+def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
     """
     Set the step as failed and return the error message
     """
     from oais_platform.oais.tasks.pipeline_actions import manage_end_of_step
 
-    if timed_out:
-        step.set_status(Status.TIMED_OUT)
+    if failure_type and not step.failure_type:
+        step.set_failure_type(failure_type)
     else:
-        step.set_status(Status.FAILED)
+        step.set_failure_type(StepFailureType.OTHER)
+    step.set_status(Status.FAILED)
     step.set_finish_date()
     if type(errormsg) is dict:
         step.set_output_data(errormsg)
@@ -83,14 +85,12 @@ def set_and_return_error(step, errormsg, extra_log=None, timed_out=False):
     return return_value
 
 
-def remove_periodic_task_on_failure(task_name, step, output_data, timed_out=False):
+def remove_periodic_task_on_failure(task_name, step, output_data, failure_type=None):
     """
     Set step as failed/timed out and remove the scheduled task
     """
-    set_and_return_error(step, output_data, timed_out=timed_out)
-    logger.warning(
-        f"Step {step.id} {('timed out' if timed_out else 'failed')}. Removing periodic task {task_name}."
-    )
+    set_and_return_error(step, output_data, failure_type=failure_type)
+    logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:
         remove_periodic_task_if_exists(task_name)
@@ -177,3 +177,10 @@ def get_interval_schedule(every, period):
         return schedule
     except Exception:
         return IntervalSchedule.objects.filter(every=every, period=period).first()
+
+
+def get_failure_type_from_status_code(status_code):
+    try:
+        return StepFailureType[f"HTTP_{status_code}"]
+    except KeyError:
+        return StepFailureType.HTTP_OTHER

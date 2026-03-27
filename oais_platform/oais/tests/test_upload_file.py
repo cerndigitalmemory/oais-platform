@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
@@ -81,6 +82,7 @@ class UploadTaskTest(APITestCase):
         self.assertTrue(os.path.exists(self.tmp_dir))
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_INPUT_DATA)
 
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     def test_upload_bagit_exception(self, hashlib_mock, bagit_create):

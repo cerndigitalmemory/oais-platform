@@ -27,6 +27,7 @@ def validate_step_group(group):
 filters_map = {
     "name": ["step_type__name"],
     "status": ["status"],
+    "failure_type": ["failure_type"],
 }
 
 

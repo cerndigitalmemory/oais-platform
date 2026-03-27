@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shutil
 import time
 
@@ -8,6 +9,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import (
@@ -15,6 +17,7 @@ from oais_platform.oais.tasks.utils import (
     create_path_artifact,
     generate_directory_structure,
     get_api_key_for_step,
+    get_failure_type_from_status_code,
 )
 from oais_platform.settings import (
     BIC_WORKDIR,
@@ -60,6 +63,7 @@ def harvest(self, archive_id, step_id):
                 logger.warning(
                     f"Archive {archive.id} exceeds file size limit ({harvest_step_type.size_limit_bytes // (1024**3)}GB)."
                 )
+                step.set_failure_type(StepFailureType.SIZE_EXCEEDED)
                 return {
                     "status": 1,
                     "errormsg": "Record is too large to be harvested.",
@@ -75,9 +79,10 @@ def harvest(self, archive_id, step_id):
                     f"({harvest_step_type.size_limit_bytes // (1024**3)}GB)."
                 )
                 if self.request.retries >= self.max_retries:
+                    step.set_failure_type(StepFailureType.AGGR_SIZE_EXCEEDED)
                     return {
                         "status": 1,
-                        "errormsg": "Max retries exceeded.",
+                        "errormsg": "Max retries exceeded for aggregated file size limit exceeded.",
                         "incremented": False,
                     }
                 step.set_status(Status.WAITING)
@@ -143,6 +148,7 @@ def upload(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
 
     if not step.input_data_json:
+        step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
 
     sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
@@ -215,6 +221,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
     """
     if bagit_result["status"] == 1:
         error_msg = str(bagit_result["errormsg"])
+        step_failure_type = None
         retry = False
         retry_codes = {
             "429": "Rate limit exceeded.",
@@ -227,17 +234,19 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
             logger.warning(
                 f"Archive {archive_id}: URL was redirected; skipping download."
             )
+            step.set_failure_type(StepFailureType.HTTP_REDIRECT)
             return {"status": 1, "errormsg": error_msg}
         elif any(key in error_msg for key in retry_codes):
-            logger.warning(
-                next(retry_codes[key] for key in retry_codes if key in error_msg)
-            )
+            code = next(key for key in retry_codes if key in error_msg)
+            logger.warning(retry_codes[code])
+            step_failure_type = get_failure_type_from_status_code(code)
             retry = True
 
         if retry:
             if task.request.retries >= task.max_retries:
                 message = f"Max retries exceeded for harvesting Archive {archive_id}. Details: {error_msg}"
                 logger.error(message)
+                step.set_failure_type(step_failure_type)
                 return {"status": 1, "errormsg": message}
 
             step.set_status(Status.WAITING)
@@ -251,7 +260,12 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
                 exc=Exception(error_msg), countdown=RETRY_INTERVAL_MINUTES * 60
             )
 
-        logger.error(f"Harvesting error for Archive {archive_id}: {error_msg}")
+        match = re.search(r"HTTP\s+(\d+)", error_msg)
+        if match:
+            step_failure_type = get_failure_type_from_status_code(match.group(1))
+            step.set_failure_type(step_failure_type)
+
+        logger.warning(f"Harvesting error for Archive {archive_id}: {error_msg}")
         return {"status": 1, "errormsg": error_msg}
 
     return
