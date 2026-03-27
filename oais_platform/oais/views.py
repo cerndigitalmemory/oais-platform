@@ -829,7 +829,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionSerializer(instance)
         return Response(serializer.data)
 
-    @action(detail=False, methods=["get"], url_path="usernames", url_name="usernames")
+    @action(detail=False, methods=["GET"], url_path="usernames", url_name="usernames")
     def get_usernames(self, request):
         """
         Returns all usernames for visible tags
