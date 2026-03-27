@@ -1,5 +1,12 @@
 # Changes
 
+## Version 3.0.0 (released 2026-03-27)
+- Merge jobs and tags into Collections, extend summaries, add failure types
+- Update Indico token scope
+- API: return duplicates when retrieving an archive
+- Database: use JSON field for input and output data
+- Fix: Step current size to be set to 0
+
 ## Version 2.10.0 (released 2026-03-18)
 - API: add delete step endpoint
 - Add Sentry environment
