@@ -9,6 +9,7 @@ from oais_platform.oais.models import (
     ApiKey,
     Archive,
     ArchiveState,
+    Profile,
     Source,
     Status,
     Step,
@@ -29,8 +30,10 @@ class NotifySourceTests(APITestCase):
             notification_endpoint="test.test/api/notify",
             notification_enabled=True,
         )
-        self.testuser_api_key = ApiKey.objects.create(
-            user=self.testuser, source=self.source, key="abcd1234"
+        self.system_user = Profile.objects.get(system=True).user
+
+        self.system_user_api_key = ApiKey.objects.create(
+            user=self.system_user, source=self.source, key="system1234"
         )
 
         self.archive = Archive.objects.create(
@@ -146,7 +149,7 @@ class NotifySourceTests(APITestCase):
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_502)
 
     @patch("oais_platform.oais.tasks.notify_source.get_source")
-    def test_notify_source_raises_http_error(self, mock_get_source):
+    def test_notify_source_raises_connection_error(self, mock_get_source):
         self.setup_aip()
         mock_source = Mock()
         mock_source.notify_source.side_effect = ConnectionResetError()

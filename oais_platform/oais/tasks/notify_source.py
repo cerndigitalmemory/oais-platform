@@ -55,7 +55,7 @@ def notify_source(self, archive_id, step_id):
             "errormsg": f"Archive's source ({archive.source}) has no notification endpoint set.",
         }
 
-    api_key = get_api_key_for_step(step)
+    api_key = get_api_key_for_step(step, force_system=True)
 
     try:
         get_source(archive.source).notify_source(

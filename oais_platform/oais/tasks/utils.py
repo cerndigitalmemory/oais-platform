@@ -143,9 +143,9 @@ def cleanup_empty_path(path_to_clean, base_path, source):
             break
 
 
-def get_api_key_for_step(step):
+def get_api_key_for_step(step, force_system=False):
     api_key = None
-    if step.initiated_by_harvest_batch:
+    if step.initiated_by_harvest_batch or force_system:
         try:
             user = Profile.objects.get(system=True).user
             api_key = ApiKey.objects.get(
