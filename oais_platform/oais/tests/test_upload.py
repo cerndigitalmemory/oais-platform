@@ -2,18 +2,19 @@ import logging
 import os
 import tempfile
 import zipfile
+from io import BytesIO
 from unittest.mock import patch
 
 from bagit_create import main as bic
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import TemporaryUploadedFile
-from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import Status
 from oais_platform.oais.models import Archive, Step, StepName, StepType
-from oais_platform.settings import BIC_WORKDIR
+from oais_platform.settings import BIC_WORKDIR, SIP_UPSTREAM_BASEPATH
 
 
 class UploadTests(APITestCase):
@@ -70,51 +71,80 @@ class UploadTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_upload_sip(self, mock_dispatch):
-        with override_settings(SIP_UPSTREAM_BASEPATH=None):
-            # Prepare a temp folder to save the results
-            with tempfile.TemporaryDirectory() as tmpdir2:
-                # Run Bagit Create with the following parameters:
-                # Save the results to tmpdir2
-                res = bic.process(
-                    recid="yz39b-yf220",
-                    source="cds-rdm-sandbox",
-                    target=tmpdir2,
-                    loglevel=logging.DEBUG,
-                    workdir=BIC_WORKDIR,
-                )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create real SIP using bic
+            res = bic.process(
+                recid="yz39b-yf220",
+                source="cds-rdm-sandbox",
+                target=tmpdir,
+                loglevel=logging.DEBUG,
+                workdir=BIC_WORKDIR,
+            )
 
-                foldername = res["foldername"]
+            foldername = res["foldername"]
+            path_to_sip = os.path.join(tmpdir, foldername)
 
-                path_to_sip = os.path.join(tmpdir2, foldername)
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                for root, _, files in os.walk(path_to_sip):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, path_to_sip)
+                        zipf.write(file_path, arcname)
 
-                # create a ZipFile object
-                with zipfile.ZipFile("test.zip", "w") as zipf:
-                    # Iterate over all the files in directory
-                    len_dir_path = len(tmpdir2)
-                    for root, _, files in os.walk(tmpdir2):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            zipf.write(file_path, file_path[len_dir_path:])
-                zipf.close()
+            zip_buffer.seek(0)
 
-                with open("test.zip", mode="rb") as myzip:
-                    url = reverse("upload-sip")
-                    response = self.client.post(url, {"file": myzip})
+            url = reverse("upload-sip")
+            response = self.client.post(url, {"file": zip_buffer}, format="multipart")
 
-                os.remove("test.zip")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], 0)
+        self.assertEqual(response.data["msg"], "SIP uploaded, see Archives page")
 
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_step = Step.objects.latest("id")
+        latest_archive = Archive.objects.latest("id")
+        expected_path = os.path.join(
+            SIP_UPSTREAM_BASEPATH, "upload", f"Archive-{latest_archive.id}"
+        )
 
-                self.assertEqual(response.data["status"], 0)
-                self.assertEqual(
-                    response.data["msg"], "SIP uploaded, see Archives page"
-                )
-                latest_step = Step.objects.latest("id")
-                mock_dispatch.assert_called_once_with(
-                    StepType.get_by_stepname(StepName.VALIDATION),
-                    Archive.objects.latest("id").id,
-                    latest_step.id,
-                    False,
-                )
-                self.assertEqual(latest_step.initiated_by_user, self.user)
-                self.assertEqual(latest_step.initiated_by_harvest_batch, None)
+        mock_dispatch.assert_called_once_with(
+            StepType.get_by_stepname(StepName.VALIDATION),
+            latest_archive.id,
+            latest_step.id,
+            False,
+        )
+        self.assertEqual(response.data["archive"], latest_archive.id)
+        self.assertEqual(latest_archive.path_to_sip, expected_path)
+        self.assertTrue(os.path.exists(expected_path))
+        self.assertEqual(latest_step.initiated_by_user, self.user)
+        self.assertEqual(latest_step.initiated_by_harvest_batch, None)
+
+        sip_upload_step = Step.objects.get(
+            archive=latest_archive, step_name=StepName.SIP_UPLOAD
+        )
+
+        self.assertEqual(sip_upload_step.status, Status.COMPLETED)
+        self.assertEqual(sip_upload_step.initiated_by_user, self.user)
+        self.assertEqual(sip_upload_step.initiated_by_harvest_batch, None)
+        self.assertIsNotNone(sip_upload_step.finish_date)
+
+    def test_upload_sip_corrupted_zip(self):
+        fake_zip = BytesIO(b"this is not a zip file")
+        fake_zip.name = "test.zip"
+
+        url = reverse("upload-sip")
+        response = self.client.post(url, {"file": fake_zip}, format="multipart")
+
+        self.assertEqual(response.data["status"], 1)
+        self.assertEqual(response.data["msg"], "SIP upload failed, see Archives page")
+
+        step = Step.objects.latest("id")
+        self.assertEqual(step.status, Status.FAILED)
+        self.assertIsNotNone(step.finish_date)
+        self.assertIsNotNone(step.output_data_json.get("errormsg"))
+
+    def test_upload_sip_no_file(self):
+        url = reverse("upload-sip")
+        response = self.client.post(url, {"wrong_key": "test"}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
