@@ -109,7 +109,7 @@ class UploadTests(APITestCase):
 
         mock_dispatch.assert_called_once_with(
             StepType.get_by_stepname(StepName.VALIDATION),
-            Archive.objects.latest("id").id,
+            latest_archive.id,
             latest_step.id,
             False,
         )

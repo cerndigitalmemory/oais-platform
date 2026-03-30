@@ -1189,7 +1189,6 @@ def upload_sip(request):
 
         source = sip_json.get("source", "N/A")
         recid = sip_json.get("recid", "N/A")
-        recid = sip_json.get("recid", "N/A")
         url = get_source(source).get_record_url(recid)
         archive.source = source
         archive.recid = recid
