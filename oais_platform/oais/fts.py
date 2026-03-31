@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 import fts3.rest.client.easy as fts3
 from cryptography import x509
+
 from oais_platform.settings import FTS_JOB_STATUS_BATCH_SIZE
 
 
