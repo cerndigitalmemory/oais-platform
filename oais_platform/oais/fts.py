@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import fts3.rest.client.easy as fts3
 from cryptography import x509
 
+from oais_platform.settings import FTS_JOB_STATUS_BATCH_SIZE
+
 
 class FTS:
     archive_timeout = 86400
@@ -67,8 +69,15 @@ class FTS:
         return submitted_job
 
     def job_statuses(self, job_ids):
-        result = fts3.get_jobs_statuses(self.context, job_ids, list_files=True)
-        return [result] if isinstance(result, dict) else result
+        results = []
+        for i in range(0, len(job_ids), FTS_JOB_STATUS_BATCH_SIZE):
+            batch = job_ids[i : i + FTS_JOB_STATUS_BATCH_SIZE]
+            result = fts3.get_jobs_statuses(self.context, batch, list_files=True)
+            if isinstance(result, dict):
+                results.append(result)
+            else:
+                results.extend(result)
+        return results
 
     def delegate(self):
         logging.info("Delegating certificate")
