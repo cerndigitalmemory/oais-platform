@@ -1,5 +1,10 @@
 # Changes
 
+## Version 3.0.1 (released 2026-04-01)
+- FTS: get job statuses in batches
+- Notify Source: use system API key
+- Fix Upload SIP
+
 ## Version 3.0.0 (released 2026-03-27)
 - Merge jobs and tags into Collections, extend summaries, add failure types
 - Update Indico token scope
