@@ -121,6 +121,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserSerializer
+    default_page_size = 20
     permission_classes = [UserPermission]
 
     @action(detail=True, url_path="archives", url_name="archives")
@@ -222,6 +223,8 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 ).data
             )
         else:
+            size = request.GET.get("size", self.default_page_size)
+            self.pagination_class.page_size = size
             return self.make_paginated_response(
                 staged_archives,
                 ArchiveWithDuplicatesSerializer,
