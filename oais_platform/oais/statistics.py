@@ -5,12 +5,14 @@ from django.db.models import (
     Exists,
     ExpressionWrapper,
     F,
+    Max,
+    Min,
     OuterRef,
 )
 from django.db.models.functions import TruncDate
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Archive, Collection, Status, Step
+from oais_platform.oais.models import Archive, Status, Step
 
 
 def count_archives_by_steps(category):
@@ -88,6 +90,8 @@ def avg_duration_per_day(
         .values("day")
         .annotate(
             avg_duration=Avg("duration"),
+            min_duration=Min("duration"),
+            max_duration=Max("duration"),
             count=Count("id"),
             avg_size=Avg("archive__sip_size"),
         )
