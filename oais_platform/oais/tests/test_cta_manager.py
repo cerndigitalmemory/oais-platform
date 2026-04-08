@@ -131,8 +131,7 @@ class CTAManagerTests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.failure_type, StepFailureType.MISSING_INPUT_DATA)
 
-    @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
-    def test_cta_manager_triggers_transfer_after_finished_job(self, mock_push_to_cta):
+    def _setup_waiting_archive(self):
         self.step.step_type.concurrency_limit = 1
         self.step.step_type.save()
 
@@ -150,6 +149,12 @@ class CTAManagerTests(APITestCase):
             start_date=timezone.now(),
         )
         waiting_archive.set_last_step(waiting_step)
+        return waiting_archive, waiting_step
+
+    @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
+    def test_cta_manager_triggers_transfer_after_finished_job(self, mock_push_to_cta):
+        waiting_archive, waiting_step = self._setup_waiting_archive()
+
         self.fts.job_statuses.return_value = [
             {"job_id": "job_id", "job_state": "FINISHED"}
         ]
@@ -162,23 +167,7 @@ class CTAManagerTests(APITestCase):
     def test_cta_manager_triggers_transfer_after_failed_job(
         self, mock_push_to_cta, mock_retry
     ):
-        self.step.step_type.concurrency_limit = 1
-        self.step.step_type.save()
-
-        self.step.status = Status.IN_PROGRESS
-        self.step.set_output_data({"fts_job_id": "job_id"})
-        self.step.save()
-
-        waiting_archive = Archive.objects.create(
-            path_to_aip="basepath/aips/test/path/waiting.zip"
-        )
-        waiting_step = Step.objects.create(
-            archive=waiting_archive,
-            step_name=StepName.PUSH_TO_CTA,
-            status=Status.WAITING,
-            start_date=timezone.now(),
-        )
-        waiting_archive.set_last_step(waiting_step)
+        waiting_archive, waiting_step = self._setup_waiting_archive()
 
         self.fts.job_statuses.return_value = [
             {"job_id": "job_id", "job_state": "FAILED"}
