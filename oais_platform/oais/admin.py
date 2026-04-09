@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
+from guardian.admin import GuardedModelAdmin
 
 from oais_platform.oais.models import (
     ApiKey,
@@ -37,7 +38,7 @@ class NullToNotRequiredMixin:
 
 
 @admin.register(Archive)
-class ArchiveAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+class ArchiveAdmin(NullToNotRequiredMixin, GuardedModelAdmin):
     list_display = (
         "id",
         "timestamp",
@@ -169,7 +170,7 @@ class ResourceAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
 
 
 @admin.register(Collection)
-class CollectionAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
+class CollectionAdmin(NullToNotRequiredMixin, GuardedModelAdmin):
     list_display = (
         "id",
         "timestamp",

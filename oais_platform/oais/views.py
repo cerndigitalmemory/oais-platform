@@ -32,7 +32,6 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import (
@@ -171,14 +170,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
             # Serializer is immutable, so let's copy it to another dict
             user_data = serializer.data
-
-            # Append the API token, if it exists
-            try:
-                user_data["api_token"] = str(
-                    RefreshToken.for_user(request.user).access_token
-                )
-            except Exception:
-                pass
 
             sources = Source.objects.filter(enabled=True, has_restricted_records=True)
             user_data["api_key"] = []
