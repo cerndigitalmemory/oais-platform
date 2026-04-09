@@ -56,12 +56,17 @@ class ArchivePermission(permissions.BasePermission):
     def _can_view_archive(self, user, archive):
         if user.is_superuser or user.has_perm("oais.view_archive_all"):
             return True
-        elif "oais.view_arhive" in get_perms(user, archive):
+        elif user.has_perm("oais.view_archive", archive):
             return True
         elif (
             archive.requester == user
             or archive.approver == user
             or not archive.restricted
+        ):
+            return True
+        elif any(
+            user.has_perm("oais.view_collection", collection)
+            for collection in archive.archive_collections.all()
         ):
             return True
         return False
@@ -181,24 +186,35 @@ def filter_archives(queryset, user=None, visibility="all"):
         case "all":
             if user.is_superuser or user.has_perm("oais.view_archive_all"):
                 return queryset
-            permission_granted_queryset = get_objects_for_user(
-                user, "oais.view_archive"
-            )
+
+            direct = get_objects_for_user(user, "oais.view_archive")
+
+            collections = get_objects_for_user(user, "oais.view_collection")
+
             return (
                 queryset.filter(
-                    Q(approver=user) | Q(requester=user) | Q(restricted=False)
+                    Q(approver=user)
+                    | Q(requester=user)
+                    | Q(restricted=False)
+                    | Q(archive_collections__in=collections)
                 )
-                | permission_granted_queryset
-            )
+                | direct
+            ).distinct()
+
         case "owned":
             return queryset.filter(Q(approver=user) | Q(requester=user))
+
         case "public":
             return queryset.filter(restricted=False)
 
 
 def filter_collections(queryset, user, internal=None):
     if not user.has_perm("oais.view_archive_all"):
-        queryset = queryset.filter(creator=user)
+        permitted = get_objects_for_user(user, "oais.view_collection")
+
+        queryset = queryset.filter(Q(creator=user) | Q(pk__in=permitted))
+
     if internal is not None:
         queryset = queryset.filter(internal=internal)
-    return queryset
+
+    return queryset.distinct()

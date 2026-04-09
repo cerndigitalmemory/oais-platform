@@ -1,5 +1,6 @@
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
+from guardian.shortcuts import assign_perm
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -57,6 +58,19 @@ class CollectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
 
+    def test_collection_list_with_object_perms(self):
+        assign_perm("oais.view_collection", self.other_user, self.collection)
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("tags-list")
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
     def test_collection_list_internal_only(self):
         self.client.force_authenticate(user=self.superuser)
 
@@ -99,6 +113,20 @@ class CollectionTests(APITestCase):
     def test_collection_detail_with_perms(self):
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("tags-detail", args=[self.collection.id])
+        response = self.client.get(
+            url,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.collection.id)
+        self.assertEqual(response.data["archives_count"], 1)
+
+    def test_collection_detail_with_object_perms(self):
+        assign_perm("oais.view_collection", self.other_user, self.collection)
         self.client.force_authenticate(user=self.other_user)
 
         url = reverse("tags-detail", args=[self.collection.id])

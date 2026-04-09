@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import Permission, User
 from django.db import IntegrityError
 from django.urls import reverse
+from guardian.shortcuts import assign_perm
 from parameterized import parameterized
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -257,6 +258,17 @@ class ArchiveTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 4)
 
+    def test_archive_list_other_user_with_object_perm(self):
+        assign_perm("oais.view_archive", self.other_user, self.private_archive)
+
+        self.client.force_authenticate(user=self.other_user)
+
+        url = reverse("archives-list")
+        response = self.client.get(url, {"access": "all"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 4)
+
     def _run_filter_test(self, url_name, result_key, data, output):
         if callable(data):
             data = data(self)  # Resolve the lambda function
@@ -283,43 +295,63 @@ class ArchiveTests(APITestCase):
         self.create_steps()
         self._run_filter_test("archives-filter-ids", "ids", data, output)
 
+    def _test_archive_access(self, expected_detail_status, expected_steps_status):
+        """Helper method to test archive access with different permissions"""
+        url = reverse("archives-detail", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
+        self.assertEqual(response.status_code, expected_detail_status)
+
+        if expected_detail_status == status.HTTP_200_OK:
+            self.assertEqual(response.data["id"], self.private_archive.id)
+
+        Step.objects.create(
+            archive=self.private_archive,
+            step_name=StepName.VALIDATION,
+            status=Status.COMPLETED,
+            start_date="2024-01-01T00:00:00Z",
+        )
+
+        url = reverse("archives-steps", args=[self.private_archive.id])
+        response = self.client.get(url, format="json")
+        self.assertEqual(response.status_code, expected_steps_status)
+
+        if expected_steps_status == status.HTTP_200_OK:
+            self.assertEqual(len(response.data), 1)
+
     def test_archive_details_requester(self):
         self.client.force_authenticate(user=self.requester)
 
-        url = reverse("archives-detail", args=[self.private_archive.id])
-        response = self.client.get(url, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.private_archive.id)
+        self._test_archive_access(status.HTTP_200_OK, status.HTTP_200_OK)
 
     def test_archive_details_superuser(self):
         self.client.force_authenticate(user=self.superuser)
 
-        url = reverse("archives-detail", args=[self.private_archive.id])
-        response = self.client.get(url, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.private_archive.id)
+        self._test_archive_access(status.HTTP_200_OK, status.HTTP_200_OK)
 
     def test_archive_details_other_user(self):
         self.client.force_authenticate(user=self.other_user)
-
-        url = reverse("archives-detail", args=[self.private_archive.id])
-        response = self.client.get(url, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self._test_archive_access(status.HTTP_404_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
     def test_archive_details_other_user_with_perm(self):
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
-
         self.client.force_authenticate(user=self.other_user)
 
-        url = reverse("archives-detail", args=[self.private_archive.id])
-        response = self.client.get(url, format="json")
+        self._test_archive_access(status.HTTP_200_OK, status.HTTP_200_OK)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.private_archive.id)
+    def test_archive_details_other_user_object_perm(self):
+        assign_perm("oais.view_archive", self.other_user, self.private_archive)
+        self.client.force_authenticate(user=self.other_user)
+
+        self._test_archive_access(status.HTTP_200_OK, status.HTTP_200_OK)
+
+    def test_archive_details_other_user_object_perm_collection(self):
+        collection = Collection.objects.create(internal=False, creator=self.requester)
+        collection.add_archive(self.private_archive)
+        assign_perm("oais.view_collection", self.other_user, collection)
+        self.client.force_authenticate(user=self.other_user)
+
+        self._test_archive_access(status.HTTP_200_OK, status.HTTP_200_OK)
 
     def test_get_steps(self):
         self.client.force_authenticate(user=self.requester)
