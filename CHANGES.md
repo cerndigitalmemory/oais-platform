@@ -1,5 +1,10 @@
 # Changes
 
+## Version 3.1.0 (released 2026-04-14)
+- Add object permissions
+- Fix: counting of active FTS jobs
+- Step stats per day: add min, max duration
+
 ## Version 3.0.1 (released 2026-04-01)
 - FTS: get job statuses in batches
 - Notify Source: use system API key
