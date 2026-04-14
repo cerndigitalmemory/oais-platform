@@ -1,5 +1,8 @@
 # Changes
 
+## Version 3.1.1 (released 2026-04-14)
+- Staged archives add page size
+
 ## Version 3.1.0 (released 2026-04-14)
 - Add object permissions
 - Fix: counting of active FTS jobs
