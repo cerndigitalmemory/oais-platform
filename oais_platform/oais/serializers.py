@@ -314,6 +314,16 @@ class CollectionSerializer(serializers.ModelSerializer):
         output_field=IntegerField(),
     )
 
+    STATUS_ORDER_CASE = Case(
+        When(status=Status.COMPLETED, then=1),
+        When(status=Status.COMPLETED_WITH_WARNINGS, then=2),
+        When(status=Status.FAILED, then=3),
+        When(status=Status.WAITING, then=4),
+        When(status=Status.IN_PROGRESS, then=5),
+        default=99,
+        output_field=IntegerField(),
+    )
+
     @extend_schema_field(serializers.DictField())
     def get_archives_summary(self, obj):
         latest_step_subquery = self._get_latest_step_subquery()
@@ -337,8 +347,9 @@ class CollectionSerializer(serializers.ModelSerializer):
                 count=Count("id"),
                 avg_duration=Avg("duration"),
                 order_index=self.STEP_ORDER_CASE,
+                status_order_index=self.STATUS_ORDER_CASE,
             )
-            .order_by("order_index")
+            .order_by("order_index", "status_order_index")
         )
 
         summary = {}
