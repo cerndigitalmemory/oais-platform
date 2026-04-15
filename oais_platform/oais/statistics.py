@@ -94,6 +94,8 @@ def avg_duration_per_day(
             max_duration=Max("duration"),
             count=Count("id"),
             avg_size=Avg("archive__sip_size"),
+            min_size=Min("archive__sip_size"),
+            max_size=Max("archive__sip_size"),
         )
-        .order_by("day")
+        .order_by("-day")
     )
