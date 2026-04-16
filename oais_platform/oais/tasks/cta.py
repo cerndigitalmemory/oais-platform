@@ -1,5 +1,6 @@
 import errno
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -179,7 +180,11 @@ def _check_in_progress_jobs(self):
 
     logger.info("Checking statuses of ongoing transfers...")
     fts = apps.get_app_config("oais").get_fts_client()
-    current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
+    try:
+        current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
+    except Exception as e:
+        failed_count = _handle_jobs_not_found(e, steps_by_job_id)
+        return len(steps_by_job_id) - failed_count
     finished_job_count = 0
     failed_job_count = 0
 
@@ -276,6 +281,29 @@ def _retry_push_to_cta(archive_id, retry_count):
         f"Quitting retrying pushing archive {archive_id} to CTA after {retry_count} attempts"
     )
     return False
+
+
+def _handle_jobs_not_found(error, steps_by_job_id):
+    not_found_ids = re.findall(
+        r'No job with the id "([^"]+)" has been found', str(error)
+    )
+    if not not_found_ids:
+        raise error
+    logger.warning(
+        f"{len(not_found_ids)} FTS jobs were not found and will be marked as failed."
+    )
+    failed_count = 0
+    for job_id in not_found_ids:
+        if step := steps_by_job_id.get(job_id):
+            _handle_failed_fts_job(
+                step,
+                {
+                    "job_id": job_id,
+                    "errormsg": f"FTS job {job_id} was not found. The job may have expired.",
+                },
+            )
+            failed_count += 1
+    return failed_count
 
 
 def _verify_file(aip_path, cta_filename):

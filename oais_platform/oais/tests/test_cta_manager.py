@@ -175,3 +175,23 @@ class CTAManagerTests(APITestCase):
 
         cta_manager.apply()
         mock_push_to_cta.assert_called_once_with(waiting_archive.id, waiting_step.id)
+
+    @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
+    def test_cta_manager_handles_not_found_jobs(self, mock_retry):
+        self.step.status = Status.IN_PROGRESS
+        self.step.set_output_data({"fts_job_id": "job_id"})
+        self.step.save()
+
+        self.fts.job_statuses.side_effect = Exception(
+            'Client error: No job with the id "job_id" has been found'
+        )
+
+        cta_manager.apply()
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertIn(
+            "was not found", self.step.output_data_json["FTS status"]["errormsg"]
+        )
+        mock_retry.assert_called_once()
+        self.assertTrue(self.step.output_data_json["retrying"])
