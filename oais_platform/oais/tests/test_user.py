@@ -313,6 +313,15 @@ class UserTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 2)
+        source_collection = Collection.objects.filter(
+            title=Collection.get_source_collection_title("testsource"),
+            internal=True,
+        ).first()
+        self.assertIsNotNone(source_collection)
+        self.assertEqual(
+            source_collection.archives.count(),
+            1,
+        )
 
     def test_users_get_staging_area_superuser(self):
         """

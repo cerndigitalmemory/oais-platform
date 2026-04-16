@@ -221,7 +221,9 @@ class BatchAnnounceTests(APITestCase):
 
         self.tag.refresh_from_db()
         self.assertEqual(Archive.objects.count(), 2)
-        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(
+            Collection.objects.count(), 2
+        )  # Batch collection + source collection
         self.assertEqual(self.tag.description, "Batch Announce completed successfully")
         self.assertEqual(mock_dispatch.call_count, 2)
         self.assertEqual(
@@ -263,7 +265,9 @@ class BatchAnnounceTests(APITestCase):
 
         self.tag.refresh_from_db()
         self.assertEqual(Archive.objects.count(), 1)
-        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(
+            Collection.objects.count(), 2
+        )  # Batch collection + source collection
         self.assertEqual(
             self.tag.description,
             " ERRORS: The given path is not a valid SIP:" + path_to_sip + ".",

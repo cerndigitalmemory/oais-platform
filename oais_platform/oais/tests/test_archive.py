@@ -521,7 +521,8 @@ class ArchiveTests(APITestCase):
         response = self.client.get(url, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 2)
+        count = self.private_archive.archive_collections.count()
+        self.assertEqual(len(response.data["results"]), count)
 
     def test_archive_tags_common_collection(self):
         other_archive = Archive.objects.create(

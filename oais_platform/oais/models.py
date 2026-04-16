@@ -274,6 +274,24 @@ class Archive(models.Model):
         ).exists()
 
 
+@receiver(post_save, sender=Archive)
+def add_archive_to_source_collection(sender, instance, created, **kwargs):
+    """Automatically add archive to its source collection"""
+    if created:
+        system_user = User.objects.filter(profile__system=True).first()
+        collection, _ = Collection.objects.get_or_create(
+            title=Collection.get_source_collection_title(instance.source),
+            internal=True,
+            creator=system_user,
+            defaults={
+                "description": Collection.get_source_collection_description(
+                    instance.source
+                ),
+            },
+        )
+        collection.add_archive(instance)
+
+
 def get_task_names():
     return [
         (task, task)
@@ -597,11 +615,18 @@ class Collection(models.Model):
 
     def add_archive(self, archive):
         self.archives.add(archive)
-        self.save()
 
     def remove_archive(self, archive):
         self.archives.remove(archive)
         self.save()
+
+    @staticmethod
+    def get_source_collection_title(source):
+        return f"Source: {source}"
+
+    @staticmethod
+    def get_source_collection_description(source):
+        return f"All archives from source: {source}"
 
 
 def get_source_classnames():

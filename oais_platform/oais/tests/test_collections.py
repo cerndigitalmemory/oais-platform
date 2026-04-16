@@ -56,7 +56,8 @@ class CollectionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
+        count = Collection.objects.count()
+        self.assertEqual(response.data["count"], count)
 
     def test_collection_list_with_object_perms(self):
         assign_perm("oais.view_collection", self.other_user, self.collection)
@@ -82,7 +83,8 @@ class CollectionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
+        count = Collection.objects.filter(internal=True).count()
+        self.assertEqual(response.data["count"], count)
         self.assertEqual(response.data["results"][0]["id"], self.job.id)
 
     def test_collection_list_not_internal(self):
@@ -479,8 +481,9 @@ class CollectionTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data, ["superuser"])
+        self.assertEqual(len(response.data), 2)
+        self.assertIn("system_user", response.data)  # Source collection
+        self.assertIn("superuser", response.data)
 
     def test_get_creator_names_empty(self):
         self.client.force_authenticate(user=self.other_user)
