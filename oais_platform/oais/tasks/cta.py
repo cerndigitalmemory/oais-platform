@@ -39,7 +39,7 @@ def cta_manager(self):
      - create tasks to check the statuses of finished FTS jobs
      - create tasks to submit new jobs
     """
-    logger.info("Checking ongoing FTS transfers...")
+    logger.info("Running CTA manager...")
     step_type = StepType.objects.get(name=StepName.PUSH_TO_CTA)
 
     try:
@@ -180,24 +180,31 @@ def _check_in_progress_jobs(self):
     logger.info("Checking statuses of ongoing transfers...")
     fts = apps.get_app_config("oais").get_fts_client()
     current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
-    in_progress_job_count = len(current_jobs)
+    finished_job_count = 0
+    failed_job_count = 0
 
     for job in current_jobs:
         step = steps_by_job_id.get(job["job_id"])
-        logger.info(f"FTS job status for Step {step.id} returned: {job['job_state']}.")
 
         if job["job_state"] == "FINISHED":
             cta_file_path = _get_cta_path(step.archive)
             _handle_successful_fts_job(
                 self, step.id, step.archive.id, job["job_id"], cta_file_path
             )
-            in_progress_job_count -= 1
+            finished_job_count += 1
 
         elif job["job_state"] == "FAILED":
             _handle_failed_fts_job(step, job)
-            in_progress_job_count -= 1
+            failed_job_count += 1
 
-    return in_progress_job_count
+    if finished_job_count or failed_job_count:
+        logger.info(
+            f"Handled {finished_job_count} successful and {failed_job_count} failed FTS transfers."
+        )
+    else:
+        logger.info("All transfers are in progress.")
+
+    return len(current_jobs) - finished_job_count - failed_job_count
 
 
 def _trigger_new_transfers(amount):
@@ -209,12 +216,12 @@ def _trigger_new_transfers(amount):
     ).order_by("create_date")[:amount]
 
     if not waiting_steps:
-        logger.info("No valid waiting push to CTA steps found.")
+        logger.info("No new transfers: no valid waiting push to CTA steps found.")
         return
 
+    logger.info(f"Creating tasks to submit {len(waiting_steps)} new transfers.")
     for step in waiting_steps:
         push_to_cta.delay(step.archive.id, step.id)
-    logger.info(f"Created tasks to submit {len(waiting_steps)} new transfers.")
 
 
 def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path):
