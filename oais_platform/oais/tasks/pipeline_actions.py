@@ -179,6 +179,8 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
 
     step.set_task(self.request.id)
     step.set_finish_date()
+    # ensure last step is correctly set
+    archive.set_last_step(step.id)
 
     # If the Celery task succeded
     if current_status == celery_states.SUCCESS:
