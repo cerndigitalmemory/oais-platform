@@ -86,17 +86,9 @@ def push_to_cta(self, archive_id, step_id):
 
     try:
         if _verify_file(archive.path_to_aip, cta_file_path):
-            finalize(
-                self=self,
-                current_status=states.SUCCESS,
-                retval={
-                    "status": 0,
-                    "details": "Archive already exists on tape with the same size and checksum",
-                },
-                task_id=None,
-                args=[archive_id, step_id, None],
-                kwargs=None,
-                einfo=None,
+            msg = "Archive already exists on tape with the same size and checksum"
+            _handle_successful_fts_job(
+                self, step_id, archive_id, None, cta_file_path, msg
             )
             return
         overwrite = True
@@ -183,8 +175,8 @@ def _check_in_progress_jobs(self):
     try:
         current_jobs = fts.job_statuses(list(steps_by_job_id.keys()))
     except Exception as e:
-        failed_count = _handle_jobs_not_found(e, steps_by_job_id)
-        return len(steps_by_job_id) - failed_count
+        _handle_jobs_not_found(e, steps_by_job_id)
+        return _check_in_progress_jobs(self)
     finished_job_count = 0
     failed_job_count = 0
 
@@ -229,7 +221,9 @@ def _trigger_new_transfers(amount):
         push_to_cta.delay(step.archive.id, step.id)
 
 
-def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path):
+def _handle_successful_fts_job(
+    self, step_id, archive_id, job_id, cta_file_path, msg=None
+):
     cta_artifact = {
         "artifact_name": "CTA",
         "artifact_localpath": cta_file_path,
@@ -238,6 +232,9 @@ def _handle_successful_fts_job(self, step_id, archive_id, job_id, cta_file_path)
     }
 
     status = {"status": 0, "errormsg": None, "artifact": cta_artifact}
+    if msg:
+        status.update({"details": msg})
+
     finalize(
         self=self,
         current_status=states.SUCCESS,
@@ -292,7 +289,6 @@ def _handle_jobs_not_found(error, steps_by_job_id):
     logger.warning(
         f"{len(not_found_ids)} FTS jobs were not found and will be marked as failed."
     )
-    failed_count = 0
     for job_id in not_found_ids:
         if step := steps_by_job_id.get(job_id):
             _handle_failed_fts_job(
@@ -302,8 +298,6 @@ def _handle_jobs_not_found(error, steps_by_job_id):
                     "errormsg": f"FTS job {job_id} was not found. The job may have expired.",
                 },
             )
-            failed_count += 1
-    return failed_count
 
 
 def _verify_file(aip_path, cta_filename):
