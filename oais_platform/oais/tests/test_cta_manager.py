@@ -129,7 +129,7 @@ class CTAManagerTests(APITestCase):
 
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_INPUT_DATA)
+        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_OUTPUT_DATA)
 
     def _setup_waiting_archive(self):
         self.step.step_type.concurrency_limit = 1

@@ -91,7 +91,12 @@ class PipelineTests(APITestCase):
     def test_execute_pipeline_ongoing_execution(self, mock_dispatch):
         self.client.force_authenticate(user=self.testuser)
 
-        pipeline = [StepName.ARCHIVE, StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH]
+        pipeline = [
+            StepName.VALIDATION,
+            StepName.ARCHIVE,
+            StepName.PUSH_TO_CTA,
+            StepName.INVENIO_RDM_PUSH,
+        ]
 
         url = reverse("archives-pipeline", kwargs={"pk": self.archive.id})
         response = self.client.post(
@@ -100,15 +105,15 @@ class PipelineTests(APITestCase):
             format="json",
         )
 
-        archive = Archive.objects.get(pk=self.archive.id)
+        self.archive.refresh_from_db()
 
-        self.assertEqual(len(archive.pipeline_steps), len(pipeline) - 1)
+        self.assertEqual(len(self.archive.pipeline_steps), len(pipeline) - 1)
         self.assertEqual(Step.objects.count(), self.init_step_count + len(pipeline))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         mock_dispatch.assert_called_once_with(
-            StepType.get_by_stepname(StepName.ARCHIVE),
+            StepType.get_by_stepname(StepName.VALIDATION),
             self.archive.id,
-            archive.last_step.id,
+            self.archive.last_step.id,
             False,
         )
 

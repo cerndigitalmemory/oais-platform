@@ -64,8 +64,6 @@ def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
     """
     Set the step as failed and return the error message
     """
-    from oais_platform.oais.tasks.pipeline_actions import manage_end_of_step
-
     if failure_type and not step.failure_type:
         step.set_failure_type(failure_type)
     else:
@@ -79,9 +77,6 @@ def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
         return_value = {"status": 1, "errormsg": errormsg}
         step.set_output_data(return_value)
         logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-
-    manage_end_of_step(step)
-
     return return_value
 
 

@@ -67,7 +67,6 @@ def harvest(self, archive_id, step_id):
                 return {
                     "status": 1,
                     "errormsg": "Record is too large to be harvested.",
-                    "incremented": False,
                 }
 
             if (
@@ -83,7 +82,6 @@ def harvest(self, archive_id, step_id):
                     return {
                         "status": 1,
                         "errormsg": "Max retries exceeded for aggregated file size limit exceeded.",
-                        "incremented": False,
                     }
                 step.set_status(Status.WAITING)
                 step.set_output_data(
