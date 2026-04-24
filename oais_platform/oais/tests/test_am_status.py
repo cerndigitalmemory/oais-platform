@@ -613,6 +613,20 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertEqual(self.step.output_data_json["retry_limit_exceeded"], True)
         create_retry_step.assert_not_called()
 
+    def test_am_status_no_package_uuid(self):
+        self.step.set_output_data({"package_uuid": None})
+        check_am_status.apply(args=[self.step.id])
+
+        self.step.refresh_from_db()
+
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_OUTPUT_DATA)
+        self.assertEqual(self.step.output_data_json["status"], "FAILED")
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["microservice"])
+        self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.output_data_json.get("retry", None))
+        self.assertIsNone(self.step.output_data_json.get("retry_count", None))
+
     def test_archive_failed_count_reset(self):
         step_type = StepType.objects.get(name=StepName.ARCHIVE)
         step_type.failed_count = 5
