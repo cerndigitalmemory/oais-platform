@@ -6,7 +6,7 @@ from amclient import AMClient
 from amclient.errors import error_codes, error_lookup
 from celery import chord, shared_task, states
 from celery.utils.log import get_task_logger
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from oais_platform.oais.enums import StepFailureType
@@ -554,6 +554,9 @@ def start_am_transfers(self, chord_results=None):
     waiting_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
         status=Status.WAITING,
+        archive__last_step=models.F(
+            "id"
+        ),  # It is the last step of the archive, not in pipeline
     ).order_by("create_date")[:capacity]
 
     if not waiting_steps.exists():
