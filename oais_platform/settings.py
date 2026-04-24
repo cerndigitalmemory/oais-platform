@@ -129,7 +129,7 @@ CELERY_BEAT_SCHEDULE = {
     "am-manager": {
         "task": "am_manager",
         "schedule": crontab(minute="*/5"),
-        "options": {"expires": 600},
+        "options": {"expires": 300},
     },
 }
 
