@@ -67,6 +67,7 @@ def push_to_cta(self, archive_id, step_id):
     logger.info(f"Pushing Archive {archive_id} to CTA")
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    step.set_start_date()
 
     if step.status != Status.WAITING:
         logger.warning(
