@@ -75,10 +75,9 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_harvest_aggr_file_size_exceeded(self):
-        self.step.step_type.current_size_bytes = (
+        self._create_with_current_size(
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
         )
-        self.step.step_type.save()
 
         with self.assertRaises(Retry):
             harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -91,10 +90,9 @@ class HarvestTest(APITestCase):
 
     @patch("celery.app.task.Task.request")
     def test_harvest_aggr_file_size_retries_exceeded(self, task_request):
-        self.step.step_type.current_size_bytes = (
+        self._create_with_current_size(
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
         )
-        self.step.step_type.save()
 
         task_request.id = "test_task_id"
         task_request.retries = 10
@@ -170,8 +168,7 @@ class HarvestTest(APITestCase):
 
     @patch("bagit_create.main.process")
     def test_harvest_non_retriable_failed(self, bagit_create):
-        self.step.step_type.current_size_bytes = 50
-        self.step.step_type.save()
+        self._create_with_current_size(50)
         bagit_create.return_value = {"status": 1, "errormsg": "Error"}
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -179,4 +176,12 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Error")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertEqual(self.step.step_type.current_size_bytes, 50)
+
+    def _create_with_current_size(self, size):
+        archive = Archive.objects.create(
+            recid="2", source="test_source", original_file_size=size
+        )
+        Step.objects.create(
+            archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
+        )

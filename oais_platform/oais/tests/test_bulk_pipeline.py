@@ -103,7 +103,12 @@ class BulkPipelineTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_run_bulk_pipeline_task_logic(self, mock_dispatch):
-        pipeline = [StepName.ARCHIVE, StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH]
+        pipeline = [
+            StepName.VALIDATION,
+            StepName.ARCHIVE,
+            StepName.PUSH_TO_CTA,
+            StepName.INVENIO_RDM_PUSH,
+        ]
         run_bulk_pipeline.apply(
             args=[self.archive_ids, "run", pipeline, self.testuser.id]
         )
@@ -118,7 +123,7 @@ class BulkPipelineTests(APITestCase):
         for archive in self.archives:
             archive.refresh_from_db()
             mock_dispatch.assert_any_call(
-                StepType.objects.filter(name=StepName.ARCHIVE).first(),
+                StepType.objects.filter(name=StepName.VALIDATION).first(),
                 archive.id,
                 archive.last_step.id,
                 False,
