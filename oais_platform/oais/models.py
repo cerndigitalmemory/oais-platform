@@ -317,9 +317,7 @@ class StepType(models.Model):
         "self", null=True, on_delete=models.SET_NULL
     )
     size_limit_bytes = models.BigIntegerField(default=None, null=True)
-    current_size_bytes = models.BigIntegerField(default=0)
     concurrency_limit = models.IntegerField(default=None, null=True)
-    current_count = models.IntegerField(default=0)
 
     @classmethod
     def get_by_stepname(cls, stepname):
@@ -328,6 +326,34 @@ class StepType(models.Model):
     def set_enabled(self, enabled):
         self.enabled = enabled
         self.save()
+
+    @property
+    def current_size_bytes(self):
+        if self.name == StepName.HARVEST:
+            return (
+                Step.objects.filter(
+                    step_type=self,
+                    status=Status.IN_PROGRESS,
+                ).aggregate(total_size=models.Sum("archive__original_file_size"))[
+                    "total_size"
+                ]
+                or 0
+            )
+
+        return (
+            Step.objects.filter(
+                step_type=self,
+                status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
+            ).aggregate(total_size=models.Sum("archive__sip_size"))["total_size"]
+            or 0
+        )
+
+    @property
+    def current_count(self):
+        return Step.objects.filter(
+            step_type=self,
+            status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
+        ).count()
 
     def increment_failed_count(self):
         self.failed_count += 1
@@ -344,23 +370,6 @@ class StepType(models.Model):
     def unblock(self):
         self.failed_count = 0
         self.enabled = True
-        self.save()
-
-    def increment_current_count(self):
-        self.current_count += 1
-        self.save()
-
-    def decrement_current_count(self):
-        if self.current_count > 0:
-            self.current_count -= 1
-            self.save()
-
-    def increment_current_size(self, size):
-        self.current_size_bytes += size
-        self.save()
-
-    def decrement_current_size(self, size):
-        self.current_size_bytes = max(0, self.current_size_bytes - size)
         self.save()
 
 
@@ -446,8 +455,10 @@ class Step(models.Model):
         if self.status == status:
             return
 
-        if status == Status.FAILED and self.failure_type is None:
-            self.failure_type = StepFailureType.OTHER
+        if status == Status.FAILED:
+            self.step_type.increment_failed_count()
+            if self.failure_type is None:
+                self.failure_type = StepFailureType.OTHER
 
         with transaction.atomic():
             self.status = status

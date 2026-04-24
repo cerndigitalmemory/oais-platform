@@ -126,6 +126,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/10"),
         "options": {"expires": 600},
     },
+    "am-manager": {
+        "task": "am_manager",
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 600},
+    },
 }
 
 ## Authentication
@@ -356,10 +361,6 @@ AM_TRANSFER_SOURCE = (
     environ.get("AM_TRANSFER_SOURCE_UUID") or get_default_transfer_source()
 )
 
-# Interval in minutes to poll Archivematica for status updates
-AM_POLLING_INTERVAL = 15  # minutes
-# After callback check status with delay
-AM_CALLBACK_DELAY = 10  # seconds
 # Maximum number of retries for Archivematica failed jobs
 AM_RETRY_LIMIT = 2
 

@@ -94,7 +94,6 @@ from oais_platform.oais.statistics import (
     count_excluded_archives,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
-from oais_platform.oais.tasks.archivematica import callback_package
 from oais_platform.oais.tasks.pipeline_actions import (
     create_pipeline,
     execute_pipeline,
@@ -1527,10 +1526,8 @@ def am_callback(request):
     package_name = serializer.validated_data["package_name"]
 
     logging.info(
-        f"Archivematica callback for package {package_uuid} with name {package_name}"
+        f"Archivematica callback for package {package_uuid} with name {package_name}, callback processing disabled."
     )
-
-    callback_package.delay(package_name, package_uuid)
 
     return Response("Callback received.")
 

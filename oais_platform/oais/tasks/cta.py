@@ -167,7 +167,7 @@ def _check_in_progress_jobs(self):
             set_and_return_error(
                 step,
                 "Step has no fts_job_id",
-                failure_type=StepFailureType.MISSING_INPUT_DATA,
+                failure_type=StepFailureType.MISSING_OUTPUT_DATA,
             )
 
     logger.info("Checking statuses of ongoing transfers...")

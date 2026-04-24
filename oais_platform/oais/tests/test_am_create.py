@@ -1,13 +1,11 @@
-import json
 from unittest.mock import patch
 
 import requests
-from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tasks.archivematica import archivematica, get_task_name
+from oais_platform.oais.tasks.archivematica import archivematica
 
 
 class ArchivematicaCreateTests(APITestCase):
@@ -39,32 +37,21 @@ class ArchivematicaCreateTests(APITestCase):
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
         create_package.return_value = {"id": "test_package_id"}
-        result = archivematica.apply(args=[self.archive.id, self.step.id])
+        result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
-        periodic_task = PeriodicTask.objects.latest("id")
-        task_arg = json.loads(periodic_task.args)
 
-        self.assertEqual(self.step.status, Status.WAITING)
-        self.assertEqual(periodic_task.name, get_task_name(self.step))
-        self.assertEqual(periodic_task.task, "check_am_status")
-        self.assertEqual(
-            task_arg,
-            [
-                create_package.return_value["id"],
-                self.step.id,
-                self.archive.id,
-                False,
-            ],
-        )
+        self.assertEqual(self.step.status, Status.SUBMITTED)
+        self.assertEqual(self.step.output_data_json["status"], 0)
+        self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(self.step.step_type.current_size_bytes, self.archive.sip_size)
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_create_package(self, create_package):
         create_package.return_value = -1
-        result = archivematica.apply(args=[self.archive.id, self.step.id])
+        result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -85,7 +72,7 @@ class ArchivematicaCreateTests(APITestCase):
         create_package.side_effect = requests.exceptions.HTTPError(
             request=unauthorized_request
         )
-        result = archivematica.apply(args=[self.archive.id, self.step.id])
+        result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -105,7 +92,7 @@ class ArchivematicaCreateTests(APITestCase):
         bad_request = requests.Request()
         bad_request.status_code = 400
         create_package.side_effect = requests.exceptions.HTTPError(request=bad_request)
-        result = archivematica.apply(args=[self.archive.id, self.step.id])
+        result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -124,7 +111,7 @@ class ArchivematicaCreateTests(APITestCase):
     def test_archivematica_failed_other_exception(self, create_package):
         exception_msg = "Error while archiving"
         create_package.side_effect = Exception(exception_msg)
-        result = archivematica.apply(args=[self.archive.id, self.step.id])
+        result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
@@ -137,26 +124,10 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
-    def test_archivematica_remains_waiting(self):
-        self.step.step_type.current_count = self.step.step_type.concurrency_limit
-        self.step.step_type.current_size_bytes = 10
-        self.step.step_type.save()
-
-        archivematica.apply(args=[self.archive.id, self.step.id])
-
-        self.step.refresh_from_db()
-        msg = "Archivematica is busy"
-        self.assertEqual(self.step.status, Status.WAITING)
-        self.assertIn(msg, self.step.output_data_json["message"])
-        self.assertEqual(
-            self.step.step_type.current_count, self.step.step_type.concurrency_limit
-        )
-        self.assertEqual(self.step.step_type.current_size_bytes, 10)
-
     def test_archivematica_file_size_exceeded(self):
         self.archive.sip_size = self.step.step_type.size_limit_bytes + 1
         self.archive.save()
-        archivematica.apply(args=[self.archive.id, self.step.id])
+        archivematica.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
         msg = "SIP exceeds the Archivematica file size limit"
@@ -167,12 +138,10 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_archivematica_aggr_file_size_exceeded(self):
-        self.step.step_type.current_count = 1
-        self.step.step_type.current_size_bytes = (
+        self._create_with_current_size(
             self.step.step_type.size_limit_bytes - self.archive.sip_size + 1
         )
-        self.step.step_type.save()
-        archivematica.apply(args=[self.archive.id, self.step.id])
+        archivematica.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
         msg = "Archivematica is busy"
@@ -182,4 +151,10 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(
             self.step.step_type.current_size_bytes,
             self.step.step_type.size_limit_bytes - self.archive.sip_size + 1,
+        )
+
+    def _create_with_current_size(self, size):
+        archive = Archive.objects.create(recid="2", source="test_source", sip_size=size)
+        Step.objects.create(
+            archive=archive, step_name=StepName.ARCHIVE, status=Status.IN_PROGRESS
         )

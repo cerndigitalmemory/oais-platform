@@ -25,7 +25,9 @@ class ArchivematicaStatusTests(APITestCase):
         )
 
         self.step = Step.objects.create(
-            archive=self.archive, step_name=StepName.ARCHIVE
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            output_data_json={"package_uuid": "5678"},
         )
 
         # simulate archivematica step started
@@ -34,10 +36,7 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_completed(
-        self, periodic_tasks, get_unit_status, get_package_details, get_jobs
-    ):
+    def test_am_status_completed(self, get_unit_status, get_package_details, get_jobs):
         aip_dependent_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
@@ -72,8 +71,7 @@ class ArchivematicaStatusTests(APITestCase):
             "current_path": "aip_test_path",
             "uuid": 5678,
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -89,7 +87,6 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
-        self.assertTrue(periodic_tasks.delete.called)
         aip_dependent_step.refresh_from_db()
         aip_dependent_step2.refresh_from_db()
         self.assertEqual(aip_dependent_step.status, Status.OUTDATED)
@@ -98,15 +95,13 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIn("outdated_at", aip_dependent_step2.output_data_json)
 
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_completed_not_fully(self, periodic_tasks, get_unit_status):
+    def test_am_status_completed_not_fully(self, get_unit_status):
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Completed first half, still processing",
             "uuid": 5678,
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -122,13 +117,11 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
-        self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_completed_uuid_not_found(
-        self, periodic_tasks, get_unit_status, get_package_details
+        self, get_unit_status, get_package_details
     ):
         get_unit_status.return_value = {
             "status": "COMPLETE",
@@ -136,8 +129,7 @@ class ArchivematicaStatusTests(APITestCase):
             "uuid": 5678,
         }
         get_package_details.return_value = "Not found"
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -155,23 +147,20 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_completed_uuid_not_found_retry_limit(
-        self, periodic_tasks, get_unit_status, get_package_details
+        self, get_unit_status, get_package_details
     ):
-        self.step.set_output_data({"package_retry": 5})
+        self.step.set_output_data({"package_retry": 5, "package_uuid": 5678})
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Remove the processing directory",
             "uuid": 5678,
         }
         get_package_details.return_value = "Not found"
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -184,17 +173,14 @@ class ArchivematicaStatusTests(APITestCase):
             "AIP package with UUID 5678 not found",
             self.step.output_data_json["errormsg"],
         )
-        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_processing(self, periodic_tasks, get_unit_status):
+    def test_am_status_processing(self, get_unit_status):
         get_unit_status.return_value = {
             "status": "PROCESSING",
             "microservice": "Package is being processed",
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -210,86 +196,65 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
-        self.assertFalse(periodic_tasks.delete.called)
-
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_periodictask_not_found(self, periodic_tasks):
-        exception_msg = "Unexpected exception occurred"
-        periodic_tasks.get.side_effect = Exception(exception_msg)
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
-
-        self.step.refresh_from_db()
-
-        self.assertEqual(self.step.status, Status.FAILED)
 
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_unexpected_exception(self, periodic_tasks, get_unit_status):
+    def test_am_status_unexpected_exception(self, get_unit_status):
         exception_msg = "Unexpected exception occurred"
         get_unit_status.side_effect = Exception(exception_msg)
-        periodic_tasks.get.return_value = periodic_tasks
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.output_data_json["status"], "FAILED")
         self.assertEqual(self.step.output_data_json["errormsg"], exception_msg)
-        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_bad_request_waiting(
-        self, periodic_tasks, get_unit_status, get_jobs
-    ):
+    def test_am_status_bad_request_waiting(self, get_unit_status, get_jobs):
         bad_request = requests.Response()
         bad_request.status_code = 400
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
         get_jobs.return_value = 1
 
-        self.step.status = Status.WAITING
+        self.step.status = Status.SUBMITTED
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
-        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(self.step.status, Status.SUBMITTED)
         self.assertEqual(self.step.output_data_json["status"], "WAITING")
         self.assertEqual(
             self.step.output_data_json["microservice"],
             "Waiting for archivematica to respond",
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertFalse(periodic_tasks.delete.called)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_bad_request_waiting_limit_reached(
-        self, periodic_tasks, get_unit_status, get_jobs, create_retry_step
+        self, get_unit_status, get_jobs, create_retry_step
     ):
         bad_request = requests.Response()
         bad_request.status_code = 400
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
         get_jobs.return_value = []
 
-        self.step.status = Status.WAITING
+        self.step.status = Status.SUBMITTED
         self.step.start_date = timezone.now() - timezone.timedelta(
             minutes=AM_WAITING_TIME_LIMIT + 1
         )
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -301,21 +266,18 @@ class ArchivematicaStatusTests(APITestCase):
             self.step.output_data_json["errormsg"], "Archivematica delayed to respond."
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_processing_limit_reached(
-        self, periodic_tasks, get_unit_status, create_retry_step
+        self, get_unit_status, create_retry_step
     ):
         get_unit_status.return_value = {
             "status": "PROCESSING",
             "microservice": "Generate metadata",
             "uuid": 6789,
         }
-        periodic_tasks.get.return_value = periodic_tasks
 
         self.step.status = Status.IN_PROGRESS
         self.step.start_date = timezone.now() - timezone.timedelta(
@@ -323,7 +285,7 @@ class ArchivematicaStatusTests(APITestCase):
         )
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -335,27 +297,22 @@ class ArchivematicaStatusTests(APITestCase):
         )
         self.assertEqual(self.step.output_data_json["retry"], True)
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_bad_request_has_executed_jobs(
-        self, periodic_tasks, get_unit_status, get_jobs
-    ):
+    def test_am_status_bad_request_has_executed_jobs(self, get_unit_status, get_jobs):
         bad_request = requests.Response()
         bad_request.status_code = 400
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
         get_jobs.return_value = [{"job": 1}, {"job": 2}]
 
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -366,30 +323,25 @@ class ArchivematicaStatusTests(APITestCase):
             "Waiting for archivematica to continue the processing",
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertFalse(periodic_tasks.delete.called)
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_bad_request_no_executed_jobs(
-        self, periodic_tasks, get_unit_status, get_jobs
-    ):
+    def test_am_status_bad_request_no_executed_jobs(self, get_unit_status, get_jobs):
         bad_request = requests.Response()
         bad_request.status_code = 400
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
         get_jobs.return_value = 1
 
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
-        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(self.step.status, Status.SUBMITTED)
         self.assertEqual(
             self.step.output_data_json["microservice"],
             "Waiting for archivematica to respond",
@@ -399,10 +351,7 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_failed(
-        self, periodic_tasks, get_unit_status, get_jobs, create_retry_step
-    ):
+    def test_am_status_failed(self, get_unit_status, get_jobs, create_retry_step):
         get_jobs.side_effect = [
             [
                 {
@@ -444,8 +393,7 @@ class ArchivematicaStatusTests(APITestCase):
             "microservice": "Moving to failed folder",
             "uuid": 1111,
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -485,31 +433,26 @@ class ArchivematicaStatusTests(APITestCase):
                 "link": f"{AM_URL}/tasks/9876",
             },
         )
-        self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_bad_request_error_executed_jobs(
-        self, periodic_tasks, get_unit_status, get_jobs
-    ):
+    def test_am_status_bad_request_error_executed_jobs(self, get_unit_status, get_jobs):
         bad_request = requests.Response()
         bad_request.status_code = 400
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
         get_jobs.side_effect = requests.exceptions.HTTPError(response=bad_request)
 
         self.step.status = Status.IN_PROGRESS
         self.step.save()
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
-        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertEqual(self.step.status, Status.SUBMITTED)
         self.assertEqual(
             self.step.output_data_json["microservice"],
             "Waiting for archivematica to respond",
@@ -517,16 +460,14 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
 
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_bad_request_unauthorized(self, periodic_tasks, get_unit_status):
+    def test_am_status_bad_request_unauthorized(self, get_unit_status):
         bad_request = requests.Response()
         bad_request.status_code = 403
         get_unit_status.side_effect = requests.exceptions.HTTPError(
             response=bad_request
         )
-        periodic_tasks.get.return_value = periodic_tasks
 
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -538,17 +479,14 @@ class ArchivematicaStatusTests(APITestCase):
             "Error: Could not connect to archivematica",
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertTrue(periodic_tasks.delete.called)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("oais_platform.oais.tasks.archivematica.requests.get")
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_package_details")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
     def test_am_status_completed_with_warnings(
         self,
-        periodic_tasks,
         get_unit_status,
         get_package_details,
         get_jobs,
@@ -592,8 +530,7 @@ class ArchivematicaStatusTests(APITestCase):
             "current_path": "aip_test_path",
             "uuid": 7890,
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 6789}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -617,21 +554,16 @@ class ArchivematicaStatusTests(APITestCase):
                 "link": f"{AM_URL}/task/5678",
             },
         )
-        self.assertTrue(periodic_tasks.delete.called)
         mock_create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_user_input(
-        self, periodic_tasks, get_unit_status, create_retry_step
-    ):
+    def test_am_status_user_input(self, get_unit_status, create_retry_step):
         get_unit_status.return_value = {
             "status": "USER_INPUT",
             "microservice": "Scan for viruses",
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -647,15 +579,11 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertEqual(self.step.output_data_json["retry"], True)
         self.assertEqual(self.step.output_data_json["retry_count"], 1)
-        self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
-    @patch("django_celery_beat.models.PeriodicTask.objects")
-    def test_am_status_retry_exceeded(
-        self, periodic_tasks, get_unit_status, create_retry_step
-    ):
+    def test_am_status_retry_exceeded(self, get_unit_status, create_retry_step):
         self.step.set_input_data({"retry_count": AM_RETRY_LIMIT})
         self.step.input_step = Step.objects.create(
             archive=self.archive,
@@ -668,8 +596,7 @@ class ArchivematicaStatusTests(APITestCase):
             "status": "USER_INPUT",
             "microservice": "Scan for viruses",
         }
-        periodic_tasks.get.return_value = periodic_tasks
-        check_am_status.apply(args=[{"id": 1234}, self.step.id, self.archive.id])
+        check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
 
@@ -684,7 +611,6 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
         self.assertEqual(self.step.output_data_json["retry"], False)
         self.assertEqual(self.step.output_data_json["retry_limit_exceeded"], True)
-        self.assertTrue(periodic_tasks.delete.called)
         create_retry_step.assert_not_called()
 
     def test_archive_failed_count_reset(self):

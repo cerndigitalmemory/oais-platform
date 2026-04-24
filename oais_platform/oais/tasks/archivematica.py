@@ -1,22 +1,18 @@
-import json
 import os
-import re
 from pathlib import Path
 
 import requests
 from amclient import AMClient
 from amclient.errors import error_codes, error_lookup
-from celery import shared_task, states
+from celery import chord, shared_task, states
 from celery.utils.log import get_task_logger
 from django.db import transaction
 from django.utils import timezone
-from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
     COMPLETED_STATUSES,
-    Archive,
     Status,
     Step,
     StepName,
@@ -26,15 +22,11 @@ from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finaliz
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
     get_failure_type_from_status_code,
-    get_interval_schedule,
-    remove_periodic_task_on_failure,
     set_and_return_error,
 )
 from oais_platform.settings import (
     AIP_UPSTREAM_BASEPATH,
     AM_API_KEY,
-    AM_CALLBACK_DELAY,
-    AM_POLLING_INTERVAL,
     AM_PROCESSING_TIME_LIMIT,
     AM_RETRY_LIMIT,
     AM_SS_API_KEY,
@@ -55,14 +47,14 @@ logger = get_task_logger(__name__)
     bind=True,
     ignore_result=True,
 )
-def archivematica(self, archive_id, step_id):
+def archivematica(self, step_id):
     """
     Submit the SIP of the passed Archive to Archivematica
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
     current_step = Step.objects.get(pk=step_id)
-    archive = Archive.objects.get(pk=archive_id)
+    archive = current_step.archive
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
@@ -83,7 +75,7 @@ def archivematica(self, archive_id, step_id):
 
     # Create archivematica package
     logger.info(
-        f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst} for user {AM_USERNAME}"
+        f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst}"
     )
 
     try:
@@ -104,10 +96,13 @@ def archivematica(self, archive_id, step_id):
                 {
                     "status": 0,
                     "details": "Uploaded to Archivematica - waiting for processing",
+                    "package_uuid": package["id"],
+                    "transfer_name": am.transfer_name,
                     "errormsg": None,
                 }
             )
-            create_check_am_status(package["id"], current_step, archive_id)
+            current_step.set_status(Status.SUBMITTED)
+            current_step.set_task(self.request.id)
             return current_step.output_data_json
     except requests.HTTPError as e:
         return set_and_return_error(
@@ -127,31 +122,28 @@ def archivematica(self, archive_id, step_id):
     bind=True,
     ignore_result=True,
 )
-def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
+def check_am_status(self, step_id):
     """
     Check the status of an Archivematica job by polling its API.
     The related Step is updated with the information returned from Archivematica
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    task_name = get_task_name(step)
 
     am = get_am_client()
+    uuid = step.output_data_json.get("package_uuid", None)
 
     try:
         failure_type = None
-        if ingest_retry:
-            logger.info(
-                f"Retrying to check status for package with uuid {uuid} for step {step_id}"
-            )
-            am.sip_uuid = uuid
-            am_status = am.get_ingest_status()
+        am_status = None
+        if uuid is None:
+            failure_type = StepFailureType.MISSING_OUTPUT_DATA
+            raise ValueError("No package UUID found in step output data.")
         else:
             am_status = am.get_unit_status(uuid)
         logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
         logger.info(f"Error {e.response.status_code} for archivematica")
-        am_status = None
         failure_type = get_failure_type_from_status_code(e.response.status_code)
         if e.response.status_code == 400:
             try:
@@ -179,7 +171,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
                 logger.info(f"Waiting in AM queue, time passed: {time_passed}s")
                 if time_passed > 60 * AM_WAITING_TIME_LIMIT:
                     logger.info(
-                        f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - deleting task"
+                        f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - setting to failed for step {step.id}"
                     )
                     am_status = {
                         "status": "FAILED",
@@ -206,23 +198,22 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
 
     status = am_status["status"]
     microservice = am_status.get("microservice", None)
+    am_status["transfer_name"] = step.output_data_json.get("transfer_name", None)
+    am_status["package_uuid"] = uuid
 
     logger.info(f"Status for {step_id} is: {status}")
 
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
-            handle_completed_am_package(
-                self, task_name, am, step, am_status, archive_id
-            )
+            handle_completed_am_package(self, am, step, am_status)
         except Exception as e:
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
             )
             if isinstance(e, MaxRetriesExceeded):
                 failure_type = StepFailureType.PACKAGE_NOT_FOUND
-            remove_periodic_task_on_failure(
-                task_name,
+            set_and_return_error(
                 step,
                 {"status": "FAILED", "errormsg": str(e)},
                 failure_type=failure_type,
@@ -242,9 +233,7 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
             am_status["retry"] = True
         if failure_type == StepFailureType.TIMEOUT:
             am_status["retry"] = True
-        remove_periodic_task_on_failure(
-            task_name, step, am_status, failure_type=failure_type
-        )
+        set_and_return_error(step, am_status, failure_type=failure_type)
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
@@ -253,39 +242,26 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
         )
         am_status["errormsg"] = "Error: Archivematica requires user input."
         am_status["retry"] = True
-        remove_periodic_task_on_failure(
-            task_name, step, am_status, failure_type=StepFailureType.USER_INPUT_REQUIRED
+        set_and_return_error(
+            step, am_status, failure_type=StepFailureType.USER_INPUT_REQUIRED
         )
 
     elif status == "PROCESSING" or status == "COMPLETE":
         time_passed = (timezone.now() - step.start_date).total_seconds()
         if time_passed > 60 * AM_PROCESSING_TIME_LIMIT:  # Probably stuck in processing
             logger.info(
-                f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - deleting task for step {step.id}"
+                f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - setting step {step.id} to failed"
             )
             am_status["errormsg"] = (
                 "Error: Archivematica processing time limit reached."
             )
             am_status["retry"] = True
-            remove_periodic_task_on_failure(
-                task_name, step, am_status, failure_type=StepFailureType.TIMEOUT
-            )
+            set_and_return_error(step, am_status, failure_type=StepFailureType.TIMEOUT)
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
-            try:
-                task = PeriodicTask.objects.get(name=task_name)
-                task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
-                task.last_run_at = (
-                    timezone.now()
-                )  # Update last run time to avoid expiration
-                task.save()
-            except PeriodicTask.DoesNotExist:
-                logger.warning(
-                    f"PeriodicTask {task_name} for step {step.id} not found."
-                )
     elif status == "WAITING":
-        step.set_status(Status.WAITING)
+        step.set_status(Status.SUBMITTED)
         step.set_output_data(am_status)
     else:
         logger.warning(
@@ -305,14 +281,16 @@ def check_am_status(self, uuid, step_id, archive_id, ingest_retry=False):
         else:
             am_status["retry_count"] = retry_count + 1
             am_status["retry"] = True
-            logger.info(f"Creating Archivematica retry step for archive {archive_id}")
+            logger.info(
+                f"Creating Archivematica retry step for archive {step.archive.id}"
+            )
             create_retry_step.apply_async(
-                args=[
-                    archive_id,
+                args=(
+                    step.archive.id,
                     step.initiated_by_user.id if step.initiated_by_user else None,
-                    True,
+                    False,
                     StepName.ARCHIVE,
-                ],
+                )
             )
         step.set_finish_date()
         step.set_output_data(am_status)
@@ -328,7 +306,6 @@ def resource_check(task, current_step, archive):
             {
                 "status": 1,
                 "errormsg": f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
-                "incremented": False,
             },
             failure_type=StepFailureType.SIZE_EXCEEDED,
         )
@@ -337,34 +314,20 @@ def resource_check(task, current_step, archive):
             pk=archive_step_type.id
         )
         if (
-            locked_archive_step_type.current_count + 1
-            > locked_archive_step_type.concurrency_limit
-        ):
-            exc_message = "Archivematica concurrency limit reached."
-        elif (
             locked_archive_step_type.current_size_bytes + archive.sip_size
             > locked_archive_step_type.size_limit_bytes
         ):
-            exc_message = "Archivematica aggregated file size limit reached."
-        else:
+            logger.warning("Archivematica aggregated file size limit reached.")
             current_step.set_status(Status.WAITING)
-            current_step.set_task(task.request.id)
-            locked_archive_step_type.increment_current_count()
-            locked_archive_step_type.increment_current_size(archive.sip_size)
+            current_step.set_output_data(
+                {
+                    "status": 0,
+                    "message": "Archivematica is busy, waiting to start processing",
+                }
+            )
+            return 1
+        else:
             return 0
-
-        logger.warning(exc_message)
-        current_step.set_status(Status.WAITING)
-        current_step.set_start_date(
-            reset=True
-        )  # reset start date to be picked up again
-        current_step.set_output_data(
-            {
-                "status": 0,
-                "message": "Archivematica is busy, waiting to start processing",
-            }
-        )
-        return 1
 
 
 def get_am_client():
@@ -440,32 +403,6 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
         return 0
 
 
-def create_check_am_status(
-    uuid, step, archive_id, reset_start_date=True, ingest_retry=False
-):
-    # overwrite the start date so the waiting limit is counted from here
-    if reset_start_date:
-        step.set_start_date()
-    task_name = get_task_name(step)
-    # Check for the existing task by name
-    if PeriodicTask.objects.filter(name=task_name).exists():
-        raise Exception(
-            f"Task '{task_name}' already exists, previous job is still in progress"
-        )
-    # Create the scheduler
-    schedule = get_interval_schedule(AM_POLLING_INTERVAL, IntervalSchedule.MINUTES)
-    # Spawn a periodic task to check for the status of the package on AM
-    return PeriodicTask.objects.create(
-        interval=schedule,
-        name=task_name,
-        task="check_am_status",
-        enabled=True,
-        args=json.dumps([uuid, step.id, archive_id, ingest_retry]),
-        expire_seconds=AM_POLLING_INTERVAL * 60.0,
-        last_run_at=timezone.now(),  # Otherwise tasks are sometimes not picked up
-    )
-
-
 def get_transfer_name(archive, step):
     # Adds an _ between Archive and the id because archivematica messes up with spaces
     transfer_name = (
@@ -483,65 +420,7 @@ def get_transfer_name(archive, step):
     return transfer_name
 
 
-def get_task_name(step):
-    transfer_name = get_transfer_name(step.archive, step)
-    return f"AM package: {transfer_name}"
-
-
-@shared_task(
-    name="callback_package",
-    bind=True,
-    ignore_result=True,
-)
-def callback_package(self, package_name, package_uuid):
-    logger.info(f"Callback for package {package_name} received.")
-    package_name = re.sub(
-        r"(.*?_\d+)_\d+$", r"\1", package_name
-    )  # Archivematica may append a suffix to the package name (eg cds_abc_Archive_66_Step_12_1)
-    periodic_task = PeriodicTask.objects.filter(name__endswith=package_name)
-    periodic_task_count = periodic_task.count()
-    if periodic_task_count > 1:
-        logger.error(
-            f"Ambiguous package name ({package_name}) found: {periodic_task.count()}"
-        )
-        return
-    elif periodic_task_count == 0:
-        logger.warning(
-            f"No periodic task found for package name {package_name}. Trying to find the related step and recreate the periodic task."
-        )
-        try:  # Periodic status check might have completed it already
-            step_id = int(re.search(r"Archive_(\d+)_Step_(\d+)", package_name).group(2))
-            step = Step.objects.get(id=step_id)
-            if step.status in COMPLETED_STATUSES:
-                logger.info(
-                    f"Archivematica package {package_name} already processed, ignoring callback."
-                )
-                return
-            logger.info(
-                f"Archivematica package {package_name} already set to {step.status}, processing callback - recreating Periodic Task."
-            )
-            periodic_task = create_check_am_status(
-                package_uuid,
-                step,
-                step.archive.id,
-                reset_start_date=False,
-                ingest_retry=True,
-            )
-        except (AttributeError, Step.DoesNotExist):
-            logger.error(f"Could not find step for package {package_name}.")
-            return
-    else:
-        periodic_task = periodic_task.get()
-
-    periodic_task.enabled = False
-    periodic_task.save()
-
-    args = json.loads(periodic_task.args)
-    # Callback is triggered by post-store AIP but it's not the last step, need to start with a delay
-    check_am_status.apply_async(args=args, countdown=AM_CALLBACK_DELAY)
-
-
-def handle_completed_am_package(self, task_name, am, step, am_status, archive_id):
+def handle_completed_am_package(self, am, step, am_status):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
@@ -580,18 +459,10 @@ def handle_completed_am_package(self, task_name, am, step, am_status, archive_id
                 current_status=states.SUCCESS,
                 retval={"status": 0},
                 task_id=None,
-                args=[archive_id, step.id, None],
+                args=[step.archive.id, step.id, None],
                 kwargs=None,
                 einfo=None,
             )
-
-        try:
-            periodic_task = PeriodicTask.objects.get(name=task_name)
-            periodic_task.delete()
-        except PeriodicTask.DoesNotExist as e:
-            logger.warning(e)
-        except Exception as e:
-            logger.error(e)
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
@@ -606,15 +477,6 @@ def handle_completed_am_package(self, task_name, am, step, am_status, archive_id
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
-            try:
-                periodic_task = PeriodicTask.objects.get(name=task_name)
-                periodic_task.enabled = True  # If it was triggered by a callback but not completed, re-enable it
-                periodic_task.last_run_at = (
-                    timezone.now()
-                )  # Update last run time to avoid expiration
-                periodic_task.save()
-            except PeriodicTask.DoesNotExist as e:
-                logger.error(e)
 
 
 @shared_task(name="archive_failed_count_reset")
@@ -639,6 +501,67 @@ def outdate_aip_dependent_steps(archive):
     for step in steps:
         step.set_status(Status.OUTDATED)
         step.set_output_data_field("outdated_at", timezone.now().isoformat())
-    logger.info(
-        f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
+    if steps.count() > 0:
+        logger.info(
+            f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
+        )
+
+
+@shared_task(
+    name="am_manager",
+    bind=True,
+    ignore_result=True,
+)
+def am_manager(self):
+    logger.info("Running Archivematica manager...")
+
+    in_progress_steps = Step.objects.filter(
+        step_type__name=StepName.ARCHIVE,
+        status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
     )
+    count = in_progress_steps.count()
+    logger.info(f"Current number of in progress Archivematica steps: {count}")
+
+    if count == 0:
+        start_am_transfers.apply_async()
+        return
+
+    logger.info(f"Checking status of {count} in progress Archivematica steps...")
+
+    chord(check_am_status.s(step.id) for step in in_progress_steps)(
+        start_am_transfers.s()
+    )
+
+
+@shared_task(
+    name="start_am_transfers",
+    bind=True,
+    ignore_result=True,
+)
+def start_am_transfers(self, chord_results=None):
+    logger.info("Starting Archivematica transfers...")
+    step_type = StepType.objects.get(name=StepName.ARCHIVE)
+    capacity = step_type.concurrency_limit - step_type.current_count
+
+    if capacity <= 0:
+        logger.info("Maximum number of Archivematica steps currently in progress.")
+        return
+
+    if not step_type.enabled:
+        logger.info("Archivematica step type is currently disabled.")
+        return
+    logger.info(
+        f"Checking for waiting Archivematica steps to run, capacity: {capacity}..."
+    )
+    waiting_steps = Step.objects.filter(
+        step_type__name=StepName.ARCHIVE,
+        status=Status.WAITING,
+    ).order_by("create_date")[:capacity]
+
+    if not waiting_steps.exists():
+        logger.info("No waiting Archivematica steps to start")
+        return
+
+    logger.info(f"Starting {waiting_steps.count()} waiting Archivematica steps to run.")
+    for step in waiting_steps:
+        archivematica.apply_async(args=[step.id])
