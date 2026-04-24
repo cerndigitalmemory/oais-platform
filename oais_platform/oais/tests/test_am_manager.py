@@ -27,9 +27,11 @@ class ArchivematicaManagerTests(APITestCase):
         self.step = Step.objects.create(
             archive=self.archive, step_name=StepName.ARCHIVE, status=Status.WAITING
         )
+        self.archive.set_last_step(self.step)
         self.step2 = Step.objects.create(
             archive=self.archive2, step_name=StepName.ARCHIVE, status=Status.WAITING
         )
+        self.archive2.set_last_step(self.step2)
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
@@ -89,3 +91,14 @@ class ArchivematicaManagerTests(APITestCase):
         self.step2.refresh_from_db()
         self.assertEqual(self.step2.status, Status.WAITING)
         mock_archivematica.assert_not_called()
+
+    @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
+    def test_am_manager_start_transfers_not_called_for_non_last_step(
+        self, mock_archivematica
+    ):
+        cta_step = Step.objects.create(
+            archive=self.archive, step_name=StepName.PUSH_TO_CTA, status=Status.WAITING
+        )
+        self.archive.set_last_step(cta_step)
+        start_am_transfers.apply()
+        mock_archivematica.assert_any_call(args=[self.step2.id])

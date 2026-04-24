@@ -486,11 +486,11 @@ class Step(models.Model):
 
     def set_task(self, task_id):
         self.celery_task_id = task_id
-        self.save()
+        self.save(update_fields=["celery_task_id"])
 
     def set_input_step(self, input_step):
         self.input_step = input_step
-        self.save()
+        self.save(update_fields=["input_step"])
 
     def set_input_data(self, data):
         self.input_data_json = data
@@ -514,22 +514,23 @@ class Step(models.Model):
 
     def set_finish_date(self):
         self.finish_date = timezone.now()
-        self.save()
+        self.save(update_fields=["finish_date"])
 
     def set_start_date(self, reset=False):
         if reset:
             self.start_date = None
         else:
             self.start_date = timezone.now()
-        self.save()
+        self.save(update_fields=["start_date"])
 
     def set_failure_type(self, failure_type):
         self.failure_type = failure_type
-        self.save()
+        self.save(update_fields=["failure_type"])
 
     def save(self, *args, **kwargs):
         super(Step, self).save(*args, **kwargs)
-        self.archive.save()
+        self.archive.last_modification_timestamp = timezone.now()
+        self.archive.save(update_fields=["last_modification_timestamp"])
 
     def delete(self, *args, **kwargs):
         if self.id in self.archive.pipeline_steps:

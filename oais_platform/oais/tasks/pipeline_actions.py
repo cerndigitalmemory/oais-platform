@@ -6,7 +6,7 @@ from celery import shared_task
 from celery import states as celery_states
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
-from django.db import models, transaction
+from django.db import transaction
 
 from oais_platform.celery import app
 from oais_platform.oais.enums import StepFailureType
@@ -46,13 +46,17 @@ def run_step(step, archive_id, return_signature=False):
     if not step.input_data_json and step.input_step is not None:
         step.input_data_json = step.input_step.output_data_json
 
-    # Set step execution start date
-    step.set_start_date()
-
     # Set Archive's last_step to the current step
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         archive.set_last_step(step.id)
+
+    # Skip steps started by manager tasks
+    if step.step_type.name in [StepName.PUSH_TO_CTA, StepName.ARCHIVE]:
+        return step, None
+
+    # Set step execution start date
+    step.set_start_date()
 
     if not step.step_type.enabled:
         step.set_failure_type(StepFailureType.STEP_DISABLED)
@@ -67,9 +71,6 @@ def run_step(step, archive_id, return_signature=False):
         logging.warning(
             f"Step type {step.step_type.name} is disabled: setting step {step.id} to FAILED"
         )
-        return step, None
-
-    if step.step_type.name in [StepName.PUSH_TO_CTA, StepName.ARCHIVE]:
         return step, None
 
     res = dispatch_task(step.step_type, archive_id, step.id, return_signature)
