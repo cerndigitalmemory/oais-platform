@@ -191,9 +191,7 @@ def check_am_status(self, step_id):
             }
             failure_type = StepFailureType.CONNECTION_ERROR
     except Exception as e:
-        """
-        In any other case make task fail (Archivematica crashed or not responding)
-        """
+        # In any other case make task fail (Archivematica crashed or not responding)
         am_status = {"status": "FAILED", "errormsg": str(e)}
 
     status = am_status["status"]
