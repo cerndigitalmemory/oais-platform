@@ -529,8 +529,8 @@ class Step(models.Model):
 
     def save(self, *args, **kwargs):
         super(Step, self).save(*args, **kwargs)
-        self.archive.last_modification_timestamp = timezone.now()
-        self.archive.save(update_fields=["last_modification_timestamp"])
+        self.archive.refresh_from_db()
+        self.archive.save()
 
     def delete(self, *args, **kwargs):
         if self.id in self.archive.pipeline_steps:
