@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_BYTE,
@@ -37,8 +37,9 @@ class UploadTaskTest(APITestCase):
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
-    def test_upload_success(self, hashlib_mock, bagit_create):
+    def test_upload_success(self, hashlib_mock, dispatch_task_mock, bagit_create):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -72,6 +73,13 @@ class UploadTaskTest(APITestCase):
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
         self.assertTrue(expected_path.exists())
+        self.archive.refresh_from_db()
+        dispatch_task_mock.assert_called_once_with(
+            StepType.get_by_stepname(StepName.VALIDATION),
+            self.archive.id,
+            self.archive.last_step.id,
+            False,
+        )
 
     def test_upload_missing_input_data(self, bagit_create):
         self.step.set_input_data(None)
