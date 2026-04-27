@@ -162,6 +162,19 @@ class CTAManagerTests(APITestCase):
         cta_manager.apply()
         mock_push_to_cta.assert_called_once_with(waiting_archive.id, waiting_step.id)
 
+    @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
+    def test_cta_manager_step_type_disabled(self, mock_push_to_cta):
+        self.step.step_type.enabled = False
+        self.step.step_type.save()
+        self._setup_waiting_archive()
+
+        self.fts.job_statuses.return_value = [
+            {"job_id": "job_id", "job_state": "FINISHED"}
+        ]
+
+        cta_manager.apply()
+        mock_push_to_cta.assert_not_called()
+
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
     def test_cta_manager_triggers_transfer_after_failed_job(
