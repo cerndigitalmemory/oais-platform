@@ -53,8 +53,13 @@ def cta_manager(self):
         logger.info("Maximum number of transfers currently in progress.")
         return
 
-    amount = step_type.concurrency_limit - current_transfers_count
-    _trigger_new_transfers(amount)
+    if step_type.enabled:
+        amount = step_type.concurrency_limit - current_transfers_count
+        _trigger_new_transfers(amount)
+    else:
+        logger.info(
+            "Push to CTA step type is disabled. No new transfers will be triggered."
+        )
 
 
 @shared_task(name="push_to_cta", bind=True, ignore_result=True)
