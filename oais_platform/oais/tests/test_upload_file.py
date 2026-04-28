@@ -187,7 +187,7 @@ class UploadFileEndpointTest(APITestCase):
     def test_upload_sanitized_filename(self, mock_run_step, mock_recid):
         title = "Test title"
         author = "Test author"
-        uploaded_file_name = "%20../file\x00_with𐍈_weird%2F_name.txt"
+        uploaded_file_name = "%20../file\x00_with𐍈_wei:rd%2F_name.txt"
         uploaded_file = SimpleUploadedFile(
             uploaded_file_name, self.file_content, content_type="text/plain"
         )
@@ -207,7 +207,7 @@ class UploadFileEndpointTest(APITestCase):
         self.assertEqual(archive.title, title)
 
         expected_file_path = os.path.join(
-            self.expected_tmp_dir, "file_with?_weird-_name.txt"
+            self.expected_tmp_dir, "file_with-_wei-rd-_name.txt"
         )
         self.assertTrue(os.path.exists(expected_file_path))
 
