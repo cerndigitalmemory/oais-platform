@@ -1,5 +1,12 @@
 # Changes
 
+## Version 3.1.1 (released 2026-04-28)
+- Fix: ensure last step is correctly set
+- Gitlab CI: remove env from trigger-prod
+- CTA: handle not found FTS jobs
+- Stat: add min, max sip size
+- Add system collection per source, title unique constraint
+
 ## Version 3.1.1 (released 2026-04-14)
 - Staged archives add page size
 
