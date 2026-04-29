@@ -27,6 +27,8 @@ router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
 router.register(r"step-type", views.StepTypeViewSet, basename="step-type")
 
+handler404 = "oais_platform.oais.views.custom_404"
+
 
 # Wire up our API using automatic URL routing.
 urlpatterns = [
