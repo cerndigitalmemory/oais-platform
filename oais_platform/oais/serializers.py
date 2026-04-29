@@ -510,3 +510,9 @@ class ConfigurationSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     status = serializers.CharField(help_text="Indicates if logout was successful")
+    logout_url = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        help_text="URL to redirect to for logout (if applicable)",
+    )
+    requires_redirect = serializers.BooleanField()
