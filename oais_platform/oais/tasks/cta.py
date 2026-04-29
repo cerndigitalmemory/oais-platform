@@ -281,9 +281,10 @@ def _retry_push_to_cta(archive_id, retry_count):
 
 
 def _handle_jobs_not_found(error, steps_by_job_id):
+    error_str = str(error)
     not_found_ids = re.findall(
-        r'No job with the id "([^"]+)" has been found', str(error)
-    )
+        r'No job with the id \\"([^\\]+)\\" has been found', error_str
+    ) or re.findall(r'No job with the id "([^"]+)" has been found', error_str)
     if not not_found_ids:
         raise error
     logger.warning(
