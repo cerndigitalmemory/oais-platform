@@ -148,10 +148,14 @@ OIDC_OP_USER_ENDPOINT = (
 OIDC_OP_JWKS_ENDPOINT = (
     "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/certs"
 )
+OIDC_OP_LOGOUT_ENDPOINT = (
+    "https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/logout"
+)
 OIDC_RP_SIGN_ALGO = "RS256"
 # Path to redirect to on successful login.
 # This is used to fetch the user information from the SPA.
 LOGIN_REDIRECT_URL = "/login/callback"
+LOGOUT_REDIRECT_URL = "/"
 
 # Authorization service endpoint to query API token
 AUTH_SERVICE_TOKEN_ENDPOINT = "https://auth.cern.ch/auth/realms/cern/api-access/token"

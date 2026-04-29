@@ -107,6 +107,7 @@ from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
+    OIDC_OP_LOGOUT_ENDPOINT,
     PIPELINE_SIZE_LIMIT,
     SIP_UPSTREAM_BASEPATH,
     STEP_FILTER_CONDITION_LIMIT,
@@ -1377,9 +1378,23 @@ def login(request):
 def logout(request):
     """
     Clean out session data for the current request and logs out the active user.
+    Returns logout URL for OIDC users to complete logout on the frontend.
     """
+    is_oidc_user = (
+        request.session.get("_auth_user_backend")
+        == "oais_platform.oais.auth.CERNAuthenticationBackend"
+    )
+
+    # Perform Django logout
     auth.logout(request)
-    return Response({"status": "success"})
+
+    if is_oidc_user:
+        logout_url = f"{OIDC_OP_LOGOUT_ENDPOINT}"
+        return Response(
+            {"status": "success", "logout_url": logout_url, "requires_redirect": True}
+        )
+
+    return Response({"status": "success", "requires_redirect": False})
 
 
 @extend_schema(
