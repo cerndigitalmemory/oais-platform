@@ -528,11 +528,11 @@ class Step(models.Model):
 
     @property
     def removable(self):
+        pipeline_steps = self.archive.pipeline_steps or []
         return (
             self.status == Status.WAITING
             and not self.celery_task_id
-            and self.archive.pipeline_steps
-            and self.id in self.archive.pipeline_steps
+            and self.id in pipeline_steps
         )
 
 

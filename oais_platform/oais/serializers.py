@@ -120,6 +120,7 @@ class StepSerializer(serializers.ModelSerializer):
     step_type = StepTypeMinimalSerializer()
     input_data = serializers.JSONField(source="input_data_json")
     output_data = serializers.JSONField(source="output_data_json")
+    removable = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Step
@@ -189,6 +190,7 @@ class ArchiveWithDuplicatesSerializer(ArchiveSerializer):
     class Meta(ArchiveSerializer.Meta):
         fields = ArchiveSerializer.Meta.fields + ["duplicates"]
 
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_duplicates(self, obj):
         duplicates_ctx = self.context.get("duplicates")
         if duplicates_ctx is not None:
