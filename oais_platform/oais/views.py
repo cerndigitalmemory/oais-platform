@@ -16,7 +16,7 @@ from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 from drf_spectacular.utils import (
@@ -1533,6 +1533,16 @@ def am_callback(request):
     callback_package.delay(package_name, package_uuid)
 
     return Response("Callback received.")
+
+
+def custom_404(request, exception):
+    return JsonResponse(
+        {
+            "detail": "The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.",
+            "status": 404,
+        },
+        status=404,
+    )
 
 
 def check_allowed_path(path, username):
