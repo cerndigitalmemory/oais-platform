@@ -1,6 +1,10 @@
 # Changes
 
-## Version 3.1.1 (released 2026-04-28)
+## Version 3.2.1 (released 2026-04-30)
+- Fix: error handling for not found FTS jobs
+- Dependency: bump oais-utils, update filename sanitization test
+
+## Version 3.2.0 (released 2026-04-28)
 - Fix: ensure last step is correctly set
 - Gitlab CI: remove env from trigger-prod
 - CTA: handle not found FTS jobs
