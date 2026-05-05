@@ -1389,7 +1389,7 @@ def logout(request):
     auth.logout(request)
 
     if is_oidc_user:
-        logout_url = f"{OIDC_OP_LOGOUT_ENDPOINT}"
+        logout_url = OIDC_OP_LOGOUT_ENDPOINT
         return Response(
             {"status": "success", "logout_url": logout_url, "requires_redirect": True}
         )
