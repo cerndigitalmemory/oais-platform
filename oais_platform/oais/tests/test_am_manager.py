@@ -27,11 +27,11 @@ class ArchivematicaManagerTests(APITestCase):
         self.step = Step.objects.create(
             archive=self.archive, step_name=StepName.ARCHIVE, status=Status.WAITING
         )
-        self.archive.set_last_step(self.step)
+        self.archive.set_last_step(self.step.id)
         self.step2 = Step.objects.create(
             archive=self.archive2, step_name=StepName.ARCHIVE, status=Status.WAITING
         )
-        self.archive2.set_last_step(self.step2)
+        self.archive2.set_last_step(self.step2.id)
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
@@ -73,7 +73,6 @@ class ArchivematicaManagerTests(APITestCase):
         self.step.step_type.concurrency_limit = 1
         self.step.step_type.save()
         self.step.set_status(Status.IN_PROGRESS)
-        self.step.save()
 
         start_am_transfers.apply()
         self.step2.refresh_from_db()
@@ -99,6 +98,6 @@ class ArchivematicaManagerTests(APITestCase):
         cta_step = Step.objects.create(
             archive=self.archive, step_name=StepName.PUSH_TO_CTA, status=Status.WAITING
         )
-        self.archive.set_last_step(cta_step)
+        self.archive.set_last_step(cta_step.id)
         start_am_transfers.apply()
-        mock_archivematica.assert_any_call(args=[self.step2.id])
+        mock_archivematica.assert_called_once_with(args=[self.step2.id])

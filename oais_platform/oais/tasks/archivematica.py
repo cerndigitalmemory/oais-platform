@@ -61,6 +61,7 @@ def archivematica(self, step_id):
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
+    current_step.set_start_date()
 
     # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(

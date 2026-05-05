@@ -26,7 +26,7 @@ class CTAManagerTests(APITestCase):
             start_date=timezone.now(),
         )
         self.step.set_input_data({"test": "test"})
-        self.archive.set_last_step(self.step)
+        self.archive.set_last_step(self.step.id)
         self.step.step_type.concurrency_limit = 2
         self.step.step_type.save()
 
@@ -148,7 +148,7 @@ class CTAManagerTests(APITestCase):
             status=Status.WAITING,
             start_date=timezone.now(),
         )
-        waiting_archive.set_last_step(waiting_step)
+        waiting_archive.set_last_step(waiting_step.id)
         return waiting_archive, waiting_step
 
     @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")

@@ -177,7 +177,7 @@ class ArchiveTests(APITestCase):
             step_name=StepName.EXTRACT_TITLE,
             status=Status.COMPLETED,
         )
-        self.private_archive.set_last_step(last_step)
+        self.private_archive.set_last_step(last_step.id)
 
         for p in self.public_archives:
             Step.objects.create(
@@ -186,7 +186,7 @@ class ArchiveTests(APITestCase):
             last_step = Step.objects.create(
                 archive=p, step_name=StepName.VALIDATION, status=Status.COMPLETED
             )
-            p.set_last_step(last_step)
+            p.set_last_step(last_step.id)
 
     def test_archive_list_public(self):
         url = reverse("archives-list")
