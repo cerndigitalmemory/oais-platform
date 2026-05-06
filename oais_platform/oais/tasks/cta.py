@@ -53,8 +53,13 @@ def cta_manager(self):
         logger.info("Maximum number of transfers currently in progress.")
         return
 
-    amount = step_type.concurrency_limit - current_transfers_count
-    _trigger_new_transfers(amount)
+    if step_type.enabled:
+        amount = step_type.concurrency_limit - current_transfers_count
+        _trigger_new_transfers(amount)
+    else:
+        logger.info(
+            "Push to CTA step type is disabled. No new transfers will be triggered."
+        )
 
 
 @shared_task(name="push_to_cta", bind=True, ignore_result=True)
@@ -67,6 +72,7 @@ def push_to_cta(self, archive_id, step_id):
     logger.info(f"Pushing Archive {archive_id} to CTA")
     archive = Archive.objects.get(pk=archive_id)
     step = Step.objects.get(pk=step_id)
+    step.set_start_date()
 
     if step.status != Status.WAITING:
         logger.warning(
@@ -167,7 +173,7 @@ def _check_in_progress_jobs(self):
             set_and_return_error(
                 step,
                 "Step has no fts_job_id",
-                failure_type=StepFailureType.MISSING_INPUT_DATA,
+                failure_type=StepFailureType.MISSING_OUTPUT_DATA,
             )
 
     logger.info("Checking statuses of ongoing transfers...")

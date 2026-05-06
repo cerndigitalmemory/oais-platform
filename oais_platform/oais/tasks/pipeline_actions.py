@@ -6,7 +6,7 @@ from celery import shared_task
 from celery import states as celery_states
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
-from django.db import models, transaction
+from django.db import transaction
 
 from oais_platform.celery import app
 from oais_platform.oais.enums import StepFailureType
@@ -46,13 +46,17 @@ def run_step(step, archive_id, return_signature=False):
     if not step.input_data_json and step.input_step is not None:
         step.input_data_json = step.input_step.output_data_json
 
-    # Set step execution start date
-    step.set_start_date()
-
     # Set Archive's last_step to the current step
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         archive.set_last_step(step.id)
+
+    # Skip steps started by manager tasks
+    if step.step_type.name in [StepName.PUSH_TO_CTA, StepName.ARCHIVE]:
+        return step, None
+
+    # Set step execution start date
+    step.set_start_date()
 
     if not step.step_type.enabled:
         step.set_failure_type(StepFailureType.STEP_DISABLED)
@@ -67,9 +71,6 @@ def run_step(step, archive_id, return_signature=False):
         logging.warning(
             f"Step type {step.step_type.name} is disabled: setting step {step.id} to FAILED"
         )
-        return step, None
-
-    if step.step_type.name == StepName.PUSH_TO_CTA:
         return step, None
 
     res = dispatch_task(step.step_type, archive_id, step.id, return_signature)
@@ -225,54 +226,6 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
             step.set_output_data(retval)
     else:
         step.set_status(Status.FAILED)
-
-    manage_end_of_step(step)
-
-
-def manage_end_of_step(step):
-    step_type = step.step_type
-    if step.status == Status.FAILED:
-        step_type.increment_failed_count()
-    incremented = step.output_data_json.get("incremented", True)
-    if incremented:
-        with transaction.atomic():
-            step_type = StepType.objects.select_for_update().get(pk=step_type.id)
-            if step_type.concurrency_limit is not None:
-                step_type.decrement_current_count()
-            if step_type.size_limit_bytes is not None:
-                if (
-                    step_type.name == StepName.HARVEST
-                    and step.archive.original_file_size
-                ):
-                    step_type.decrement_current_size(step.archive.original_file_size)
-                elif step_type.name == StepName.ARCHIVE and step.archive.sip_size:
-                    step_type.decrement_current_size(step.archive.sip_size)
-    if step_type.name == StepName.ARCHIVE and step_type.enabled:
-        logging.info(
-            f"Checking for waiting ARCHIVE steps to run (concurrency limit: {step_type.concurrency_limit})"
-        )
-        with transaction.atomic():
-            first_waiting_step = (
-                Step.objects.select_for_update(skip_locked=True)
-                .filter(
-                    status=Status.WAITING,
-                    step_type=step_type,
-                    celery_task_id__isnull=True,
-                    start_date__isnull=True,
-                    archive__last_step=models.F(
-                        "id"
-                    ),  # It is the last step of the archive, not in pipeline
-                )
-                .order_by("create_date")
-                .first()
-            )
-            if first_waiting_step:
-                logging.info(
-                    f"Found oldest waiting {StepName.ARCHIVE} steps to run (id: {first_waiting_step.id})."
-                )
-                step, _ = run_step(first_waiting_step, first_waiting_step.archive.id)
-            else:
-                logging.info(f"No waiting {StepName.ARCHIVE} step found to run.")
 
 
 def create_pipeline(archive_id, steps, run_type, user):

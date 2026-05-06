@@ -26,7 +26,7 @@ class CTAManagerTests(APITestCase):
             start_date=timezone.now(),
         )
         self.step.set_input_data({"test": "test"})
-        self.archive.set_last_step(self.step)
+        self.archive.set_last_step(self.step.id)
         self.step.step_type.concurrency_limit = 2
         self.step.step_type.save()
 
@@ -129,7 +129,7 @@ class CTAManagerTests(APITestCase):
 
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_INPUT_DATA)
+        self.assertEqual(self.step.failure_type, StepFailureType.MISSING_OUTPUT_DATA)
 
     def _setup_waiting_archive(self):
         self.step.step_type.concurrency_limit = 1
@@ -148,7 +148,7 @@ class CTAManagerTests(APITestCase):
             status=Status.WAITING,
             start_date=timezone.now(),
         )
-        waiting_archive.set_last_step(waiting_step)
+        waiting_archive.set_last_step(waiting_step.id)
         return waiting_archive, waiting_step
 
     @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
@@ -161,6 +161,19 @@ class CTAManagerTests(APITestCase):
 
         cta_manager.apply()
         mock_push_to_cta.assert_called_once_with(waiting_archive.id, waiting_step.id)
+
+    @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")
+    def test_cta_manager_step_type_disabled(self, mock_push_to_cta):
+        self.step.step_type.enabled = False
+        self.step.step_type.save()
+        self._setup_waiting_archive()
+
+        self.fts.job_statuses.return_value = [
+            {"job_id": "job_id", "job_state": "FINISHED"}
+        ]
+
+        cta_manager.apply()
+        mock_push_to_cta.assert_not_called()
 
     @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     @patch("oais_platform.oais.tasks.cta.push_to_cta.delay")

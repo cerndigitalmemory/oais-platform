@@ -6,7 +6,7 @@ from celery.exceptions import Retry
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import harvest
 from oais_platform.settings import SIP_UPSTREAM_BASEPATH
 
@@ -24,9 +24,10 @@ class HarvestTest(APITestCase):
         self.step.step_type.size_limit_bytes = 200
         self.step.step_type.save()
 
+    @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     @patch("bagit_create.main.process")
-    def test_harvest_success(self, bagit_create, hashlib_mock):
+    def test_harvest_success(self, bagit_create, hashlib_mock, dispatch_task):
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -62,6 +63,13 @@ class HarvestTest(APITestCase):
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
         self.assertTrue(expected_path.exists())
+        self.archive.refresh_from_db()
+        dispatch_task.assert_called_once_with(
+            StepType.get_by_stepname(StepName.VALIDATION),
+            self.archive.id,
+            self.archive.last_step.id,
+            False,
+        )
 
     def test_harvest_file_size_exceeded(self):
         self.archive.set_original_file_size(self.step.step_type.size_limit_bytes + 100)
@@ -75,10 +83,9 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
     def test_harvest_aggr_file_size_exceeded(self):
-        self.step.step_type.current_size_bytes = (
+        self._create_with_current_size(
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
         )
-        self.step.step_type.save()
 
         with self.assertRaises(Retry):
             harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -91,10 +98,9 @@ class HarvestTest(APITestCase):
 
     @patch("celery.app.task.Task.request")
     def test_harvest_aggr_file_size_retries_exceeded(self, task_request):
-        self.step.step_type.current_size_bytes = (
+        self._create_with_current_size(
             self.step.step_type.size_limit_bytes - self.archive.original_file_size + 1
         )
-        self.step.step_type.save()
 
         task_request.id = "test_task_id"
         task_request.retries = 10
@@ -170,8 +176,7 @@ class HarvestTest(APITestCase):
 
     @patch("bagit_create.main.process")
     def test_harvest_non_retriable_failed(self, bagit_create):
-        self.step.step_type.current_size_bytes = 50
-        self.step.step_type.save()
+        self._create_with_current_size(50)
         bagit_create.return_value = {"status": 1, "errormsg": "Error"}
 
         result = harvest.apply(args=[self.archive.id, self.step.id], throw=True).get()
@@ -179,4 +184,12 @@ class HarvestTest(APITestCase):
         self.assertEqual(result["errormsg"], "Error")
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
-        self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertEqual(self.step.step_type.current_size_bytes, 50)
+
+    def _create_with_current_size(self, size):
+        archive = Archive.objects.create(
+            recid="2", source="test_source", original_file_size=size
+        )
+        Step.objects.create(
+            archive=archive, step_name=StepName.HARVEST, status=Status.IN_PROGRESS
+        )
