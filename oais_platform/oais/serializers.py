@@ -330,7 +330,7 @@ class CollectionSerializer(serializers.ModelSerializer):
                 duration=ExpressionWrapper(
                     Coalesce(
                         F("finish_date") - F("start_date"),
-                        timezone.now() - F("start_date"),
+                        timezone.now() - Coalesce(F("start_date"), F("create_date")),
                     ),
                     output_field=DurationField(),
                 ),
