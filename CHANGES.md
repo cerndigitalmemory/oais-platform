@@ -1,5 +1,13 @@
 # Changes
 
+## Version 3.3.0 (released 2026-05-06)
+- Add Archivematica manager function
+- Add Submitted status
+- Add SSO logout redirect
+- Optimize management command: create source Collections
+- Add missing serializer type hints
+- Remove Django view from prod, add custom 404
+
 ## Version 3.2.1 (released 2026-04-30)
 - Fix: error handling for not found FTS jobs
 - Dependency: bump oais-utils, update filename sanitization test
