@@ -82,7 +82,7 @@ def avg_duration_per_day(
     return (
         steps.exclude(start_date__isnull=True, finish_date__isnull=True)
         .annotate(
-            day=TruncDate("start_date"),
+            day=TruncDate("finish_date"),
             duration=ExpressionWrapper(
                 F("finish_date") - F("start_date"), output_field=DurationField()
             ),
