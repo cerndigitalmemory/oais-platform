@@ -410,7 +410,10 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
                 )
         return errors, failure_type
     else:
-        return 0, failure_type
+        if not check_for_failed:
+            return 0
+        else:
+            return 0, failure_type
 
 
 def get_am_failure_type_from_failed_job(job):
