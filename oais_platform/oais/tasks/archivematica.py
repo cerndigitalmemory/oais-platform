@@ -220,11 +220,13 @@ def check_am_status(self, step_id):
 
     elif status == "FAILED" or status == "REJECTED":
         if not am_status.get("errormsg", None):
-            errors = get_executed_jobs(am, uuid, check_for_failed=True)
-            if am_status.get("uuid", None):
-                errors += get_executed_jobs(
-                    am, am_status["uuid"], check_for_failed=True
+            errors, failure_type = get_executed_jobs(am, uuid, check_for_failed=True)
+            ingest_uuid = am_status.get("uuid", None)
+            if ingest_uuid and ingest_uuid != uuid:
+                errors2, failure_type = get_executed_jobs(
+                    am, ingest_uuid, check_for_failed=True
                 )
+                errors.extend(errors2)
             logger.warning(
                 f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
             )
@@ -291,8 +293,8 @@ def check_am_status(self, step_id):
                     StepName.ARCHIVE,
                 )
             )
-        step.set_finish_date()
         step.set_output_data(am_status)
+    step.set_finish_date()
 
 
 def resource_check(task, current_step, archive):
@@ -348,9 +350,11 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
     executed_jobs = am.get_jobs()
     logger.debug(f"Executed jobs for given id({unit_uuid}): {executed_jobs}")
     errors = []
+    failure_type = None
     if executed_jobs != 1 and len(executed_jobs) > 0:
         if not check_for_failed:
             return len(executed_jobs)
+        seen = set()
         for job in executed_jobs:
             try:
                 # Normalization failure is not failing the whole package, so need to check tasks inside the job
@@ -377,18 +381,25 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
                                 }
                             )
                 if job["status"] == "FAILED":
-                    entry = {
-                        "task": job["name"],
-                        "microservice": job.get("microservice"),
-                        "link": f"{am.am_url}/tasks/{job['uuid']}",
-                    }
-                    if not any(
-                        e["task"] == entry["task"]
-                        and e.get("microservice", None) == entry["microservice"]
-                        and e["link"] == entry["link"]
-                        for e in errors
-                    ):
-                        errors.append(entry)
+                    key = (
+                        job["name"],
+                        job.get("microservice"),
+                        f"{am.am_url}/tasks/{job['uuid']}",
+                    )
+
+                    if key not in seen:
+                        seen.add(key)
+                        errors.append(
+                            {
+                                "task": job["name"],
+                                "microservice": job.get("microservice"),
+                                "link": f"{am.am_url}/tasks/{job['uuid']}",
+                            }
+                        )
+                        if not failure_type:
+                            failure_type = get_am_failure_type_from_failed_job(
+                                job["name"]
+                            )
             except KeyError:
                 logger.warning(
                     f"KeyError while checking executed jobs for {unit_uuid}: {str(job)}"
@@ -397,9 +408,24 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
                 logger.warning(
                     f"Error while checking executed jobs for {unit_uuid}: {str(e)}"
                 )
-        return errors
+        return errors, failure_type
     else:
-        return 0
+        if not check_for_failed:
+            return 0
+        else:
+            return 0, failure_type
+
+
+def get_am_failure_type_from_failed_job(job):
+    match job:
+        case "Scan for viruses in directories":
+            return StepFailureType.VIRUS_FLAGGED
+        case "Extract contents from compressed archives":
+            return StepFailureType.EXTRACTION_FAILED
+        case "Normalize for preservation", "Validate preservation derivatives":
+            return StepFailureType.NORMALIZATION_FAILED
+        case _:
+            return StepFailureType.AM_JOB_FAILED_OTHER
 
 
 def get_transfer_name(archive, step):
@@ -443,7 +469,9 @@ def handle_completed_am_package(self, am, step, am_status):
 
             outdate_aip_dependent_steps(step.archive)
 
-        errors = get_executed_jobs(am, am_status["uuid"], check_for_failed=True)
+        errors, failure_type = get_executed_jobs(
+            am, am_status["uuid"], check_for_failed=True
+        )
         if errors and len(errors) > 0:
             am_status["errormsg"] = errors
             am_status["retry"] = True
@@ -452,6 +480,7 @@ def handle_completed_am_package(self, am, step, am_status):
             )
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
+            step.set_failure_type(failure_type)
         else:
             finalize(
                 self=self,
