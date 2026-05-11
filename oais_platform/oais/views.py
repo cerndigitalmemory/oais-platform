@@ -472,21 +472,30 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Returns all Steps of an identified Archive
         """
         archive = self.get_object()
-        pipeline_ids = archive.pipeline_steps or []
-
-        steps = archive.steps.annotate(
-            in_pipeline=Case(
-                When(
-                    id__in=pipeline_ids, then=1
-                ),  # Deprioritize steps that are in the pipeline
-                default=0,
-                output_field=IntegerField(),
-            )
-        ).order_by("in_pipeline", "start_date", "create_date")
-
-        serializer = StepSerializer(steps, many=True)
-
+        serializer = StepSerializer(
+            archive.steps.order_by("start_date", "create_date"), many=True
+        )
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=["DELETE"],
+        url_path=r"pipeline-step/(?P<step_index>\d+)",
+        url_name="delete-pipeline-step",
+    )
+    def archive_delete_pipeline_step(self, request, pk=None, step_index=None):
+        """
+        Deletes a step from the pipeline of an identified Archive
+        """
+        archive = self.get_object()
+        step_index = int(step_index)
+
+        if step_index < 0 or step_index >= len(archive.pipeline_steps):
+            raise BadRequest("Step index out of bounds")
+
+        archive.pipeline_steps.pop(step_index)
+        archive.save()
+        return Response(status=204)
 
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
@@ -621,14 +630,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive = self.get_object()
         run_type = request.data.get("run_type", "run")
-        steps = request.data.get("pipeline_steps")
+        step_types = request.data.get("pipeline_steps")
 
-        if run_type == "run" and (not steps or len(steps) > PIPELINE_SIZE_LIMIT):
+        if run_type == "run" and (
+            not step_types or len(step_types) > PIPELINE_SIZE_LIMIT
+        ):
             raise BadRequest("Invalid pipeline size")
 
         try:
-            step = create_pipeline(archive.id, steps, run_type, request.user)
-            return Response(StepSerializer(step, many=False).data)
+            create_pipeline(archive.id, step_types, run_type, request.user)
+            return Response({"msg": f"Pipeline created for archive {archive.id}"})
         except Exception as e:
             raise BadRequest(str(e))
 
@@ -644,7 +655,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         archive_ids = request.data.get("archive_ids", [])
         run_type = request.data.get("run_type", "run")
-        steps = request.data.get("pipeline_steps", [])
+        step_types = request.data.get("pipeline_steps", [])
 
         if not archive_ids:
             raise BadRequest("No archive IDs.")
@@ -654,10 +665,12 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
             )
 
-        if run_type == "run" and (len(steps) > PIPELINE_SIZE_LIMIT or len(steps) == 0):
+        if run_type == "run" and (
+            len(step_types) > PIPELINE_SIZE_LIMIT or len(step_types) == 0
+        ):
             raise BadRequest("Invalid pipeline size")
 
-        run_bulk_pipeline.delay(archive_ids, run_type, steps, request.user.id)
+        run_bulk_pipeline.delay(archive_ids, run_type, step_types, request.user.id)
 
         return Response(
             {
@@ -754,18 +767,6 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     )
                     return response
         return HttpResponse(status=404)
-
-    @action(detail=True, methods=["DELETE"], url_path="delete", url_name="delete")
-    def delete_step(self, request, pk=None):
-        """
-        Deletes the waiting Step in the pipeline
-        """
-        step = self.get_object()
-        if not step.removable:
-            raise BadRequest("Can only delete steps that are waiting in the pipeline.")
-        with transaction.atomic():
-            step.delete()
-        return Response("Step deleted.")
 
     @action(
         detail=False,

@@ -120,7 +120,6 @@ class StepSerializer(serializers.ModelSerializer):
     step_type = StepTypeMinimalSerializer()
     input_data = serializers.JSONField(source="input_data_json")
     output_data = serializers.JSONField(source="output_data_json")
-    removable = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Step
@@ -136,7 +135,6 @@ class StepSerializer(serializers.ModelSerializer):
             "input_data",
             "input_step",
             "output_data",
-            "removable",
             "failure_type",
         ]
 
@@ -182,6 +180,7 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "resource",  # this points to the serialized resource
             "state",
             "last_update",
+            "pipeline_steps",
         ]
 
 
