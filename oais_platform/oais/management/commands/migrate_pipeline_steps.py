@@ -34,7 +34,7 @@ class Command(BaseCommand):
                             else None
                         )
                         new_pipeline_steps.append(
-                            (step.step_type.id, user_id, batch_id)
+                            (step.step_type.name, user_id, batch_id)
                         )
                         step.delete()
                     except Step.DoesNotExist:

@@ -16,6 +16,7 @@ from oais_platform.oais.models import (
     Status,
     Step,
     StepName,
+    StepType,
 )
 from oais_platform.oais.tasks.scheduled_harvest import (
     batch_harvest,
@@ -245,10 +246,7 @@ class ScheduledHarvestTests(APITestCase):
                     archive.id, self.collection.archives.values_list("id", flat=True)
                 )
                 self.assertEqual(archive.source, self.source.name)
-                step_names = [
-                    Step.objects.get(id=step_id).step_type.name
-                    for step_id in archive.pipeline_steps
-                ]
+                step_names = [step[0] for step in archive.pipeline_steps]
                 self.assertEqual(step_names, self.pipeline)
                 mock_execute_pipeline.assert_called_once_with(
                     archive.id, None, return_signature=True
@@ -323,10 +321,7 @@ class ScheduledHarvestTests(APITestCase):
                 archive.id, self.collection.archives.values_list("id", flat=True)
             )
             self.assertEqual(archive.source, self.source.name)
-            step_names = [
-                Step.objects.get(id=step_id).step_type.name
-                for step_id in archive.pipeline_steps
-            ]
+            step_names = [step[0] for step in archive.pipeline_steps]
             self.assertEqual(step_names, self.pipeline)
             mock_execute_pipeline.assert_called_once_with(
                 archive.id, None, return_signature=True
@@ -453,6 +448,7 @@ class ScheduledHarvestTests(APITestCase):
             version_timestamp=updated_time,
         )
         self.collection.add_archive(archive)
+        self.batch.add_archive(archive)
         return archive
 
     def create_batch_step(self, archive, name, status):

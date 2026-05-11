@@ -26,7 +26,6 @@ class CreateRetryStepTests(APITestCase):
         ).first()
         self.assertIsNotNone(retry_step)
         self.archive.refresh_from_db()
-        self.assertEqual(self.archive.pipeline_steps, [retry_step.id])
         self.assertEqual(retry_step.initiated_by_user, self.user)
         self.assertEqual(retry_step.initiated_by_harvest_batch, None)
 
