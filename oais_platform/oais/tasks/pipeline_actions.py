@@ -260,9 +260,6 @@ def create_pipeline(archive_id, step_types, run_type, user):
                     raise Exception(
                         "Continue operation not permitted, the pipeline is empty."
                     )
-
-                archive.consume_pipeline()
-
             case _:
                 raise Exception(
                     "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
