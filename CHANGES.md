@@ -1,5 +1,11 @@
 # Changes
 
+## Version 4.0.0 (released 2026-05-13)
+- Refactor Archive pipeline
+- Archivematica: add specific failure types
+- Per day summary: use finish day
+- Step summary: use create_date if no start_date
+
 ## Version 3.3.0 (released 2026-05-06)
 - Add Archivematica manager function
 - Add Submitted status
