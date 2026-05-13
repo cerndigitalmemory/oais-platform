@@ -87,8 +87,7 @@ def execute_pipeline(archive_id, force_continue=False, return_signature=False):
         if archive.last_completed_step == archive.last_step or force_continue:
             # Run first available step in the pipeline
             if len(archive.pipeline_steps) != 0:
-                step_id = archive.consume_pipeline()
-                step = Step.objects.get(pk=step_id)
+                step = archive.consume_pipeline()
             # No available step in the pipeline
             else:
                 # Automatically run next step ONLY if the automatic_next_step is set
@@ -146,11 +145,9 @@ def _create_retry_step(
     # update successors of the failed steps
     for next_step in next_steps:
         next_step.set_input_step(step)
-    archive.pipeline_steps.insert(0, step.id)
-    archive.save()
 
     if execute:
-        execute_pipeline(archive.id, force_continue=True)
+        run_step(step, archive.id)
 
     return {"errormsg": None}
 
@@ -228,21 +225,22 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
         step.set_status(Status.FAILED)
 
 
-def create_pipeline(archive_id, steps, run_type, user):
+def create_pipeline(archive_id, step_types, run_type, user):
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         force_continue = False
 
         match run_type:
             case "run":
-                for step_name in steps:
-                    archive.add_step_to_pipeline(step_name, user=user)
+                for step_type in step_types:
+                    archive.add_step_to_pipeline(step_type, user=user)
 
             case "retry":
                 force_continue = True
-                result = _create_retry_step(archive_id, user.id)
+                result = _create_retry_step(archive_id, user.id, execute=True)
                 if result.get("errormsg"):
                     raise Exception(result["errormsg"])
+                return
 
             case "continue":
                 force_continue = True
@@ -262,33 +260,22 @@ def create_pipeline(archive_id, steps, run_type, user):
                     raise Exception(
                         "Continue operation not permitted, the pipeline is empty."
                     )
-
-                continue_step = Step.objects.select_for_update().get(
-                    pk=archive.pipeline_steps[0]
-                )
-                if continue_step.status != Status.WAITING:
-                    raise Exception(
-                        "Continue operation not permitted, next step in pipeline is not in status WAITING."
-                    )
-
             case _:
                 raise Exception(
                     "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
                 )
 
-    step, _ = execute_pipeline(archive.id, force_continue=force_continue)
-
-    return step
+    execute_pipeline(archive.id, force_continue=force_continue)
 
 
 @shared_task(name="run_bulk_pipeline", bind=True, ignore_result=True)
-def run_bulk_pipeline(self, archive_ids, run_type, steps, user_id):
+def run_bulk_pipeline(self, archive_ids, run_type, step_types, user_id):
     archives = Archive.objects.filter(id__in=archive_ids).values("id", "source")
     user = User.objects.get(pk=user_id)
 
     for item in archives:
         archive_id = item["id"]
         try:
-            create_pipeline(archive_id, steps, run_type, user)
+            create_pipeline(archive_id, step_types, run_type, user)
         except Exception as e:
             logging.warning(f"Failed to run pipeline for archive {archive_id}: {e}")

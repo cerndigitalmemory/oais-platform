@@ -8,7 +8,7 @@ from oais_platform.oais.models import Archive, Status, Step, StepName
 
 class ArchiveActionIntersectionTest(APITestCase):
     def create_archive_with_state(self, last_step_status, pipeline_steps=None):
-        steps = pipeline_steps if pipeline_steps is not None else [123]
+        steps = pipeline_steps if pipeline_steps is not None else [StepName.HARVEST]
 
         archive = Archive.objects.create(pipeline_steps=steps)
         step = Step.objects.create(

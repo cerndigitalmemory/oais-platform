@@ -17,6 +17,7 @@ from oais_platform.oais.models import (
     StepType,
 )
 from oais_platform.oais.tasks.pipeline_actions import run_bulk_pipeline
+from oais_platform.oais.tests.utils import verify_archives_pipeline
 from oais_platform.settings import PIPELINE_SIZE_LIMIT
 
 
@@ -79,7 +80,7 @@ class BulkPipelineTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status_code)
-        self.assertEqual(Step.objects.count(), self.init_step_count)
+        verify_archives_pipeline(self, self.archives, [])
 
     @patch("oais_platform.oais.tasks.pipeline_actions.run_bulk_pipeline.delay")
     def test_bulk_pipeline_task_creation(self, mock_delay):
@@ -113,11 +114,7 @@ class BulkPipelineTests(APITestCase):
             args=[self.archive_ids, "run", pipeline, self.testuser.id]
         )
 
-        steps_created = (
-            Step.objects.filter(archive_id__in=self.archive_ids).count()
-            - self.init_step_count
-        )
-        self.assertEqual(steps_created, len(self.archive_ids) * len(pipeline))
+        verify_archives_pipeline(self, self.archives, pipeline[1:])
         self.assertEqual(mock_dispatch.call_count, len(self.archive_ids))
 
         for archive in self.archives:
@@ -129,9 +126,9 @@ class BulkPipelineTests(APITestCase):
                 False,
             )
 
-    @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
-    def test_bulk_retry_logic(self, mock_execute):
-        mock_execute.return_value = (MagicMock(spec=Step), None)
+    @patch("oais_platform.oais.tasks.pipeline_actions.run_step")
+    def test_bulk_retry_logic(self, mock_run_step):
+        mock_run_step.return_value = (MagicMock(spec=Step), None)
         for archive in self.archives:
             step = Step.objects.create(
                 archive=archive, step_name=StepName.PUSH_TO_CTA, status=Status.FAILED
@@ -140,9 +137,7 @@ class BulkPipelineTests(APITestCase):
 
         run_bulk_pipeline.apply(args=[self.archive_ids, "retry", [], self.testuser.id])
 
-        self.assertEqual(mock_execute.call_count, len(self.archive_ids))
-        for archive_id in self.archive_ids:
-            mock_execute.assert_any_call(archive_id, force_continue=True)
+        self.assertEqual(mock_run_step.call_count, len(self.archive_ids))
 
     @patch("oais_platform.oais.tasks.pipeline_actions.execute_pipeline")
     def test_bulk_continue_logic(self, mock_execute):
@@ -151,12 +146,8 @@ class BulkPipelineTests(APITestCase):
             failed_step = Step.objects.create(
                 archive=archive, step_name=StepName.HARVEST, status=Status.FAILED
             )
-            waiting_step = Step.objects.create(
-                archive=archive, step_name=StepName.VALIDATION, status=Status.WAITING
-            )
-
             archive.set_last_step(failed_step.id)
-            archive.pipeline_steps = [waiting_step.id]
+            archive.pipeline_steps = [(StepName.VALIDATION, None, None)]
             archive.save()
 
         run_bulk_pipeline.apply(

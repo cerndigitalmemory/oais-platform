@@ -225,10 +225,22 @@ class Archive(models.Model):
             self.state = ArchiveState.NONE
 
     def consume_pipeline(self):
-        step_id = self.pipeline_steps.pop(0)
+        step_name, user_id, harvest_batch_id = self.pipeline_steps.pop(0)
         self.save()
 
-        return step_id
+        return Step.objects.create(
+            archive=self,
+            step_type=StepType.get_by_stepname(step_name),
+            status=Status.WAITING,
+            initiated_by_user=User.objects.get(pk=user_id) if user_id else None,
+            initiated_by_harvest_batch=(
+                HarvestBatch.objects.get(pk=harvest_batch_id)
+                if harvest_batch_id
+                else None
+            ),
+            input_step=self.last_step,
+            input_data=self.last_step.output_data_json if self.last_step else None,
+        )
 
     def add_step_to_pipeline(
         self, step_name, user=None, harvest_batch=None, lock=False
@@ -236,7 +248,7 @@ class Archive(models.Model):
         archive = self
 
         try:
-            StepType.objects.get(name=step_name)
+            step_type = StepType.objects.get(name=step_name)
         except StepType.DoesNotExist:
             raise Exception(f"Invalid Step type: {step_name}")
 
@@ -248,24 +260,13 @@ class Archive(models.Model):
             if not archive.pipeline_steps:
                 archive.pipeline_steps = []
 
-            if len(archive.pipeline_steps) == 0:
-                if archive.last_step:
-                    input_step_id = archive.last_step.id
-                else:
-                    input_step_id = None
-            else:
-                input_step_id = archive.pipeline_steps[-1]
-
-            step = Step.objects.create(
-                archive=archive,
-                step_name=step_name,
-                input_step_id=input_step_id,
-                status=Status.WAITING,
-                initiated_by_user=user,
-                initiated_by_harvest_batch=harvest_batch,
+            archive.pipeline_steps.append(
+                (
+                    step_type.name,
+                    user.id if user else None,
+                    harvest_batch.id if harvest_batch else None,
+                )
             )
-
-            archive.pipeline_steps.append(step.id)
             archive.save()
 
     def has_completed_step(self, step_name):
@@ -386,10 +387,10 @@ class StepQuerySet(models.QuerySet):
 
 
 class StepManager(models.Manager):
-    def create(self, *, step_name: StepName, **kwargs):
+    def create(self, *, step_name: StepName = None, **kwargs):
         # resolve StepType from StepName
-        step_type = StepType.get_by_stepname(step_name)
-        kwargs["step_type"] = step_type
+        if step_name and "step_type" not in kwargs:
+            kwargs["step_type"] = StepType.get_by_stepname(step_name)
         return super().create(**kwargs)
 
     def get_queryset(self):
@@ -531,21 +532,6 @@ class Step(models.Model):
         super(Step, self).save(*args, **kwargs)
         self.archive.refresh_from_db()
         self.archive.save()
-
-    def delete(self, *args, **kwargs):
-        if self.id in self.archive.pipeline_steps:
-            self.archive.pipeline_steps.remove(self.id)
-            self.archive.save()
-        super().delete(*args, **kwargs)
-
-    @property
-    def removable(self):
-        pipeline_steps = self.archive.pipeline_steps or []
-        return (
-            self.status == Status.WAITING
-            and not self.celery_task_id
-            and self.id in pipeline_steps
-        )
 
 
 class Resource(models.Model):
@@ -836,6 +822,9 @@ class HarvestBatch(models.Model):
         HarvestRun, on_delete=models.CASCADE, related_name="batches"
     )
     skipped_count = models.PositiveIntegerField(default=0)
+    archives = models.ManyToManyField(
+        Archive, blank=True, related_name="harvest_batches"
+    )
 
     @property
     def size(self):
@@ -878,10 +867,6 @@ class HarvestBatch(models.Model):
             batch_status__in=[Status.COMPLETED, Status.COMPLETED_WITH_WARNINGS]
         ).count()
 
-    @property
-    def archives(self):
-        return Archive.objects.filter(steps__initiated_by_harvest_batch=self).distinct()
-
     class Meta:
         unique_together = ("harvest_run", "batch_number")
         ordering = ["batch_number"]
@@ -892,6 +877,10 @@ class HarvestBatch(models.Model):
 
     def increase_skipped_count(self):
         self.skipped_count += 1
+        self.save()
+
+    def add_archive(self, archive):
+        self.archives.add(archive)
         self.save()
 
     def refresh_status(self, step_status=None):

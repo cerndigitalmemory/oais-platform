@@ -376,14 +376,9 @@ class ArchiveTests(APITestCase):
             status=Status.FAILED,
             start_date="2024-01-01T00:01:00Z",
         )
-        self.step3 = Step.objects.create(
-            archive=self.private_archive,
-            step_name=StepName.NOTIFY_SOURCE,
-            status=Status.WAITING,
-        )
         self.private_archive.last_step = self.step2
         self.private_archive.last_completed_step = self.step1
-        self.private_archive.pipeline_steps = [self.step3.id]
+        self.private_archive.pipeline_steps = [(StepName.NOTIFY_SOURCE, None, None)]
         self.private_archive.save()
 
         response = self.client.get(
@@ -392,10 +387,9 @@ class ArchiveTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)
+        self.assertEqual(len(response.data), 2)
         self.assertEqual(response.data[0]["id"], self.step1.id)
         self.assertEqual(response.data[1]["id"], self.step2.id)
-        self.assertEqual(response.data[2]["id"], self.step3.id)
 
         # Create waiting retry step
         self.step4 = Step.objects.create(
@@ -412,11 +406,10 @@ class ArchiveTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 4)
+        self.assertEqual(len(response.data), 3)
         self.assertEqual(response.data[0]["id"], self.step1.id)
         self.assertEqual(response.data[1]["id"], self.step2.id)
         self.assertEqual(response.data[2]["id"], self.step4.id)
-        self.assertEqual(response.data[3]["id"], self.step3.id)
 
     def test_record_check_none(self):
         self.client.force_authenticate(user=self.requester)

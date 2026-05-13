@@ -47,3 +47,10 @@ class TestSource(AbstractSource):
                 "source": "test",
             }
         ], datetime.now(timezone.utc)
+
+
+def verify_archives_pipeline(self, archives, expected_steps):
+    for archive in archives:
+        archive.refresh_from_db()
+        pipeline_step_names = [step[0] for step in archive.pipeline_steps]
+        self.assertEqual(pipeline_step_names, expected_steps)

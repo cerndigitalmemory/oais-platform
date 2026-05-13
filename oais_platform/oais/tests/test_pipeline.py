@@ -16,6 +16,7 @@ from oais_platform.oais.models import (
     StepName,
     StepType,
 )
+from oais_platform.oais.tests.utils import verify_archives_pipeline
 from oais_platform.settings import PIPELINE_SIZE_LIMIT
 
 
@@ -108,7 +109,8 @@ class PipelineTests(APITestCase):
         self.archive.refresh_from_db()
 
         self.assertEqual(len(self.archive.pipeline_steps), len(pipeline) - 1)
-        self.assertEqual(Step.objects.count(), self.init_step_count + len(pipeline))
+        self.assertEqual(Step.objects.count(), self.init_step_count + 1)
+        verify_archives_pipeline(self, [self.archive], pipeline[1:])
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         mock_dispatch.assert_called_once_with(
             StepType.get_by_stepname(StepName.VALIDATION),

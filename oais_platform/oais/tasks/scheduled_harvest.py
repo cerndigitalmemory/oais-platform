@@ -190,6 +190,7 @@ def batch_harvest(self, batch_id):
                     version_timestamp=record.get("updated"),
                 )
                 batch.harvest_run.collection.add_archive(archive.id)
+                batch.add_archive(archive)
 
                 for step_name in batch.harvest_run.pipeline:
                     archive.add_step_to_pipeline(step_name, harvest_batch=batch)
