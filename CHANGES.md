@@ -1,5 +1,8 @@
 # Changes
 
+## Version 4.0.1 (released 2026-05-15)
+- Archivematica: execute retry step
+
 ## Version 4.0.0 (released 2026-05-13)
 - Refactor Archive pipeline
 - Archivematica: add specific failure types
