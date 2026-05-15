@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
@@ -17,8 +19,9 @@ class CreateRetryStepTests(APITestCase):
         self.archive.set_last_step(self.step.id)
         self.user = User.objects.create_superuser("user", "", "pw")
 
-    def test_create_retry_step_success(self):
-        create_retry_step.apply(args=[self.archive.id, self.user.id])
+    @patch("oais_platform.oais.tasks.pipeline_actions.run_step")
+    def test_create_retry_step_success(self, mock_run_step):
+        create_retry_step.apply(args=[self.archive.id, self.user.id, True])
         retry_step = Step.objects.filter(
             step_type=self.step.step_type,
             archive=self.archive,
@@ -28,6 +31,7 @@ class CreateRetryStepTests(APITestCase):
         self.archive.refresh_from_db()
         self.assertEqual(retry_step.initiated_by_user, self.user)
         self.assertEqual(retry_step.initiated_by_harvest_batch, None)
+        mock_run_step.assert_called_once_with(retry_step, self.archive.id)
 
     def test_create_retry_step_not_failed(self):
         self.step.set_status(Status.COMPLETED)

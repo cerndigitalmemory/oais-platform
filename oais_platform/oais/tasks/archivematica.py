@@ -289,7 +289,7 @@ def check_am_status(self, step_id):
                 args=(
                     step.archive.id,
                     step.initiated_by_user.id if step.initiated_by_user else None,
-                    False,
+                    True,
                     StepName.ARCHIVE,
                 )
             )
