@@ -1,7 +1,7 @@
 from django.db.models import Exists, OuterRef, Q
 
 from oais_platform.oais.exceptions import BadRequest
-from oais_platform.oais.models import Step
+from oais_platform.oais.models import Step, StepType
 from oais_platform.settings import STEP_FILTER_CONDITION_LIMIT
 
 
@@ -39,6 +39,22 @@ def build_step_condition(condition):
 
     exclude = condition.pop("exclude", False)
     is_last_step = condition.pop("last_step", False)
+    in_pipeline = condition.pop("in_pipeline", False)
+
+    if in_pipeline:
+        q = Q()
+
+        for key, value in condition.items():
+            if key != "name":
+                raise KeyError(f"Invalid filter key for in_pipeline: {key}")
+            try:
+                step_type = StepType.objects.get(name=value)
+            except StepType.DoesNotExist:
+                raise BadRequest(f"Invalid step type name: {value}")
+
+            q |= Q(pipeline_steps__contains=[[step_type.name]])
+
+        return ~q if exclude else q
 
     if is_last_step:
         q = Q()
