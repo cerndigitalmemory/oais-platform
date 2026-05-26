@@ -501,6 +501,13 @@ class StepStatisticsSerializer(serializers.Serializer):
     )
 
 
+class StepStatusStatisticsSerializer(serializers.Serializer):
+    counts = serializers.DictField(
+        child=serializers.DictField(child=serializers.IntegerField()),
+        help_text=("Number of steps grouped by step name and status"),
+    )
+
+
 class ConfigurationSerializer(serializers.Serializer):
     max_file_size = serializers.IntegerField(
         help_text="Maximum allowed file size for uploads (in bytes)"

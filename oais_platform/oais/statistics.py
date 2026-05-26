@@ -66,6 +66,24 @@ def count_excluded_archives(statistics):
     return Archive.objects.all().count() - sum(statistics.values())
 
 
+def count_steps_by_status():
+    """
+    Returns the count of Steps grouped by step name and status.
+    """
+    rows = (
+        Step.objects.filter(step_type__isnull=False)
+        .values("step_type__name", "status")
+        .annotate(count=Count("id"))
+    )
+    status_label = dict(Status.choices)
+    counts = {}
+    for row in rows:
+        counts.setdefault(row["step_type__name"], {})[status_label[row["status"]]] = (
+            row["count"]
+        )
+    return counts
+
+
 def avg_duration_per_day(
     collection_id=None, step_name=None, statuses=COMPLETED_STATUSES
 ):
