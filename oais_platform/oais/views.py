@@ -15,7 +15,7 @@ from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -719,6 +719,60 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 and stats["empty_pipeline"] == 0,
             }
         )
+
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="harvest-recids",
+        url_name="harvest-recids",
+    )
+    def create_archives_from_recids(self, request):
+        """
+        Create archives from a list of source, recids pairs
+        """
+        records = request.data.get("records", [])
+
+        if not records:
+            raise BadRequest("No records provided.")
+        if len(records) > 1000:
+            raise BadRequest("Too many records provided. Max is 1000.")
+
+        with transaction.atomic():
+            collection = Collection.objects.create(
+                title=f"Collection from recids {timezone.now():%Y-%m-%d %H:%M}",
+                creator=request.user,
+                description="Collection created from record ids and sources via API.",
+            )
+            try:
+                for record in records:
+                    if not record.get("recid") or not record.get("source"):
+                        raise BadRequest("Each record must have a recid and source.")
+                    detailed_record = get_source(record["source"]).search_by_id(
+                        record["recid"]
+                    )["result"][0]
+                    a = Archive.objects.create(
+                        recid=detailed_record["recid"],
+                        source=detailed_record["source"],
+                        source_url=detailed_record["source_url"],
+                        title=detailed_record["title"],
+                        requester=request.user,
+                        staged=False,
+                        original_file_size=detailed_record.get("file_size") or 0,
+                        version_timestamp=detailed_record.get("updated"),
+                    )
+                    collection.add_archive(a)
+                    a.add_step_to_pipeline(StepName.HARVEST, user=request.user)
+            except InvalidSource as e:
+                raise BadRequest(f"Invalid source: {str(e)}")
+            except Exception as e:
+                raise BadRequest(
+                    f"An error occurred while creating archives from recids: {str(e)}"
+                )
+
+        for archive in collection.archives.all():
+            execute_pipeline(archive.id)
+
+        return Response({"status": 0, "errormsg": None, "collection_id": collection.id})
 
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
