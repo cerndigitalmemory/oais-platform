@@ -74,14 +74,17 @@ def count_steps_by_status():
         Step.objects.filter(step_type__isnull=False)
         .values("step_type__name", "status")
         .annotate(count=Count("id"))
+        .order_by("step_type__name", "status")
     )
     status_label = dict(Status.choices)
-    counts = {}
-    for row in rows:
-        counts.setdefault(row["step_type__name"], {})[status_label[row["status"]]] = (
-            row["count"]
-        )
-    return counts
+    return [
+        {
+            "step": row["step_type__name"],
+            "status": status_label[row["status"]],
+            "count": row["count"],
+        }
+        for row in rows
+    ]
 
 
 def avg_duration_per_day(

@@ -40,13 +40,15 @@ class StepStatusStatisticsEndpointTest(APITestCase):
     def test_step_status_statistics(self):
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
+        self.assertCountEqual(
             response.data,
-            {
-                StepName.HARVEST: {"COMPLETED": 2, "IN_PROGRESS": 1},
-                StepName.ARCHIVE: {"COMPLETED": 1, "FAILED": 1},
-                StepName.PUSH_TO_CTA: {"COMPLETED": 1},
-            },
+            [
+                {"step": StepName.HARVEST, "status": "COMPLETED", "count": 2},
+                {"step": StepName.HARVEST, "status": "IN_PROGRESS", "count": 1},
+                {"step": StepName.ARCHIVE, "status": "COMPLETED", "count": 1},
+                {"step": StepName.ARCHIVE, "status": "FAILED", "count": 1},
+                {"step": StepName.PUSH_TO_CTA, "status": "COMPLETED", "count": 1},
+            ],
         )
 
     def test_step_status_statistics_empty_database(self):
@@ -55,7 +57,7 @@ class StepStatusStatisticsEndpointTest(APITestCase):
 
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, {})
+        self.assertEqual(response.data, [])
 
     def test_step_status_statistics_omits_zero_counts(self):
         Archive.objects.all().delete()
@@ -66,5 +68,5 @@ class StepStatusStatisticsEndpointTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             response.data,
-            {StepName.HARVEST: {"COMPLETED": 1}},
+            [{"step": StepName.HARVEST, "status": "COMPLETED", "count": 1}],
         )

@@ -502,9 +502,10 @@ class StepStatisticsSerializer(serializers.Serializer):
 
 
 class StepStatusStatisticsSerializer(serializers.Serializer):
-    counts = serializers.DictField(
-        child=serializers.DictField(child=serializers.IntegerField()),
-        help_text=("Number of steps grouped by step name and status"),
+    step = serializers.CharField(help_text="Step name")
+    status = serializers.CharField(help_text="Step status")
+    count = serializers.IntegerField(
+        help_text="Number of steps with this step/status combination"
     )
 
 

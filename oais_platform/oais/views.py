@@ -1052,7 +1052,7 @@ def step_statistics(request):
     return Response(data)
 
 
-@extend_schema(request=None, responses={200: StepStatusStatisticsSerializer})
+@extend_schema(request=None, responses={200: StepStatusStatisticsSerializer(many=True)})
 @api_view(["GET"])
 def step_status_statistics(request):
     return Response(count_steps_by_status())
