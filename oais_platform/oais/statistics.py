@@ -12,7 +12,7 @@ from django.db.models import (
 from django.db.models.functions import TruncDate
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, StepName
 
 
 def count_archives_by_steps(category):
@@ -74,16 +74,16 @@ def count_steps_by_status():
         Step.objects.filter(step_type__isnull=False)
         .values("step_type__name", "status")
         .annotate(count=Count("id"))
-        .order_by("step_type__name", "status")
     )
-    status_label = dict(Status.choices)
+    counts = {(row["step_type__name"], row["status"]): row["count"] for row in rows}
     return [
         {
-            "step": row["step_type__name"],
-            "status": status_label[row["status"]],
-            "count": row["count"],
+            "step": step,
+            "status": label,
+            "count": counts.get((step, status_value), 0),
         }
-        for row in rows
+        for step in StepName.values
+        for status_value, label in Status.choices
     ]
 
 

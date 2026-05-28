@@ -4,6 +4,8 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 
+TOTAL_COMBINATIONS = len(StepName.values) * len(Status.values)
+
 
 class StepStatusStatisticsEndpointTest(APITestCase):
     def create_archive_with_steps(self, steps):
@@ -37,18 +39,31 @@ class StepStatusStatisticsEndpointTest(APITestCase):
             ]
         )
 
+    def get_count(self, data, step, step_status):
+        return next(
+            r["count"] for r in data if r["step"] == step and r["status"] == step_status
+        )
+
     def test_step_status_statistics(self):
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertCountEqual(
-            response.data,
-            [
-                {"step": StepName.HARVEST, "status": "COMPLETED", "count": 2},
-                {"step": StepName.HARVEST, "status": "IN_PROGRESS", "count": 1},
-                {"step": StepName.ARCHIVE, "status": "COMPLETED", "count": 1},
-                {"step": StepName.ARCHIVE, "status": "FAILED", "count": 1},
-                {"step": StepName.PUSH_TO_CTA, "status": "COMPLETED", "count": 1},
-            ],
+        self.assertEqual(len(response.data), TOTAL_COMBINATIONS)
+        self.assertEqual(
+            self.get_count(response.data, StepName.HARVEST, "COMPLETED"), 2
+        )
+        self.assertEqual(
+            self.get_count(response.data, StepName.HARVEST, "IN_PROGRESS"), 1
+        )
+        self.assertEqual(self.get_count(response.data, StepName.HARVEST, "FAILED"), 0)
+        self.assertEqual(
+            self.get_count(response.data, StepName.ARCHIVE, "COMPLETED"), 1
+        )
+        self.assertEqual(self.get_count(response.data, StepName.ARCHIVE, "FAILED"), 1)
+        self.assertEqual(
+            self.get_count(response.data, StepName.PUSH_TO_CTA, "COMPLETED"), 1
+        )
+        self.assertEqual(
+            self.get_count(response.data, StepName.PUSH_TO_CTA, "FAILED"), 0
         )
 
     def test_step_status_statistics_empty_database(self):
@@ -57,16 +72,21 @@ class StepStatusStatisticsEndpointTest(APITestCase):
 
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, [])
+        self.assertEqual(len(response.data), TOTAL_COMBINATIONS)
+        self.assertTrue(all(r["count"] == 0 for r in response.data))
 
-    def test_step_status_statistics_omits_zero_counts(self):
+    def test_step_status_statistics_includes_zero_counts(self):
         Archive.objects.all().delete()
         Step.objects.all().delete()
         self.create_archive_with_steps([(StepName.HARVEST, Status.COMPLETED)])
 
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), TOTAL_COMBINATIONS)
         self.assertEqual(
-            response.data,
-            [{"step": StepName.HARVEST, "status": "COMPLETED", "count": 1}],
+            self.get_count(response.data, StepName.HARVEST, "COMPLETED"), 1
+        )
+        self.assertEqual(self.get_count(response.data, StepName.HARVEST, "FAILED"), 0)
+        self.assertEqual(
+            self.get_count(response.data, StepName.ARCHIVE, "COMPLETED"), 0
         )
