@@ -68,10 +68,17 @@ def count_excluded_archives(statistics):
 
 def count_steps_by_status():
     """
-    Returns the count of Steps grouped by step name and status.
+    Returns the count of current Steps grouped by step name and status.
     """
+    newer = Step.objects.filter(
+        archive=OuterRef("archive"),
+        step_type=OuterRef("step_type"),
+        id__gt=OuterRef("id"),
+    )
     rows = (
         Step.objects.filter(step_type__isnull=False)
+        .annotate(has_newer=Exists(newer))
+        .filter(has_newer=False)
         .values("step_type__name", "status")
         .annotate(count=Count("id"))
     )
