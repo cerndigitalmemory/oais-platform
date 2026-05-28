@@ -20,6 +20,14 @@ class StepStatusStatisticsEndpointTest(APITestCase):
     def setUp(self):
         self.url = reverse("step_status_statistics")
 
+    def get_count(self, data, step, step_status):
+        return next(
+            row["count"]
+            for row in data
+            if row["step"] == step and row["status"] == step_status
+        )
+
+    def test_step_status_statistics(self):
         self.create_archive_with_steps(
             [
                 (StepName.HARVEST, Status.COMPLETED),
@@ -39,12 +47,6 @@ class StepStatusStatisticsEndpointTest(APITestCase):
             ]
         )
 
-    def get_count(self, data, step, step_status):
-        return next(
-            r["count"] for r in data if r["step"] == step and r["status"] == step_status
-        )
-
-    def test_step_status_statistics(self):
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), TOTAL_COMBINATIONS)
@@ -67,17 +69,12 @@ class StepStatusStatisticsEndpointTest(APITestCase):
         )
 
     def test_step_status_statistics_empty_database(self):
-        Archive.objects.all().delete()
-        Step.objects.all().delete()
-
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), TOTAL_COMBINATIONS)
-        self.assertTrue(all(r["count"] == 0 for r in response.data))
+        self.assertTrue(all(row["count"] == 0 for row in response.data))
 
     def test_step_status_statistics_includes_zero_counts(self):
-        Archive.objects.all().delete()
-        Step.objects.all().delete()
         self.create_archive_with_steps([(StepName.HARVEST, Status.COMPLETED)])
 
         response = self.client.get(self.url, format="json")
@@ -89,4 +86,78 @@ class StepStatusStatisticsEndpointTest(APITestCase):
         self.assertEqual(self.get_count(response.data, StepName.HARVEST, "FAILED"), 0)
         self.assertEqual(
             self.get_count(response.data, StepName.ARCHIVE, "COMPLETED"), 0
+        )
+
+    def test_retried_step_counts_only_latest_attempt(self):
+        self.create_archive_with_steps(
+            [
+                (StepName.HARVEST, Status.COMPLETED),
+                (StepName.ARCHIVE, Status.FAILED),
+                (StepName.ARCHIVE, Status.COMPLETED),
+            ]
+        )
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.get_count(response.data, StepName.ARCHIVE, "COMPLETED"), 1
+        )
+        self.assertEqual(self.get_count(response.data, StepName.ARCHIVE, "FAILED"), 0)
+        self.assertEqual(
+            self.get_count(response.data, StepName.HARVEST, "COMPLETED"), 1
+        )
+
+    def test_rerun_from_earlier_step_counts_only_latest_per_step(self):
+        self.create_archive_with_steps(
+            [
+                (StepName.HARVEST, Status.COMPLETED),
+                (StepName.VALIDATION, Status.COMPLETED),
+                (StepName.ARCHIVE, Status.FAILED),
+                (StepName.HARVEST, Status.COMPLETED),
+                (StepName.VALIDATION, Status.COMPLETED),
+                (StepName.ARCHIVE, Status.COMPLETED),
+            ]
+        )
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.get_count(response.data, StepName.HARVEST, "COMPLETED"), 1
+        )
+        self.assertEqual(
+            self.get_count(response.data, StepName.VALIDATION, "COMPLETED"), 1
+        )
+        self.assertEqual(
+            self.get_count(response.data, StepName.ARCHIVE, "COMPLETED"), 1
+        )
+        self.assertEqual(self.get_count(response.data, StepName.ARCHIVE, "FAILED"), 0)
+
+    def test_outdated_step_counts_only_latest_attempt(self):
+        self.create_archive_with_steps(
+            [
+                (StepName.PUSH_TO_CTA, Status.OUTDATED),
+                (StepName.PUSH_TO_CTA, Status.COMPLETED),
+            ]
+        )
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.get_count(response.data, StepName.PUSH_TO_CTA, "COMPLETED"), 1
+        )
+        self.assertEqual(
+            self.get_count(response.data, StepName.PUSH_TO_CTA, "OUTDATED"), 0
+        )
+
+    def test_outdated_step_without_rerun_is_counted(self):
+        self.create_archive_with_steps(
+            [
+                (StepName.PUSH_TO_CTA, Status.OUTDATED),
+            ]
+        )
+
+        response = self.client.get(self.url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.get_count(response.data, StepName.PUSH_TO_CTA, "OUTDATED"), 1
         )
