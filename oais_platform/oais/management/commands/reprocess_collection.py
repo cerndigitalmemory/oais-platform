@@ -14,7 +14,7 @@ class Command(BaseCommand):
             help="Target environment to reprocess the collection (dev or qa)",
         )
         parser.add_argument(
-            "collection_id", type=str, help="ID of the collection to reprocess"
+            "collection_id", type=int, help="ID of the collection to reprocess"
         )
         parser.add_argument(
             "--token",
@@ -34,7 +34,7 @@ class Command(BaseCommand):
             )
             return
 
-        if not token or token == "":
+        if not token:
             self.stderr.write(
                 self.style.ERROR(
                     "Access token not provided. Please provide a token using the --token argument."
@@ -75,21 +75,28 @@ class Command(BaseCommand):
                 f"Reprocessing collection with ID {collection_id} in {env} environment..."
             )
         )
-        res = requests.post(
-            f"{instance}api/archives/harvest-recids/",
-            json={"records": archive_dicts},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        if res.status_code == 200:
-            new_collection_id = res.json().get("collection_id")
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Successfully reprocessed collection with ID {collection_id} in {env} environment. New collection ID: {new_collection_id}"
-                )
+        try:
+            res = requests.post(
+                f"{instance}api/archives/harvest-recids/",
+                json={"records": archive_dicts},
+                headers={"Authorization": f"Bearer {token}"},
             )
-        else:
+            if res.status_code == 200:
+                new_collection_id = res.json().get("collection_id")
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Successfully reprocessed collection with ID {collection_id} in {env} environment. New collection ID: {new_collection_id}"
+                    )
+                )
+            else:
+                self.stderr.write(
+                    self.style.ERROR(
+                        f"Failed to reprocess collection with ID {collection_id} in {env} environment. Status code: {res.status_code}, Response: {res.text}"
+                    )
+                )
+        except Exception as e:
             self.stderr.write(
                 self.style.ERROR(
-                    f"Failed to reprocess collection with ID {collection_id} in {env} environment. Status code: {res.status_code}, Response: {res.text}"
+                    f"An error occurred while reprocessing collection with ID {collection_id} in {env} environment. Error: {str(e)}"
                 )
             )

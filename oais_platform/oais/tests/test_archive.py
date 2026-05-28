@@ -121,6 +121,9 @@ class ArchiveTests(APITestCase):
     def setUp(self):
         self.permission = Permission.objects.get(codename="view_archive_all")
         self.approve_permission = Permission.objects.get(codename="can_approve_all")
+        self.execute_step_permission = Permission.objects.get(
+            codename="can_execute_step"
+        )
         self.superuser = User.objects.create_superuser("superuser", password="pw")
         self.requester = User.objects.create_user("requester", password="pw")
         self.other_user = User.objects.create_user("other", password="pw")
@@ -776,6 +779,8 @@ class ArchiveTests(APITestCase):
     @patch("oais_platform.oais.views.execute_pipeline")
     def test_harvest_recids_success(self, mock_execute_pipeline, mock_get_source):
         """Ensure authenticated users can successfully create collection and archives from recids."""
+        self.requester.user_permissions.add(self.execute_step_permission)
+        self.requester.save()
         url = reverse("archives-harvest-recids")
         self.client.force_authenticate(user=self.requester)
 
@@ -816,6 +821,8 @@ class ArchiveTests(APITestCase):
 
     def test_harvest_recids_no_records(self):
         """Endpoint should return a 400 error if records list is missing or empty."""
+        self.requester.user_permissions.add(self.execute_step_permission)
+        self.requester.save()
         url = reverse("archives-harvest-recids")
         self.client.force_authenticate(user=self.requester)
 
@@ -825,6 +832,8 @@ class ArchiveTests(APITestCase):
 
     def test_harvest_recids_too_many_records(self):
         """Endpoint should cap requests at 1000 records."""
+        self.requester.user_permissions.add(self.execute_step_permission)
+        self.requester.save()
         url = reverse("archives-harvest-recids")
         self.client.force_authenticate(user=self.requester)
 
@@ -835,6 +844,8 @@ class ArchiveTests(APITestCase):
 
     def test_harvest_recids_missing_fields_in_record(self):
         """Individual records must contain both 'recid' and 'source'."""
+        self.requester.user_permissions.add(self.execute_step_permission)
+        self.requester.save()
         url = reverse("archives-harvest-recids")
         self.client.force_authenticate(user=self.requester)
 
@@ -850,6 +861,8 @@ class ArchiveTests(APITestCase):
     @patch("oais_platform.oais.views.get_source")
     def test_harvest_recids_invalid_source_exception(self, mock_get_source):
         """InvalidSource exceptions raised by get_source should trigger a bad request."""
+        self.requester.user_permissions.add(self.execute_step_permission)
+        self.requester.save()
         url = reverse("archives-harvest-recids")
         collection_count = Collection.objects.count()
         self.client.force_authenticate(user=self.requester)
@@ -860,3 +873,12 @@ class ArchiveTests(APITestCase):
         response = self.client.post(url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Collection.objects.count(), collection_count)
+
+    def test_harvest_recids_permission_denied(self):
+        """Users without the can_execute_step permission should receive a 403 response."""
+        url = reverse("archives-harvest-recids")
+        self.client.force_authenticate(user=self.requester)
+
+        payload = {"records": [{"recid": "1", "source": "test"}]}
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
