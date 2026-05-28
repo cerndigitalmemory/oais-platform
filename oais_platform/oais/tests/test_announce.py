@@ -7,10 +7,18 @@ from unittest.mock import patch
 from bagit_create import main as bic
 from django.contrib.auth.models import User
 from django.urls import reverse
+from parameterized import parameterized
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step, StepName, StepType
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Profile,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.views import check_allowed_path
 from oais_platform.settings import BIC_WORKDIR
 
@@ -66,9 +74,21 @@ class AnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
 
+    @parameterized.expand(
+        [
+            (False, False),
+            (True, False),
+            (True, True),
+        ]
+    )
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
-    def test_announce(self, mock_dispatch):
+    def test_announce(self, has_collection, collection_exists, mock_dispatch):
         url = reverse("announce")
+        if collection_exists:
+            system_user = Profile.objects.get(system=True).user
+            Collection.objects.create(
+                title="Test Collection", creator=system_user, internal=True
+            )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
@@ -77,6 +97,7 @@ class AnnounceTests(APITestCase):
                 target=tmpdir,
                 loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
+                collection="Test Collection" if has_collection else None,
             )
 
             foldername = res["foldername"]
@@ -99,6 +120,9 @@ class AnnounceTests(APITestCase):
             status_code=302,
         )
         self.assertEqual(Archive.objects.count(), 1)
+        archive = Archive.objects.first()
+        self.assertEqual(archive.recid, "yz39b-yf220")
+        self.assertEqual(archive.source, "cds-rdm-sandbox")
         latest_step = Step.objects.latest("id")
         mock_dispatch.assert_called_once_with(
             StepType.get_by_stepname(StepName.ANNOUNCE),
@@ -111,6 +135,18 @@ class AnnounceTests(APITestCase):
         self.assertEqual(latest_step.step_type.name, StepName.ANNOUNCE)
         self.assertEqual(latest_step.initiated_by_user, self.user)
         self.assertEqual(latest_step.initiated_by_harvest_batch, None)
+        if has_collection:
+            collection = Collection.objects.get(title="Test Collection")
+            self.assertIn(collection, archive.archive_collections.all())
+            self.assertEqual(collection.archives.count(), 1)
+            self.assertEqual(archive.archive_collections.count(), 2)
+        else:
+            self.assertFalse(
+                Collection.objects.filter(title="Test Collection").exists()
+            )
+            self.assertEqual(
+                archive.archive_collections.count(), 1
+            )  # source collection
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_announce_validation_failed(self, mock_dispatch):

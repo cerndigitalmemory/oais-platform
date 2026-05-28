@@ -8,7 +8,14 @@ from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
+from oais_platform.oais.models import (
+    Archive,
+    Collection,
+    Profile,
+    Status,
+    Step,
+    StepName,
+)
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize, run_step
 from oais_platform.oais.tasks.utils import (
@@ -59,6 +66,8 @@ def announce_sip(announce_path, user):
         sip_json = get_manifest(announce_path)
         source = sip_json["source"]
         recid = sip_json["recid"]
+        usr_metadata = sip_json.get("usr-meta", {})
+        collection_name = usr_metadata.get("collection")
         try:
             if source != "local":
                 url = get_source(source).get_record_url(recid)
@@ -66,8 +75,16 @@ def announce_sip(announce_path, user):
                 url = "N/A"
         except Exception:
             url = "N/A"
-    except Exception:
-        return {"status": 1, "errormsg": "Error while reading sip.json"}
+        if collection_name:
+            system_user = Profile.objects.get(system=True).user
+            collection, created = Collection.objects.get_or_create(
+                title=collection_name, creator=system_user, internal=True
+            )
+            logger.info(
+                f"Collection {collection_name} {'created' if created else 'already exists'}"
+            )
+    except Exception as e:
+        return {"status": 1, "errormsg": f"Error while reading sip.json: {e}"}
 
     # Create a new Archive
     archive = Archive.objects.create(
@@ -77,6 +94,11 @@ def announce_sip(announce_path, user):
         approver=user,
         requester=user,
         title=f"{source} - {recid}",
+    )
+    if collection_name:
+        collection.add_archive(archive)
+    logger.info(
+        f"Archive created with id {archive.id} for announced SIP {announce_path}"
     )
 
     # Create the starting Announce step
