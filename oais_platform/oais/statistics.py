@@ -104,6 +104,26 @@ def count_steps_by_status():
     ]
 
 
+def count_failures_by_type():
+    """
+    Returns the count of current failed Steps grouped by step name and failure type.
+    """
+    rows = (
+        latest_steps()
+        .filter(status=Status.FAILED)
+        .values("step_type__name", "failure_type")
+        .annotate(count=Count("id"))
+    )
+    return [
+        {
+            "step": row["step_type__name"],
+            "failure_type": row["failure_type"],
+            "count": row["count"],
+        }
+        for row in rows
+    ]
+
+
 def avg_duration_per_day(
     collection_id=None, step_name=None, statuses=COMPLETED_STATUSES
 ):

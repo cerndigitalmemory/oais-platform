@@ -103,6 +103,11 @@ urlpatterns = [
                     views.step_status_statistics,
                     name="step_status_statistics",
                 ),
+                path(
+                    "stats/steps/failure-types",
+                    views.step_failure_statistics,
+                    name="step_failure_statistics",
+                ),
                 path("sources/", views.sources, name="sources"),
                 path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
                 path(
