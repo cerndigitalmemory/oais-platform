@@ -501,6 +501,14 @@ class StepStatisticsSerializer(serializers.Serializer):
     )
 
 
+class StepFailureStatisticsSerializer(serializers.Serializer):
+    step = serializers.CharField(help_text="Step name")
+    failure_type = serializers.CharField(help_text="Failure type", allow_null=True)
+    count = serializers.IntegerField(
+        help_text="Number of failed steps with this step/failure type combination"
+    )
+
+
 class ConfigurationSerializer(serializers.Serializer):
     max_file_size = serializers.IntegerField(
         help_text="Maximum allowed file size for uploads (in bytes)"

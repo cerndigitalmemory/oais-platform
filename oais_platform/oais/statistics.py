@@ -66,6 +66,32 @@ def count_excluded_archives(statistics):
     return Archive.objects.all().count() - sum(statistics.values())
 
 
+def count_failures_by_type():
+    """
+    Returns the count of current failed Steps grouped by step name and failure type.
+    """
+    newer = Step.objects.filter(
+        archive=OuterRef("archive"),
+        step_type=OuterRef("step_type"),
+        id__gt=OuterRef("id"),
+    )
+    rows = (
+        Step.objects.filter(step_type__isnull=False)
+        .annotate(has_newer=Exists(newer))
+        .filter(has_newer=False, status=Status.FAILED)
+        .values("step_type__name", "failure_type")
+        .annotate(count=Count("id"))
+    )
+    return [
+        {
+            "step": row["step_type__name"],
+            "failure_type": row["failure_type"],
+            "count": row["count"],
+        }
+        for row in rows
+    ]
+
+
 def avg_duration_per_day(
     collection_id=None, step_name=None, statuses=COMPLETED_STATUSES
 ):

@@ -83,6 +83,7 @@ from oais_platform.oais.serializers import (
     SearchByIdResultSerializer,
     SearchResultSerializer,
     StatisticsSerializer,
+    StepFailureStatisticsSerializer,
     StepSerializer,
     StepStatisticsSerializer,
     StepTypeMinimalSerializer,
@@ -92,6 +93,7 @@ from oais_platform.oais.sources.utils import InvalidSource, get_source
 from oais_platform.oais.statistics import (
     count_archives_by_steps,
     count_excluded_archives,
+    count_failures_by_type,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (
@@ -1048,6 +1050,14 @@ def step_statistics(request):
     data["others_count"] = count_excluded_archives(data)
 
     return Response(data)
+
+
+@extend_schema(
+    request=None, responses={200: StepFailureStatisticsSerializer(many=True)}
+)
+@api_view(["GET"])
+def step_failure_statistics(request):
+    return Response(count_failures_by_type())
 
 
 @extend_schema(
