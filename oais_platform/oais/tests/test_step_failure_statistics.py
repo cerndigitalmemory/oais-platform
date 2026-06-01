@@ -2,13 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import (
-    Archive,
-    Status,
-    Step,
-    StepFailureType,
-    StepName,
-)
+from oais_platform.oais.models import Archive, Status, Step, StepFailureType, StepName
 
 
 class StepFailureStatisticsEndpointTest(APITestCase):
