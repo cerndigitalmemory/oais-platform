@@ -8,63 +8,80 @@ from django.db.models import (
     Max,
     Min,
     OuterRef,
+    Q,
     Subquery,
 )
 from django.db.models.functions import TruncDate
 
-from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.enums import COMPLETED_STATUSES, ArchiveState, StepName
+from oais_platform.oais.models import Archive, Status, Step
 
 
-def count_archives_by_steps(category):
-    """
-    Returns count of Archives based on included and excluded completed steps.
-
-    :param category: A dictionary containing values to filter archives by
-    """
-    include_steps = category.get("included", [])
-    exclude_steps = category.get("excluded", [])
-
-    archives = Archive.objects.all()
-
-    if category.get("state"):
-        archives = archives.filter(state=category["state"])
-
-    if category.get("staged"):
-        archives = archives.filter(staged=category["staged"])
-
-    for step_name in include_steps:
-        archives = archives.filter(
-            Exists(
-                Step.objects.filter(
-                    archive=OuterRef("pk"),
-                    step_name=step_name,
-                    status=Status.COMPLETED,
-                )
-            )
+def _completed_step_exists(step_name):
+    return Exists(
+        Step.objects.filter(
+            archive=OuterRef("pk"),
+            step_name=step_name,
+            status=Status.COMPLETED,
         )
-
-    for step_name in exclude_steps:
-        archives = archives.filter(
-            ~Exists(
-                Step.objects.filter(
-                    archive=OuterRef("pk"),
-                    step_name=step_name,
-                    status=Status.COMPLETED,
-                )
-            )
-        )
-
-    return archives.distinct().count()
+    )
 
 
-def count_excluded_archives(statistics):
+def step_statistics_counts():
     """
-    Returns the count of Archives that do not belong to any of the predefined categories.
-
-    :param statistics: A dictionary containing the counts for each category.
+    Returns the count of Archives in each pipeline-step category.
     """
-    return Archive.objects.all().count() - sum(statistics.values())
+    not_pushed = Q(has_cta=False, has_invenio=False)
+
+    counts = Archive.objects.annotate(
+        has_cta=_completed_step_exists(StepName.PUSH_TO_CTA),
+        has_invenio=_completed_step_exists(StepName.INVENIO_RDM_PUSH),
+    ).aggregate(
+        total=Count("pk"),
+        staged_count=Count(
+            "pk",
+            filter=Q(staged=True),
+        ),
+        harvested_count=Count(
+            "pk",
+            filter=Q(staged=False, state=ArchiveState.SIP) & not_pushed,
+        ),
+        harvested_preserved_count=Count(
+            "pk",
+            filter=Q(staged=False, state=ArchiveState.AIP) & not_pushed,
+        ),
+        harvested_preserved_tape_count=Count(
+            "pk",
+            filter=Q(
+                staged=False,
+                state=ArchiveState.AIP,
+                has_cta=True,
+                has_invenio=False,
+            ),
+        ),
+        harvested_preserved_registry_count=Count(
+            "pk",
+            filter=Q(
+                staged=False,
+                state=ArchiveState.AIP,
+                has_cta=False,
+                has_invenio=True,
+            ),
+        ),
+        harvested_preserved_tape_registry_count=Count(
+            "pk",
+            filter=Q(
+                staged=False,
+                state=ArchiveState.AIP,
+                has_cta=True,
+                has_invenio=True,
+            ),
+        ),
+    )
+
+    total = counts.pop("total")
+    counts["others_count"] = total - sum(counts.values())
+    return counts
 
 
 def latest_steps(steps=None):
