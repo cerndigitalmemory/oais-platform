@@ -8,6 +8,7 @@ from django.db.models import (
     Max,
     Min,
     OuterRef,
+    Subquery,
 )
 from django.db.models.functions import TruncDate
 
@@ -66,21 +67,30 @@ def count_excluded_archives(statistics):
     return Archive.objects.all().count() - sum(statistics.values())
 
 
+def latest_steps(steps=None):
+    """
+    Returns the most recent Step per archive and step_type.
+    Pass a pre-filtered queryset to scope the result.
+    """
+    if steps is None:
+        steps = Step.objects.all()
+    latest = (
+        Step.objects.filter(
+            archive=OuterRef("archive"),
+            step_type=OuterRef("step_type"),
+        )
+        .order_by("-start_date", "-create_date")
+        .values("id")[:1]
+    )
+    return steps.filter(step_type__isnull=False, id=Subquery(latest))
+
+
 def count_steps_by_status():
     """
     Returns the count of current Steps grouped by step name and status.
     """
-    newer = Step.objects.filter(
-        archive=OuterRef("archive"),
-        step_type=OuterRef("step_type"),
-        id__gt=OuterRef("id"),
-    )
     rows = (
-        Step.objects.filter(step_type__isnull=False)
-        .annotate(has_newer=Exists(newer))
-        .filter(has_newer=False)
-        .values("step_type__name", "status")
-        .annotate(count=Count("id"))
+        latest_steps().values("step_type__name", "status").annotate(count=Count("id"))
     )
     counts = {(row["step_type__name"], row["status"]): row["count"] for row in rows}
     return [

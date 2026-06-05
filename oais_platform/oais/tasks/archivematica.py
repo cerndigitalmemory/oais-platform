@@ -54,6 +54,7 @@ def archivematica(self, step_id):
     Once done, spawn a periodic task to check on the progress
     """
     current_step = Step.objects.get(pk=step_id)
+    current_step.set_start_date()
     archive = current_step.archive
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
@@ -61,7 +62,6 @@ def archivematica(self, step_id):
     path_to_sip = archive.path_to_sip
 
     logger.info(f"Starting archiving {path_to_sip}")
-    current_step.set_start_date()
 
     # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(
