@@ -34,6 +34,8 @@ class ArchivePermission(permissions.BasePermission):
             return self._can_view_archive_list(user, request.data["archives"])
         elif view.action == "list" and request.GET.get("access", "all") == "public":
             return True
+        elif view.action == "create_archives_from_recids":
+            return user.has_perm("oais.can_execute_step")
         else:
             return user.is_authenticated
 
