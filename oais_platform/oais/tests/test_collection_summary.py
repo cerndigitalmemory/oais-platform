@@ -126,6 +126,31 @@ class CollectionSummarySerializerTest(APITestCase):
             failure_summary["ARCHIVE"], [{"failure_type": "Unknown", "count": 1}]
         )
 
+    def test_failure_summary_is_scoped_to_the_collection(self):
+        self.add_archive_with_steps(
+            [
+                {
+                    "step_name": StepName.ARCHIVE,
+                    "status": Status.FAILED,
+                    "failure_type": StepFailureType.TIMEOUT,
+                }
+            ]
+        )
+        other_archive = Archive.objects.create()
+        Step.objects.create(
+            archive=other_archive,
+            step_name=StepName.HARVEST,
+            status=Status.FAILED,
+            failure_type=StepFailureType.HTTP_404,
+        )
+
+        failure_summary = self.get_failure_summary()
+
+        self.assertEqual(
+            failure_summary["ARCHIVE"], [{"failure_type": "TIMEOUT", "count": 1}]
+        )
+        self.assertNotIn("HARVEST", failure_summary)
+
     def test_failure_summary_excludes_steps_whose_latest_attempt_succeeded(self):
         self.add_archive_with_steps(
             [
