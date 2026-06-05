@@ -76,18 +76,21 @@ class AnnounceTests(APITestCase):
 
     @parameterized.expand(
         [
-            (False, False),
-            (True, False),
-            (True, True),
+            (None, False),
+            ("Test Collection", False),
+            ("Test Collection", True),
+            (
+                "A very long collection name that exceeds the maximum length allowed for collection titles in the database",
+                False,
+            ),
         ]
     )
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
-    def test_announce(self, has_collection, collection_exists, mock_dispatch):
+    def test_announce(self, collection_name, collection_exists, mock_dispatch):
         url = reverse("announce")
         if collection_exists:
-            system_user = Profile.objects.get(system=True).user
-            Collection.objects.create(
-                title="Test Collection", creator=system_user, internal=True
+            Collection.get_or_create_system_collection(
+                collection_name, "Collection created for testing announce."
             )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +100,7 @@ class AnnounceTests(APITestCase):
                 target=tmpdir,
                 loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
-                collection="Test Collection" if has_collection else None,
+                collection=collection_name,
             )
 
             foldername = res["foldername"]
@@ -135,15 +138,17 @@ class AnnounceTests(APITestCase):
         self.assertEqual(latest_step.step_type.name, StepName.ANNOUNCE)
         self.assertEqual(latest_step.initiated_by_user, self.user)
         self.assertEqual(latest_step.initiated_by_harvest_batch, None)
-        if has_collection:
-            collection = Collection.objects.get(title="Test Collection")
+        if collection_name:
+            if len(collection_name) > Collection._meta.get_field("title").max_length:
+                collection_name = collection_name[
+                    : Collection._meta.get_field("title").max_length
+                ]
+            collection = Collection.objects.get(title=collection_name)
             self.assertIn(collection, archive.archive_collections.all())
             self.assertEqual(collection.archives.count(), 1)
             self.assertEqual(archive.archive_collections.count(), 2)
         else:
-            self.assertFalse(
-                Collection.objects.filter(title="Test Collection").exists()
-            )
+            self.assertFalse(Collection.objects.filter(title=collection_name).exists())
             self.assertEqual(
                 archive.archive_collections.count(), 1
             )  # source collection

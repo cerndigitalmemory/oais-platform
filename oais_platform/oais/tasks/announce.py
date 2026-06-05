@@ -76,9 +76,12 @@ def announce_sip(announce_path, user):
         except Exception:
             url = "N/A"
         if collection_name:
-            system_user = Profile.objects.get(system=True).user
-            collection, created = Collection.objects.get_or_create(
-                title=collection_name, creator=system_user, internal=True
+            if len(collection_name) > Collection._meta.get_field("title").max_length:
+                collection_name = collection_name[
+                    : Collection._meta.get_field("title").max_length
+                ]
+            collection, created = Collection.get_or_create_system_collection(
+                collection_name, "Collection created from announce."
             )
             logger.info(
                 f"Collection {collection_name} {'created' if created else 'already exists'}"
