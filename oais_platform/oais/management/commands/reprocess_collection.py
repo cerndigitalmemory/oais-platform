@@ -18,7 +18,7 @@ class Command(BaseCommand):
             "env",
             type=str,
             choices=["local", "dev", "qa", "prod"],
-            help="Target environment to reprocess the collection (dev or qa)",
+            help="Target environment to reprocess the collection (local, dev, qa, prod)",
         )
         parser.add_argument(
             "collection_id", type=int, help="ID of the collection to reprocess"
