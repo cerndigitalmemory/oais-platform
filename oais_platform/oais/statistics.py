@@ -8,11 +8,12 @@ from django.db.models import (
     Max,
     Min,
     OuterRef,
+    Subquery,
 )
 from django.db.models.functions import TruncDate
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, StepName
 
 
 def count_archives_by_steps(category):
@@ -64,6 +65,43 @@ def count_excluded_archives(statistics):
     :param statistics: A dictionary containing the counts for each category.
     """
     return Archive.objects.all().count() - sum(statistics.values())
+
+
+def latest_steps(steps=None):
+    """
+    Returns the most recent Step per archive and step_type.
+    Pass a pre-filtered queryset to scope the result.
+    """
+    if steps is None:
+        steps = Step.objects.all()
+    latest = (
+        Step.objects.filter(
+            archive=OuterRef("archive"),
+            step_type=OuterRef("step_type"),
+        )
+        .order_by("-start_date", "-create_date")
+        .values("id")[:1]
+    )
+    return steps.filter(step_type__isnull=False, id=Subquery(latest))
+
+
+def count_steps_by_status():
+    """
+    Returns the count of current Steps grouped by step name and status.
+    """
+    rows = (
+        latest_steps().values("step_type__name", "status").annotate(count=Count("id"))
+    )
+    counts = {(row["step_type__name"], row["status"]): row["count"] for row in rows}
+    return [
+        {
+            "step": step,
+            "status": label,
+            "count": counts.get((step, status_value), 0),
+        }
+        for step in StepName.values
+        for status_value, label in Status.choices
+    ]
 
 
 def avg_duration_per_day(

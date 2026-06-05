@@ -98,6 +98,11 @@ urlpatterns = [
                 ),
                 path("stats/", views.statistics, name="statistics"),
                 path("stats/steps", views.step_statistics, name="step_statistics"),
+                path(
+                    "stats/steps/by-status",
+                    views.step_status_statistics,
+                    name="step_status_statistics",
+                ),
                 path("sources/", views.sources, name="sources"),
                 path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
                 path(

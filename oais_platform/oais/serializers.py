@@ -7,8 +7,6 @@ from django.db.models import (
     ExpressionWrapper,
     F,
     IntegerField,
-    OuterRef,
-    Subquery,
     When,
 )
 from django.db.models.functions import Coalesce
@@ -29,7 +27,7 @@ from oais_platform.oais.models import (
     Step,
     StepType,
 )
-from oais_platform.oais.statistics import avg_duration_per_day
+from oais_platform.oais.statistics import avg_duration_per_day, latest_steps
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -296,15 +294,6 @@ class CollectionSerializer(serializers.ModelSerializer):
     def get_archives_no_package_count(self, obj):
         return obj.archives.filter(state=ArchiveState.NONE).count()
 
-    def _get_latest_step_subquery(self):
-        return (
-            Step.objects.filter(
-                archive=OuterRef("archive"), step_type=OuterRef("step_type")
-            )
-            .order_by("-start_date", "-create_date")
-            .values("id")[:1]
-        )
-
     STEP_ORDER_CASE = Case(
         When(step_type__has_sip=True, then=0),
         When(step_type__name=StepName.VALIDATION, then=1),
@@ -318,11 +307,8 @@ class CollectionSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.DictField())
     def get_archives_summary(self, obj):
-        latest_step_subquery = self._get_latest_step_subquery()
         qs = (
-            Step.objects.filter(
-                archive__in=obj.archives.all(), id=Subquery(latest_step_subquery)
-            )
+            latest_steps(Step.objects.filter(archive__in=obj.archives.all()))
             .annotate(
                 step_name=F("step_type__name"),
                 step_status=F("status"),
@@ -361,12 +347,11 @@ class CollectionSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.DictField())
     def get_archives_failure_summary(self, obj):
-        latest_step_subquery = self._get_latest_step_subquery()
         qs = (
-            Step.objects.filter(
-                archive__in=obj.archives.all(),
-                id=Subquery(latest_step_subquery),
-                status=Status.FAILED,
+            latest_steps(
+                Step.objects.filter(
+                    archive__in=obj.archives.all(), status=Status.FAILED
+                )
             )
             .values("step_type__name", "failure_type")
             .annotate(
@@ -498,6 +483,14 @@ class StepStatisticsSerializer(serializers.Serializer):
     )
     others_count = serializers.IntegerField(
         help_text="Number of archives not matching any of the above categories"
+    )
+
+
+class StepStatusStatisticsSerializer(serializers.Serializer):
+    step = serializers.CharField(help_text="Step name")
+    status = serializers.CharField(help_text="Step status")
+    count = serializers.IntegerField(
+        help_text="Number of steps with this step/status combination"
     )
 
 
