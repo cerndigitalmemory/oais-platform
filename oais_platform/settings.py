@@ -436,6 +436,10 @@ ENCRYPT_KEY = environ.get("ENCRYPT_KEY", "uIUcp1Yoh4e3H7vbCVwMTUflNPwmEb6DsntxeV
 # Step filtering limits
 STEP_FILTER_CONDITION_LIMIT = 3
 
+REPROCESS_TOKEN_DEV = environ.get("REPROCESS_TOKEN_DEV")
+REPROCESS_TOKEN_QA = environ.get("REPROCESS_TOKEN_QA")
+REPROCESS_TOKEN_PROD = environ.get("REPROCESS_TOKEN_PROD")
+
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
 from oais_platform.local_settings import *  # noqa

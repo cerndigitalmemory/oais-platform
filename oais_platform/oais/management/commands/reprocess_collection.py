@@ -2,7 +2,12 @@ import requests
 from django.core.management.base import BaseCommand
 
 from oais_platform.oais.models import Collection
-from oais_platform.settings import ENVIRONMENT
+from oais_platform.settings import (
+    ENVIRONMENT,
+    REPROCESS_TOKEN_DEV,
+    REPROCESS_TOKEN_PROD,
+    REPROCESS_TOKEN_QA,
+)
 
 
 class Command(BaseCommand):
@@ -21,7 +26,6 @@ class Command(BaseCommand):
         parser.add_argument(
             "--token",
             type=str,
-            required=True,
             help="Token for authentication with the target environment",
         )
 
@@ -37,7 +41,21 @@ class Command(BaseCommand):
             return
 
         collection_id = options["collection_id"]
-        token = options["token"]
+        token = options.get("token")
+        if not token:
+            env_token_mapping = {
+                "dev": REPROCESS_TOKEN_DEV,
+                "qa": REPROCESS_TOKEN_QA,
+                "prod": REPROCESS_TOKEN_PROD,
+            }
+            token = env_token_mapping.get(target_env)
+            if not token:
+                self.stderr.write(
+                    self.style.ERROR(
+                        f"No token provided and no default token found for {target_env} environment."
+                    )
+                )
+                return
 
         try:
             collection = Collection.objects.get(id=collection_id)
