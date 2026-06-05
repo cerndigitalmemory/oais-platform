@@ -279,16 +279,9 @@ class Archive(models.Model):
 def add_archive_to_source_collection(sender, instance, created, **kwargs):
     """Automatically add archive to its source collection"""
     if created:
-        system_user = User.objects.filter(profile__system=True).first()
-        collection, _ = Collection.objects.get_or_create(
-            title=Collection.get_source_collection_title(instance.source),
-            internal=True,
-            creator=system_user,
-            defaults={
-                "description": Collection.get_source_collection_description(
-                    instance.source
-                ),
-            },
+        collection, _ = Collection.get_or_create_system_collection(
+            Collection.get_source_collection_title(instance.source),
+            Collection.get_source_collection_description(instance.source),
         )
         collection.add_archive(instance)
 
@@ -625,6 +618,19 @@ class Collection(models.Model):
     @staticmethod
     def get_source_collection_description(source):
         return f"All archives from source: {source}"
+
+    @staticmethod
+    def get_or_create_system_collection(name, description=None):
+        system_user = User.objects.filter(profile__system=True).first()
+        if len(name) > Collection._meta.get_field("title").max_length:
+            name = name[: Collection._meta.get_field("title").max_length - 3] + "..."
+        collection, created = Collection.objects.get_or_create(
+            title=name,
+            internal=True,
+            creator=system_user,
+            defaults={"description": description or name},
+        )
+        return collection, created
 
 
 def get_source_classnames():

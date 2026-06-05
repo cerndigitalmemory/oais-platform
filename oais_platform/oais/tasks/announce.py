@@ -8,14 +8,7 @@ from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import (
-    Archive,
-    Collection,
-    Profile,
-    Status,
-    Step,
-    StepName,
-)
+from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
 from oais_platform.oais.tasks.pipeline_actions import finalize, run_step
 from oais_platform.oais.tasks.utils import (
@@ -76,9 +69,8 @@ def announce_sip(announce_path, user):
         except Exception:
             url = "N/A"
         if collection_name:
-            system_user = Profile.objects.get(system=True).user
-            collection, created = Collection.objects.get_or_create(
-                title=collection_name, creator=system_user, internal=True
+            collection, created = Collection.get_or_create_system_collection(
+                collection_name, "Collection created from announce."
             )
             logger.info(
                 f"Collection {collection_name} {'created' if created else 'already exists'}"
