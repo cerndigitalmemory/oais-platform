@@ -104,23 +104,30 @@ def count_steps_by_status():
     ]
 
 
-def count_failures_by_type():
+def failures_by_type(steps=None):
     """
-    Returns the count of current failed Steps grouped by step name and failure type.
+    Returns the latest failed Steps grouped by step name and failure type, with counts.
+    Pass a pre-filtered queryset to scope the result.
     """
-    rows = (
-        latest_steps()
+    return (
+        latest_steps(steps)
         .filter(status=Status.FAILED)
         .values("step_type__name", "failure_type")
         .annotate(count=Count("id"))
     )
+
+
+def count_failures_by_type():
+    """
+    Returns the count of current failed Steps grouped by step name and failure type.
+    """
     return [
         {
             "step": row["step_type__name"],
             "failure_type": row["failure_type"],
             "count": row["count"],
         }
-        for row in rows
+        for row in failures_by_type()
     ]
 
 
