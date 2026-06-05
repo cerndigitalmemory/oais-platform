@@ -2,6 +2,7 @@ import requests
 from django.core.management.base import BaseCommand
 
 from oais_platform.oais.models import Collection
+from oais_platform.settings import ENVIRONMENT
 
 
 class Command(BaseCommand):
@@ -11,6 +12,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "env",
             type=str,
+            choices=["local", "dev", "qa", "prod"],
             help="Target environment to reprocess the collection (dev or qa)",
         )
         parser.add_argument(
@@ -19,28 +21,23 @@ class Command(BaseCommand):
         parser.add_argument(
             "--token",
             type=str,
+            required=True,
             help="Token for authentication with the target environment",
         )
 
     def handle(self, *args, **options):
-        env = options["env"]
-        collection_id = options["collection_id"]
-        token = options.get("token")
-        if env not in ["dev", "qa"]:
+        target_env = options["env"]
+        current_env = str(ENVIRONMENT).lower()
+        if target_env == "prod" and current_env not in ["prod", "production"]:
             self.stderr.write(
                 self.style.ERROR(
-                    "Invalid environment. Please choose either 'dev' or 'qa'."
+                    "You can only reprocess to the production environment from itself."
                 )
             )
             return
 
-        if not token:
-            self.stderr.write(
-                self.style.ERROR(
-                    "Access token not provided. Please provide a token using the --token argument."
-                )
-            )
-            return
+        collection_id = options["collection_id"]
+        token = options["token"]
 
         try:
             collection = Collection.objects.get(id=collection_id)
@@ -65,38 +62,44 @@ class Command(BaseCommand):
             )
             return
 
-        if env == "dev":
-            instance = "https://preserve-dev.web.cern.ch/"
-        elif env == "qa":
-            instance = "https://preserve-qa.web.cern.ch/"
+        env_mapping = {
+            "local": "http://127.0.0.1:8000",
+            "dev": "https://preserve-dev.web.cern.ch",
+            "qa": "https://preserve-qa.web.cern.ch",
+            "prod": "https://preserve.web.cern.ch",
+        }
+        instance = env_mapping[target_env]
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Reprocessing collection with ID {collection_id} in {env} environment..."
+                f"Reprocessing collection with ID {collection_id} in {target_env} environment..."
             )
         )
         try:
             res = requests.post(
-                f"{instance}api/archives/harvest-recids/",
+                f"{instance}/api/archives/harvest-recids/",
                 json={"records": archive_dicts},
                 headers={"Authorization": f"Bearer {token}"},
             )
             if res.status_code == 200:
-                new_collection_id = res.json().get("collection_id")
+                try:
+                    new_collection_id = res.json().get("collection_id")
+                except Exception:
+                    new_collection_id = "Unknown (Invalid JSON received)"
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f"Successfully reprocessed collection with ID {collection_id} in {env} environment. New collection ID: {new_collection_id}"
+                        f"Successfully reprocessed collection with ID {collection_id} in {target_env} environment. New collection ID: {new_collection_id}"
                     )
                 )
             else:
                 self.stderr.write(
                     self.style.ERROR(
-                        f"Failed to reprocess collection with ID {collection_id} in {env} environment. Status code: {res.status_code}, Response: {res.text}"
+                        f"Failed to reprocess collection with ID {collection_id} in {target_env} environment. Status code: {res.status_code}, Response: {res.text}"
                     )
                 )
         except Exception as e:
             self.stderr.write(
                 self.style.ERROR(
-                    f"An error occurred while reprocessing collection with ID {collection_id} in {env} environment. Error: {str(e)}"
+                    f"An error occurred while reprocessing collection with ID {collection_id} in {target_env} environment. Error: {str(e)}"
                 )
             )
