@@ -238,7 +238,7 @@ def check_am_status(self, step_id):
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
-        logger.error(
+        logger.warning(
             f"Package requires user input for step {step.id} - automatic pipeline failed"
         )
         am_status["errormsg"] = "Error: Archivematica requires user input."
