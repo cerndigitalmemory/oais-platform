@@ -532,12 +532,12 @@ def handle_completed_am_package(self, am, am_instance_config, step, am_status):
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
         if retry_count + 1 > retry_limit:
-            error_msg = f"AIP package with UUID {uuid} not found on {am_instance_config['ss_url']} after retrying {retry_limit} times."
+            error_msg = f"AIP package with UUID {uuid} not found on {am_instance_config['AM_SS_URL']} after retrying {retry_limit} times."
             logger.error(error_msg)
             raise MaxRetriesExceeded(error_msg)
         else:
             logger.warning(
-                f"AIP package with UUID {uuid} not found on {am_instance_config['ss_url']}, retrying..."
+                f"AIP package with UUID {uuid} not found on {am_instance_config['AM_SS_URL']}, retrying..."
             )
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)

@@ -107,7 +107,9 @@ def copy_sip(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
     archive = Archive.objects.get(pk=archive_id)
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(archive)
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        archive.archivematica_instance
+    )
 
     if not step.input_data_json:
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
