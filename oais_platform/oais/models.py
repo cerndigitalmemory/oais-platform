@@ -107,6 +107,7 @@ class Archive(models.Model):
     )
     path_to_sip = models.CharField(max_length=250)
     path_to_aip = models.CharField(max_length=250, null=True)
+    archivematica_instance = models.CharField(max_length=100, blank=True, default="")
     pipeline_steps = models.JSONField(default=list)
     manifest = models.JSONField(default=None, null=True)
     staged = models.BooleanField(default=False)
@@ -165,6 +166,10 @@ class Archive(models.Model):
 
     def set_aip_path(self, new_aip_path):
         self.path_to_aip = new_aip_path
+        self.save()
+
+    def set_archivematica_instance(self, new_am_instance):
+        self.archivematica_instance = new_am_instance
         self.save()
 
     def set_title(self, title):
