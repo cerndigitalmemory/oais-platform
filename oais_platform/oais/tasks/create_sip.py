@@ -9,6 +9,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
@@ -130,7 +131,7 @@ def harvest(self, archive_id, step_id):
     if error_response := _handle_bagit_error(self, archive_id, step, bagit_result):
         return error_response
 
-    return _handle_successful_bagit(archive, bagit_result, sip_path)
+    return _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path)
 
 
 @shared_task(
@@ -192,7 +193,7 @@ def upload(self, archive_id, step_id):
 
     _delete_local_upload(step.input_data_json.get("tmp_dir"))
 
-    return _handle_successful_bagit(archive, bagit_result, sip_path)
+    return _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path)
 
 
 @shared_task(name="upload_cleanup", bind=True, ignore_result=True)
@@ -280,7 +281,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
     return
 
 
-def _handle_successful_bagit(archive, bagit_result, sip_path=None):
+def _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path=None):
     """
     Update archive path and size and create the artifact.
     """
