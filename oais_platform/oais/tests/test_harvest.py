@@ -8,11 +8,16 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import harvest
-from oais_platform.settings import SIP_UPSTREAM_BASEPATH
+from oais_platform.settings import AM_INSTANCES
 
 
 class HarvestTest(APITestCase):
     def setUp(self):
+        self.random_instance_patch = patch(
+            "oais_platform.oais.archivematica_instances.random.choice",
+            return_value=AM_INSTANCES[0],
+        )
+        self.random_instance_patch.start()
         self.archive = Archive.objects.create(
             recid="1",
             source="test_source",
@@ -24,10 +29,14 @@ class HarvestTest(APITestCase):
         self.step.step_type.size_limit_bytes = 200
         self.step.step_type.save()
 
+    def tearDown(self):
+        self.random_instance_patch.stop()
+
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     @patch("bagit_create.main.process")
     def test_harvest_success(self, bagit_create, hashlib_mock, dispatch_task):
+        am_sip_upstream_basepath = AM_INSTANCES[0]["SIP_UPSTREAM_BASEPATH"]
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -48,7 +57,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                SIP_UPSTREAM_BASEPATH,
+                am_sip_upstream_basepath,
                 "test_source",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -58,7 +67,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.status, Status.COMPLETED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(am_sip_upstream_basepath)
             / "test_source"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -118,6 +127,7 @@ class HarvestTest(APITestCase):
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     @patch("bagit_create.main.process")
     def test_harvest_bagit_exception(self, bagit_create, hashlib_mock):
+        am_sip_upstream_basepath = AM_INSTANCES[0]["SIP_UPSTREAM_BASEPATH"]
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -131,7 +141,7 @@ class HarvestTest(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(am_sip_upstream_basepath)
             / "test_source"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
