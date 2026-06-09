@@ -7,6 +7,7 @@ from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
@@ -93,6 +94,8 @@ def announce_sip(announce_path, user):
         f"Archive created with id {archive.id} for announced SIP {announce_path}"
     )
 
+    ArchivematicaInstances.assign(archive)
+
     # Create the starting Announce step
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
@@ -119,6 +122,8 @@ def copy_sip(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
     archive = Archive.objects.get(pk=archive_id)
 
+    am_instance_config = ArchivematicaInstances.get_instance_config(archive)
+
     if not step.input_data_json:
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
@@ -135,7 +140,6 @@ def copy_sip(self, archive_id, step_id):
         else:
             target_path = foldername
         os.mkdir(target_path)
-
         for dirpath, dirnames, filenames in os.walk(announce_path, followlinks=False):
             logger.info(f"Starting copy of {announce_path} to {target_path}..")
             if announce_path == dirpath:

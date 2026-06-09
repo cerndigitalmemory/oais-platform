@@ -566,6 +566,39 @@ def get_transfer_source(am):
     )
 
 
+def get_transfer_source(am_instance_config):
+    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
+    try:
+        am = AMClient()
+        am.ss_url = am_instance_config["AM_SS_URL"]
+        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
+        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+
+        locations = am.list_storage_locations()
+        # Archivematica returns integers for errors
+        if not locations or not isinstance(locations, dict):
+            raise Exception("Invalid storage locations response.")
+
+    except Exception as exc:
+        raise Exception(
+            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
+        ) from exc
+
+    objects = locations.get("objects") or []
+
+    for loc in objects:
+        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
+            "enabled"
+        ):
+            return loc.get("uuid")
+
+    raise Exception(
+        "Transfer source is not defined, and no enabled location with "
+        "description 'Default transfer source' was found for instance "
+        f"{am_instance_config['AM_INSTANCE']}."
+    )
+
+
 def get_executed_jobs(am, unit_uuid, check_for_failed=False):
     am.unit_uuid = unit_uuid
     executed_jobs = am.get_jobs()
