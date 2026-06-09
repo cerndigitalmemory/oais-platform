@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica
+from oais_platform.settings import AM_INSTANCES
 
 
 class ArchivematicaCreateTests(APITestCase):
@@ -16,6 +17,7 @@ class ArchivematicaCreateTests(APITestCase):
             source_url="",
             path_to_sip="basepath/sips/test_path",
             sip_size=1000,
+            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
 
         self.step = Step.objects.create(
@@ -24,15 +26,18 @@ class ArchivematicaCreateTests(APITestCase):
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
-
-        self.path_patch = patch(
-            "oais_platform.oais.tasks.archivematica.SIP_UPSTREAM_BASEPATH",
-            "basepath/sips",
+        self.instance_patch = patch(
+            "oais_platform.oais.tasks.archivematica.ArchivematicaInstances.get_instance_config",
+            return_value={
+                **AM_INSTANCES[0],
+                "SIP_UPSTREAM_BASEPATH": "basepath/sips",
+                "AM_TRANSFER_SOURCE": "test-transfer-source",
+            },
         )
-        self.path_patch.start()
+        self.instance_patch.start()
 
     def tearDown(self):
-        self.path_patch.stop()
+        self.instance_patch.stop()
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):

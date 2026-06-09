@@ -1,4 +1,5 @@
 import errno
+import os
 from unittest.mock import MagicMock, Mock, patch
 
 import requests
@@ -9,7 +10,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.settings import CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
+from oais_platform.settings import AM_INSTANCES, CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
 
 
 class MockedGError(Exception):
@@ -28,8 +29,13 @@ class PushToCTATests(APITestCase):
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
-        path_to_aip = "basepath/aips/test/path/filename.zip"
-        self.archive = Archive.objects.create(path_to_aip=path_to_aip)
+        path_to_aip = os.path.join(
+            AM_INSTANCES[0]["AIP_UPSTREAM_BASEPATH"], "test/path/filename.zip"
+        )
+        self.archive = Archive.objects.create(
+            path_to_aip=path_to_aip,
+            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
+        )
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
@@ -40,14 +46,6 @@ class PushToCTATests(APITestCase):
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
         self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
-
-        self.path_patch = patch(
-            "oais_platform.oais.tasks.cta.AIP_UPSTREAM_BASEPATH", "basepath/aips"
-        )
-        self.path_patch.start()
-
-    def tearDown(self):
-        self.path_patch.stop()
 
     def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()
