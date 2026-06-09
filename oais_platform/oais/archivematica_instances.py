@@ -8,12 +8,16 @@ class ArchivematicaInstances:
 
     @staticmethod
     def assign(archive: Archive):
+        if archive.archivematica_instance:
+            return ArchivematicaInstances.get_instance_config(
+                archive.archivematica_instance
+            )
         am_instance_config = random.choice(AM_INSTANCES)
         archive.set_archivematica_instance(am_instance_config["AM_INSTANCE"])
         return am_instance_config
 
-    @classmethod
-    def get_instance_config(cls, archivematica_instance):
+    @staticmethod
+    def get_instance_config(archivematica_instance):
         return next(
             (
                 am_instance_config
