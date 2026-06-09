@@ -11,9 +11,8 @@ from oais_platform.oais.tasks.archivematica import (
     check_am_status,
 )
 from oais_platform.settings import (
+    AM_INSTANCES,
     AM_PROCESSING_TIME_LIMIT,
-    AM_RETRY_LIMIT,
-    AM_URL,
     AM_WAITING_TIME_LIMIT,
 )
 
@@ -21,7 +20,11 @@ from oais_platform.settings import (
 class ArchivematicaStatusTests(APITestCase):
     def setUp(self):
         self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", path_to_sip="test_path"
+            recid="1",
+            source="test",
+            source_url="",
+            path_to_sip="test_path",
+            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
 
         self.step = Step.objects.create(
@@ -352,6 +355,7 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_failed(self, get_unit_status, get_jobs, create_retry_step):
+        am_instance_url = AM_INSTANCES[0]["AM_URL"]
         get_jobs.side_effect = [
             [
                 {
@@ -414,7 +418,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Normalize for preservation",
                 "microservice": "Normalize",
-                "link": f"{AM_URL}/tasks/5678",
+                "link": f"{am_instance_url}/tasks/5678",
             },
         )
         self.assertEqual(
@@ -422,7 +426,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Extract technical metadata",
                 "microservice": "Unzipping file",
-                "link": f"{AM_URL}/tasks/6789",
+                "link": f"{am_instance_url}/tasks/6789",
             },
         )
         self.assertEqual(
@@ -430,7 +434,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "SIP Creation",
                 "microservice": "Exception occured",
-                "link": f"{AM_URL}/tasks/9876",
+                "link": f"{am_instance_url}/tasks/9876",
             },
         )
         create_retry_step.assert_called_once()
@@ -493,6 +497,7 @@ class ArchivematicaStatusTests(APITestCase):
         get_task,
         mock_create_retry_step,
     ):
+        am_instance_url = AM_INSTANCES[0]["AM_URL"]
         self.step.set_input_data({"retry_count": 1})
         self.step.input_step = Step.objects.create(
             archive=self.archive,
@@ -551,7 +556,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Normalize for preservation",
                 "filename": "failed.txt",
-                "link": f"{AM_URL}/task/5678",
+                "link": f"{am_instance_url}/task/5678",
             },
         )
         mock_create_retry_step.assert_called_once()
@@ -584,7 +589,8 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_retry_exceeded(self, get_unit_status, create_retry_step):
-        self.step.set_input_data({"retry_count": AM_RETRY_LIMIT})
+        am_instance_retry_limit = AM_INSTANCES[0]["AM_RETRY_LIMIT"]
+        self.step.set_input_data({"retry_count": am_instance_retry_limit})
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,

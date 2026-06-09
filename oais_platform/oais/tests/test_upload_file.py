@@ -13,16 +13,21 @@ from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
+    AM_INSTANCES,
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
-    SIP_UPSTREAM_BASEPATH,
 )
 
 
 @patch("bagit_create.main.process")
 class UploadTaskTest(APITestCase):
     def setUp(self):
+        self.random_instance_patch = patch(
+            "oais_platform.oais.archivematica_instances.random.choice",
+            return_value=AM_INSTANCES[0],
+        )
+        self.random_instance_patch.start()
         self.archive = Archive.objects.create(
             recid="1",
             source="local",
@@ -37,9 +42,13 @@ class UploadTaskTest(APITestCase):
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
 
+    def tearDown(self):
+        self.random_instance_patch.stop()
+
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     def test_upload_success(self, hashlib_mock, dispatch_task_mock, bagit_create):
+        am_sip_upstream_basepath = AM_INSTANCES[0]["SIP_UPSTREAM_BASEPATH"]
         sip_folder = "result_folder"
         bagit_create.return_value = {"status": 0, "foldername": sip_folder}
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -58,7 +67,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                SIP_UPSTREAM_BASEPATH,
+                am_sip_upstream_basepath,
                 "local",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -68,7 +77,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(am_sip_upstream_basepath)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -94,6 +103,7 @@ class UploadTaskTest(APITestCase):
 
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
     def test_upload_bagit_exception(self, hashlib_mock, bagit_create):
+        am_sip_upstream_basepath = AM_INSTANCES[0]["SIP_UPSTREAM_BASEPATH"]
         exc_msg = "bagit-create exception"
         bagit_create.side_effect = RuntimeError(exc_msg)
         hashlib_mock.return_value.hexdigest.return_value = (
@@ -109,7 +119,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(am_sip_upstream_basepath)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
