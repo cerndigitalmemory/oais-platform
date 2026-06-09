@@ -9,6 +9,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.db import transaction
 
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.pipeline_actions import finalize
@@ -22,7 +23,6 @@ from oais_platform.oais.tasks.utils import (
 from oais_platform.settings import (
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
-    SIP_UPSTREAM_BASEPATH,
     UPLOAD_DELETION_CUTOFF_DAYS,
 )
 
@@ -107,8 +107,10 @@ def harvest(self, archive_id, step_id):
         logger.info(
             f"The given source({archive.source}) might requires an API key which was not provided."
         )
-
-    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
+    am_instance_config = ArchivematicaInstances.assign(archive)
+    sip_path = generate_directory_structure(
+        am_instance_config["SIP_UPSTREAM_BASEPATH"], archive
+    )
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -119,7 +121,9 @@ def harvest(self, archive_id, step_id):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
+        cleanup_empty_path(
+            sip_path, am_instance_config["SIP_UPSTREAM_BASEPATH"], archive.source
+        )
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -127,7 +131,7 @@ def harvest(self, archive_id, step_id):
     if error_response := _handle_bagit_error(self, archive_id, step, bagit_result):
         return error_response
 
-    return _handle_successful_bagit(archive, bagit_result, sip_path)
+    return _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path)
 
 
 @shared_task(
@@ -149,7 +153,10 @@ def upload(self, archive_id, step_id):
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
 
-    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
+    am_instance_config = ArchivematicaInstances.assign(archive)
+    sip_path = generate_directory_structure(
+        am_instance_config["SIP_UPSTREAM_BASEPATH"], archive
+    )
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -161,7 +168,9 @@ def upload(self, archive_id, step_id):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
+        cleanup_empty_path(
+            sip_path, am_instance_config["SIP_UPSTREAM_BASEPATH"], archive.source
+        )
         return {
             "status": 1,
             "errormsg": str(e),
@@ -181,7 +190,7 @@ def upload(self, archive_id, step_id):
 
     _delete_local_upload(step.input_data_json.get("tmp_dir"))
 
-    return _handle_successful_bagit(archive, bagit_result, sip_path)
+    return _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path)
 
 
 @shared_task(name="upload_cleanup", bind=True, ignore_result=True)
@@ -269,7 +278,7 @@ def _handle_bagit_error(task, archive_id, step, bagit_result):
     return
 
 
-def _handle_successful_bagit(archive, bagit_result, sip_path=None):
+def _handle_successful_bagit(archive, am_instance_config, bagit_result, sip_path=None):
     """
     Update archive path and size and create the artifact.
     """
@@ -283,7 +292,9 @@ def _handle_successful_bagit(archive, bagit_result, sip_path=None):
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
-        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name), sip_folder_name
+        "SIP",
+        os.path.join(am_instance_config["SIP_UPSTREAM_BASEPATH"], sip_folder_name),
+        sip_folder_name,
     )
 
     bagit_result["artifact"] = output_artifact

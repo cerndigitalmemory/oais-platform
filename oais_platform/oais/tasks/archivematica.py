@@ -9,6 +9,7 @@ from celery.utils.log import get_task_logger
 from django.db import models, transaction
 from django.utils import timezone
 
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
@@ -24,20 +25,7 @@ from oais_platform.oais.tasks.utils import (
     get_failure_type_from_status_code,
     set_and_return_error,
 )
-from oais_platform.settings import (
-    AIP_UPSTREAM_BASEPATH,
-    AM_API_KEY,
-    AM_PROCESSING_TIME_LIMIT,
-    AM_RETRY_LIMIT,
-    AM_SS_API_KEY,
-    AM_SS_URL,
-    AM_SS_USERNAME,
-    AM_TRANSFER_SOURCE,
-    AM_URL,
-    AM_USERNAME,
-    AM_WAITING_TIME_LIMIT,
-    SIP_UPSTREAM_BASEPATH,
-)
+from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
 
 logger = get_task_logger(__name__)
 
@@ -59,24 +47,29 @@ def archivematica(self, step_id):
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        archive.archivematica_instance
+    )
+
     path_to_sip = archive.path_to_sip
+    sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
 
     logger.info(f"Starting archiving {path_to_sip}")
 
     # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(
         "/",
-        Path(path_to_sip).relative_to(SIP_UPSTREAM_BASEPATH),
+        Path(path_to_sip).relative_to(sip_base_path),
     )
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
-    am = get_am_client()
+    am = get_am_client(am_instance_config)
     am.transfer_directory = archivematica_dst
     am.transfer_name = get_transfer_name(archive, current_step)
 
     # Create archivematica package
     logger.info(
-        f"Creating archivematica package on Archivematica instance: {AM_URL} at directory {archivematica_dst}"
+        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']}"
     )
 
     try:
@@ -130,8 +123,11 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.archive.archivematica_instance
+    )
 
-    am = get_am_client()
+    am = get_am_client(am_instance_config)
     uuid = step.output_data_json.get("package_uuid", None)
 
     try:
@@ -202,10 +198,14 @@ def check_am_status(self, step_id):
 
     logger.info(f"Status for {step_id} is: {status}")
 
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.archive.archivematica_instance
+    )
+
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
-            handle_completed_am_package(self, am, step, am_status)
+            handle_completed_am_package(self, am, am_instance_config, step, am_status)
         except Exception as e:
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
@@ -274,7 +274,7 @@ def check_am_status(self, step_id):
         retry_count = 0
         if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
             retry_count = step.input_data_json.get("retry_count", 0)
-        if retry_count + 1 > AM_RETRY_LIMIT:
+        if retry_count + 1 > am_instance_config["AM_RETRY_LIMIT"]:
             logger.warning("Max retries exceeded for failed Archivematica jobs.")
             am_status["retry_count"] = retry_count
             am_status["retry_limit_exceeded"] = True
@@ -331,18 +331,53 @@ def resource_check(task, current_step, archive):
             return 0
 
 
-def get_am_client():
+def get_am_client(am_instance_config):
     am = AMClient()
-    am.am_url = AM_URL
-    am.am_user_name = AM_USERNAME
-    am.am_api_key = AM_API_KEY
-    am.transfer_source = AM_TRANSFER_SOURCE
-    am.ss_url = AM_SS_URL
-    am.ss_user_name = AM_SS_USERNAME
-    am.ss_api_key = AM_SS_API_KEY
+    am.am_url = am_instance_config["AM_URL"]
+    am.am_user_name = am_instance_config["AM_USERNAME"]
+    am.am_api_key = am_instance_config["AM_API_KEY"]
+    am.transfer_source = am_instance_config.get(
+        "AM_TRANSFER_SOURCE"
+    ) or get_transfer_source(am_instance_config)
+    am.ss_url = am_instance_config["AM_SS_URL"]
+    am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
+    am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
     am.processing_config = "automated"
 
     return am
+
+
+def get_transfer_source(am_instance_config):
+    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
+    try:
+        am = AMClient()
+        am.ss_url = am_instance_config["AM_SS_URL"]
+        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
+        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+
+        locations = am.list_storage_locations()
+        # Archivematica returns integers for errors
+        if not locations or not isinstance(locations, dict):
+            raise Exception("Invalid storage locations response.")
+
+    except Exception as exc:
+        raise Exception(
+            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
+        ) from exc
+
+    objects = locations.get("objects") or []
+
+    for loc in objects:
+        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
+            "enabled"
+        ):
+            return loc.get("uuid")
+
+    raise Exception(
+        "Transfer source is not defined, and no enabled location with "
+        "description 'Default transfer source' was found for instance "
+        f"{am_instance_config['AM_INSTANCE']}."
+    )
 
 
 def get_executed_jobs(am, unit_uuid, check_for_failed=False):
@@ -445,7 +480,7 @@ def get_transfer_name(archive, step):
     return transfer_name
 
 
-def handle_completed_am_package(self, am, step, am_status):
+def handle_completed_am_package(self, am, am_instance_config, step, am_status):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
@@ -459,7 +494,9 @@ def handle_completed_am_package(self, am, step, am_status):
         am_status["aip_path"] = aip_path
 
         am_status["artifact"] = create_path_artifact(
-            "AIP", os.path.join(AIP_UPSTREAM_BASEPATH, aip_path), aip_path
+            "AIP",
+            os.path.join(am_instance_config["AIP_UPSTREAM_BASEPATH"], aip_path),
+            aip_path,
         )
 
         step.set_output_data(am_status)
@@ -495,12 +532,12 @@ def handle_completed_am_package(self, am, step, am_status):
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
         if retry_count + 1 > retry_limit:
-            error_msg = f"AIP package with UUID {uuid} not found on {AM_SS_URL} after retrying {retry_limit} times."
+            error_msg = f"AIP package with UUID {uuid} not found on {am_instance_config['ss_url']} after retrying {retry_limit} times."
             logger.error(error_msg)
             raise MaxRetriesExceeded(error_msg)
         else:
             logger.warning(
-                f"AIP package with UUID {uuid} not found on {AM_SS_URL}, retrying..."
+                f"AIP package with UUID {uuid} not found on {am_instance_config['ss_url']}, retrying..."
             )
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
