@@ -66,7 +66,6 @@ class APIKeySerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    is_superuser = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
 
     class Meta:
@@ -78,11 +77,8 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "is_superuser",
+            "is_staff",
         ]
-
-    @extend_schema_field(serializers.BooleanField)
-    def get_is_superuser(self, obj):
-        return obj.is_superuser
 
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_permissions(self, obj):
