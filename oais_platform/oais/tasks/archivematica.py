@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
     COMPLETED_STATUSES,
@@ -206,6 +207,9 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.archive.archivematica_instance
+    )
 
     error, am = get_am_client(step)
     if error:
@@ -562,6 +566,39 @@ def get_transfer_source(am):
     raise Exception(
         "Transfer source is not defined, and no enabled location with "
         "description 'Default transfer source' was found"
+    )
+
+
+def get_transfer_source(am_instance_config):
+    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
+    try:
+        am = AMClient()
+        am.ss_url = am_instance_config["AM_SS_URL"]
+        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
+        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+
+        locations = am.list_storage_locations()
+        # Archivematica returns integers for errors
+        if not locations or not isinstance(locations, dict):
+            raise Exception("Invalid storage locations response.")
+
+    except Exception as exc:
+        raise Exception(
+            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
+        ) from exc
+
+    objects = locations.get("objects") or []
+
+    for loc in objects:
+        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
+            "enabled"
+        ):
+            return loc.get("uuid")
+
+    raise Exception(
+        "Transfer source is not defined, and no enabled location with "
+        "description 'Default transfer source' was found for instance "
+        f"{am_instance_config['AM_INSTANCE']}."
     )
 
 
