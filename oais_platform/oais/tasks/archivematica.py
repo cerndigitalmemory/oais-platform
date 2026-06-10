@@ -336,9 +336,11 @@ def get_am_client(am_instance_config):
     am.am_url = am_instance_config["AM_URL"]
     am.am_user_name = am_instance_config["AM_USERNAME"]
     am.am_api_key = am_instance_config["AM_API_KEY"]
-    am.transfer_source = am_instance_config.get(
-        "AM_TRANSFER_SOURCE"
-    ) or get_transfer_source(am_instance_config)
+    if am_instance_config.get("AM_TRANSFER_SOURCE") is None:
+        am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(
+            am_instance_config
+        )
+    am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
     am.ss_url = am_instance_config["AM_SS_URL"]
     am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
     am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
