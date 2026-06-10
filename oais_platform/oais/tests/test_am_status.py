@@ -19,6 +19,12 @@ from oais_platform.settings import (
 
 class ArchivematicaStatusTests(APITestCase):
     def setUp(self):
+        self.transfer_source_patch = patch(
+            "oais_platform.oais.tasks.archivematica.get_transfer_source",
+            return_value="test-transfer-source",
+        )
+        self.transfer_source_patch.start()
+
         self.archive = Archive.objects.create(
             recid="1",
             source="test",
@@ -35,6 +41,9 @@ class ArchivematicaStatusTests(APITestCase):
 
         # simulate archivematica step started
         self.step.set_start_date()
+
+    def tearDown(self):
+        self.transfer_source_patch.stop()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_package_details")
