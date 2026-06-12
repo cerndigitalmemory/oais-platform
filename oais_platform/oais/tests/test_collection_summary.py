@@ -9,13 +9,12 @@ from oais_platform.oais.models import (
     StepFailureType,
     StepName,
 )
-from oais_platform.oais.serializers import CollectionSerializer
 
 COMPLETED = str(Status.COMPLETED.value)
 FAILED = str(Status.FAILED.value)
 
 
-class CollectionSummarySerializerTest(APITestCase):
+class CollectionSummaryTest(APITestCase):
 
     def setUp(self):
         self.creator = User.objects.create_user("creator", password="pw")
@@ -31,10 +30,10 @@ class CollectionSummarySerializerTest(APITestCase):
         return archive
 
     def get_summary(self):
-        return CollectionSerializer(self.collection).data["archives_summary"]
+        return self.collection.get_step_summary()
 
     def get_failure_summary(self):
-        return CollectionSerializer(self.collection).data["archives_failure_summary"]
+        return self.collection.get_failure_summary()
 
     def test_summary_groups_latest_step_by_status(self):
         self.add_archive_with_steps(
