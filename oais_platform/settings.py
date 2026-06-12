@@ -332,10 +332,6 @@ AM_INSTANCES = [
         "SIP_UPSTREAM_BASEPATH": "/oais_platform/oais-data/sips/am1",
         "AIP_UPSTREAM_BASEPATH": "/oais_platform/oais-data/aips/am1",
         "AM_TRANSFER_SOURCE": None,
-        # Interval in minutes to poll Archivematica for status updates
-        "AM_POLLING_INTERVAL": 15,  # minutes,
-        # After callback check status with delay
-        "AM_CALLBACK_DELAY": 10,  # seconds,
         # Maximum number of retries for Archivematica failed jobs
         "AM_RETRY_LIMIT": 2,
     }
