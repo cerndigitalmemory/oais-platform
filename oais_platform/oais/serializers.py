@@ -1,21 +1,8 @@
 from django.contrib.auth.models import User
-from django.db.models import (
-    Avg,
-    Case,
-    Count,
-    DurationField,
-    ExpressionWrapper,
-    F,
-    IntegerField,
-    When,
-)
-from django.db.models.functions import Coalesce
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
 
-from oais_platform.oais.enums import StepName
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -26,11 +13,6 @@ from oais_platform.oais.models import (
     Source,
     Step,
     StepType,
-)
-from oais_platform.oais.statistics import (
-    avg_duration_per_day,
-    failures_by_type,
-    latest_steps,
 )
 
 
@@ -253,15 +235,11 @@ class CollectionMinimalSerializer(serializers.ModelSerializer):
 
 
 class CollectionSerializer(serializers.ModelSerializer):
-    archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     creator = UserMinimalSerializer()
-
-    archives_summary = serializers.SerializerMethodField()
+    archives_count = serializers.IntegerField(source="archives.count", read_only=True)
     archives_sip_count = serializers.SerializerMethodField()
     archives_aip_count = serializers.SerializerMethodField()
     archives_no_package_count = serializers.SerializerMethodField()
-    archives_failure_summary = serializers.SerializerMethodField()
-    execution_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -274,12 +252,9 @@ class CollectionSerializer(serializers.ModelSerializer):
             "last_modification_date",
             "internal",
             "archives_count",
-            "archives_summary",
             "archives_sip_count",
             "archives_aip_count",
             "archives_no_package_count",
-            "archives_failure_summary",
-            "execution_summary",
         ]
 
     @extend_schema_field(serializers.IntegerField)
@@ -293,89 +268,6 @@ class CollectionSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.IntegerField)
     def get_archives_no_package_count(self, obj):
         return obj.archives.filter(state=ArchiveState.NONE).count()
-
-    STEP_ORDER_CASE = Case(
-        When(step_type__has_sip=True, then=0),
-        When(step_type__name=StepName.VALIDATION, then=1),
-        When(step_type__name=StepName.EXTRACT_TITLE, then=2),
-        When(step_type__name=StepName.ARCHIVE, then=3),
-        When(step_type__name=StepName.NOTIFY_SOURCE, then=4),
-        When(step_type__name=StepName.PUSH_TO_CTA, then=5),
-        default=99,
-        output_field=IntegerField(),
-    )
-
-    @extend_schema_field(serializers.DictField())
-    def get_archives_summary(self, obj):
-        qs = (
-            latest_steps(Step.objects.filter(archive__in=obj.archives.all()))
-            .annotate(
-                step_name=F("step_type__name"),
-                step_status=F("status"),
-                duration=ExpressionWrapper(
-                    Coalesce(
-                        F("finish_date") - F("start_date"),
-                        timezone.now() - Coalesce(F("start_date"), F("create_date")),
-                    ),
-                    output_field=DurationField(),
-                ),
-            )
-            .values("step_name", "step_status")
-            .annotate(
-                count=Count("id"),
-                avg_duration=Avg("duration"),
-                order_index=self.STEP_ORDER_CASE,
-            )
-            .order_by("order_index")
-        )
-
-        summary = {}
-        for row in qs:
-            step = row["step_name"]
-            status = str(row["step_status"])  # JSON-friendly keys
-
-            summary.setdefault(step, {})[status] = {
-                "count": row["count"],
-                "avg_duration": (
-                    float(f"{row['avg_duration'].total_seconds():.2f}")
-                    if row["avg_duration"]
-                    else None
-                ),
-            }
-
-        return summary
-
-    @extend_schema_field(serializers.DictField())
-    def get_archives_failure_summary(self, obj):
-        qs = (
-            failures_by_type(Step.objects.filter(archive__in=obj.archives.all()))
-            .annotate(order_index=self.STEP_ORDER_CASE)
-            .order_by("order_index")
-        )
-
-        summary = {}
-        for row in qs:
-            step_name = row["step_type__name"]
-            failure_type = row["failure_type"] or "Unknown"
-
-            summary.setdefault(step_name, []).append(
-                {
-                    "failure_type": failure_type,
-                    "count": row["count"],
-                }
-            )
-
-        return summary
-
-    @extend_schema_field(serializers.DictField())
-    def get_execution_summary(self, obj):
-        summary = {}
-        step_names = [StepName.ARCHIVE, StepName.PUSH_TO_CTA]
-        for step_name in step_names:
-            summary[step_name] = avg_duration_per_day(
-                collection_id=obj.id, step_name=step_name
-            )
-        return summary
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):
