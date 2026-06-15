@@ -92,8 +92,6 @@ from oais_platform.oais.serializers import (
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
 from oais_platform.oais.statistics import (
-    count_archives_by_steps,
-    count_excluded_archives,
     count_failures_by_type,
     count_steps_by_status,
     step_statistics_counts,
