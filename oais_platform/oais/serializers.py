@@ -15,7 +15,7 @@ from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
 
-from oais_platform.oais.enums import Status, StepName
+from oais_platform.oais.enums import StepName
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
@@ -27,7 +27,11 @@ from oais_platform.oais.models import (
     Step,
     StepType,
 )
-from oais_platform.oais.statistics import avg_duration_per_day, latest_steps
+from oais_platform.oais.statistics import (
+    avg_duration_per_day,
+    failures_by_type,
+    latest_steps,
+)
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -348,16 +352,8 @@ class CollectionSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.DictField())
     def get_archives_failure_summary(self, obj):
         qs = (
-            latest_steps(
-                Step.objects.filter(
-                    archive__in=obj.archives.all(), status=Status.FAILED
-                )
-            )
-            .values("step_type__name", "failure_type")
-            .annotate(
-                count=Count("id"),
-                order_index=self.STEP_ORDER_CASE,
-            )
+            failures_by_type(Step.objects.filter(archive__in=obj.archives.all()))
+            .annotate(order_index=self.STEP_ORDER_CASE)
             .order_by("order_index")
         )
 
@@ -491,6 +487,14 @@ class StepStatusStatisticsSerializer(serializers.Serializer):
     status = serializers.CharField(help_text="Step status")
     count = serializers.IntegerField(
         help_text="Number of steps with this step/status combination"
+    )
+
+
+class StepFailureStatisticsSerializer(serializers.Serializer):
+    step = serializers.CharField(help_text="Step name")
+    failure_type = serializers.CharField(help_text="Failure type")
+    count = serializers.IntegerField(
+        help_text="Number of failed steps with this step/failure type combination"
     )
 
 
