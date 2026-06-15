@@ -326,9 +326,9 @@ class BatchAnnounceTests(APITestCase):
             self.tag.description,
         )
         self.assertIn(
-            "Error while reading sip.json:" + path_to_sip2,
+            "Error while reading sip.json: 'source':" + path_to_sip2,
             self.tag.description,
         )
         self.assertEqual(Archive.objects.count(), 0)
         self.assertEqual(Collection.objects.count(), 1)
-        mock_dispatch.asssert_not_called()
+        mock_dispatch.assert_not_called()

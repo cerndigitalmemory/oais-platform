@@ -59,6 +59,8 @@ def announce_sip(announce_path, user):
         sip_json = get_manifest(announce_path)
         source = sip_json["source"]
         recid = sip_json["recid"]
+        usr_metadata = sip_json.get("usr-meta", {})
+        collection_name = usr_metadata.get("collection")
         try:
             if source != "local":
                 url = get_source(source).get_record_url(recid)
@@ -66,8 +68,15 @@ def announce_sip(announce_path, user):
                 url = "N/A"
         except Exception:
             url = "N/A"
-    except Exception:
-        return {"status": 1, "errormsg": "Error while reading sip.json"}
+        if collection_name:
+            collection, created = Collection.get_or_create_system_collection(
+                collection_name, "Collection created from announce."
+            )
+            logger.info(
+                f"Collection {collection_name} {'created' if created else 'already exists'}"
+            )
+    except Exception as e:
+        return {"status": 1, "errormsg": f"Error while reading sip.json: {e}"}
 
     # Create a new Archive
     archive = Archive.objects.create(
@@ -77,6 +86,11 @@ def announce_sip(announce_path, user):
         approver=user,
         requester=user,
         title=f"{source} - {recid}",
+    )
+    if collection_name:
+        collection.add_archive(archive)
+    logger.info(
+        f"Archive created with id {archive.id} for announced SIP {announce_path}"
     )
 
     # Create the starting Announce step

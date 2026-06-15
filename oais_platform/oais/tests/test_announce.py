@@ -7,10 +7,11 @@ from unittest.mock import patch
 from bagit_create import main as bic
 from django.contrib.auth.models import User
 from django.urls import reverse
+from parameterized import parameterized
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.models import Archive, Step, StepName, StepType
+from oais_platform.oais.models import Archive, Collection, Step, StepName, StepType
 from oais_platform.oais.views import check_allowed_path
 from oais_platform.settings import BIC_WORKDIR
 
@@ -66,9 +67,24 @@ class AnnounceTests(APITestCase):
         )
         self.assertEqual(Archive.objects.count(), 0)
 
+    @parameterized.expand(
+        [
+            (None, False),
+            ("Test Collection", False),
+            ("Test Collection", True),
+            (
+                "A very long collection name that exceeds the maximum length allowed for collection titles in the database",
+                False,
+            ),
+        ]
+    )
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
-    def test_announce(self, mock_dispatch):
+    def test_announce(self, collection_name, collection_exists, mock_dispatch):
         url = reverse("announce")
+        if collection_exists:
+            Collection.get_or_create_system_collection(
+                collection_name, "Collection created for testing announce."
+            )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             res = bic.process(
@@ -77,6 +93,7 @@ class AnnounceTests(APITestCase):
                 target=tmpdir,
                 loglevel=logging.DEBUG,
                 workdir=BIC_WORKDIR,
+                collection=collection_name,
             )
 
             foldername = res["foldername"]
@@ -99,6 +116,9 @@ class AnnounceTests(APITestCase):
             status_code=302,
         )
         self.assertEqual(Archive.objects.count(), 1)
+        archive = Archive.objects.first()
+        self.assertEqual(archive.recid, "yz39b-yf220")
+        self.assertEqual(archive.source, "cds-rdm-sandbox")
         latest_step = Step.objects.latest("id")
         mock_dispatch.assert_called_once_with(
             StepType.get_by_stepname(StepName.ANNOUNCE),
@@ -111,6 +131,20 @@ class AnnounceTests(APITestCase):
         self.assertEqual(latest_step.step_type.name, StepName.ANNOUNCE)
         self.assertEqual(latest_step.initiated_by_user, self.user)
         self.assertEqual(latest_step.initiated_by_harvest_batch, None)
+        if collection_name:
+            if len(collection_name) > Collection._meta.get_field("title").max_length:
+                collection_name = collection_name[
+                    : Collection._meta.get_field("title").max_length - 3
+                ]
+            collection = Collection.objects.get(title__contains=collection_name)
+            self.assertIn(collection, archive.archive_collections.all())
+            self.assertEqual(collection.archives.count(), 1)
+            self.assertEqual(archive.archive_collections.count(), 2)
+        else:
+            self.assertFalse(Collection.objects.filter(title=collection_name).exists())
+            self.assertEqual(
+                archive.archive_collections.count(), 1
+            )  # source collection
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_announce_validation_failed(self, mock_dispatch):
