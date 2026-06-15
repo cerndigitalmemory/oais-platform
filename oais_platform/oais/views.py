@@ -1017,7 +1017,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionNameSerializer(tags.order_by("-timestamp"), many=True)
         return Response({"result": serializer.data})
 
-    @action(detail=True, methods=["GET"], url_path="summary")
+    @action(detail=True, methods=["GET"], url_path="summary", url_name="summary")
     def get_summary(self, request, pk=None):
         collection = self.get_object()
         summary_type = request.GET.get("type", "step")
