@@ -92,10 +92,9 @@ from oais_platform.oais.serializers import (
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
 from oais_platform.oais.statistics import (
-    count_archives_by_steps,
-    count_excluded_archives,
     count_failures_by_type,
     count_steps_by_status,
+    step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (
@@ -1060,52 +1059,7 @@ def statistics(request):
 @extend_schema(request=None, responses={200: StepStatisticsSerializer})
 @api_view(["GET"])
 def step_statistics(request):
-    categories = {
-        "staged": {
-            "staged": True,
-            "excluded": [
-                StepName.ARCHIVE,
-                StepName.PUSH_TO_CTA,
-                StepName.INVENIO_RDM_PUSH,
-            ],
-        },
-        "harvested": {
-            "state": ArchiveState.SIP,
-            "excluded": [
-                StepName.ARCHIVE,
-                StepName.PUSH_TO_CTA,
-                StepName.INVENIO_RDM_PUSH,
-            ],
-        },
-        "harvested_preserved": {
-            "state": ArchiveState.AIP,
-            "excluded": [StepName.PUSH_TO_CTA, StepName.INVENIO_RDM_PUSH],
-        },
-        "harvested_preserved_tape": {
-            "state": ArchiveState.AIP,
-            "included": [StepName.PUSH_TO_CTA],
-            "excluded": [StepName.INVENIO_RDM_PUSH],
-        },
-        "harvested_preserved_registry": {
-            "state": ArchiveState.AIP,
-            "included": [StepName.INVENIO_RDM_PUSH],
-            "excluded": [StepName.PUSH_TO_CTA],
-        },
-        "harvested_preserved_tape_registry": {
-            "state": ArchiveState.AIP,
-            "included": [
-                StepName.PUSH_TO_CTA,
-                StepName.INVENIO_RDM_PUSH,
-            ],
-        },
-    }
-    data = {
-        f"{name}_count": count_archives_by_steps(category)
-        for name, category in categories.items()
-    }
-    data["others_count"] = count_excluded_archives(data)
-
-    return Response(data)
+    return Response(step_statistics_counts())
 
 
 @extend_schema(request=None, responses={200: StepStatusStatisticsSerializer(many=True)})
