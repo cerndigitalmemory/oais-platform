@@ -43,8 +43,6 @@ class ArchivePermission(permissions.BasePermission):
         user = request.user
         if user.is_superuser:
             return True
-        if view.action in ["archive_save_manifest"]:  # Actions that need edit right
-            return self._can_edit_archive(user, obj)
         elif view.action in ["archive_unstage"]:  # Actions that need approve right
             return self._can_approve_archive(user, obj)
         elif view.action in [

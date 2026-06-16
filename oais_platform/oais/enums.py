@@ -33,7 +33,7 @@ class StepName(models.TextChoices):
     HARVEST = "HARVEST"
     VALIDATION = "VALIDATION"
     ARCHIVE = "ARCHIVE"
-    EDIT_MANIFEST = "EDIT_MANIFEST"
+    EDIT_MANIFEST = "EDIT_MANIFEST"  # deprecated, keeping for backwards compatibility
     INVENIO_RDM_PUSH = "INVENIO_RDM_PUSH"
     ANNOUNCE = "ANNOUNCE"
     PUSH_TO_CTA = "PUSH_TO_CTA"

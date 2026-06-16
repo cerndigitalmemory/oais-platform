@@ -536,42 +536,6 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         collections = filter_collections(collections, request.user)
         return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
-    @action(
-        detail=True,
-        methods=["POST"],
-        url_path="save-manifest",
-        url_name="save-manifest",
-    )
-    def archive_save_manifest(self, request, pk=None):
-        """
-        Update the manifest for the specified Archive with the given content
-        """
-        archive = self.get_object()
-        try:
-            body = request.data
-            if "manifest" not in body:
-                raise BadRequest("Missing manifest")
-            manifest = body["manifest"]
-
-            # If manifest operations are successful, create manifest step
-            step = Step.objects.create(
-                archive=archive,
-                step_name=StepName.EDIT_MANIFEST,
-                input_step=archive.last_completed_step,
-                status=Status.IN_PROGRESS,
-                input_data_json=archive.manifest,
-                initiated_by_user=request.user,
-            )
-
-            archive.set_archive_manifest(manifest)
-
-            step.set_output_data(manifest)
-            step.set_status(Status.COMPLETED)
-            step.set_finish_date()
-            return Response()
-        except Exception as e:
-            raise BadRequest("An error occured while saving the manifests.", e)
-
     @extend_schema(operation_id="mlt-unstage")
     @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):

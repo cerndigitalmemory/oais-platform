@@ -24,7 +24,6 @@ class PipelineTests(APITestCase):
     def setUp(self):
         self.permission = Permission.objects.get(codename="view_archive_all")
         self.execute_permission = Permission.objects.get(codename="can_execute_step")
-        self.edit_permission = Permission.objects.get(codename="can_edit_all")
 
         self.testuser = User.objects.create_user("testuser", password="pw")
         self.testuser.user_permissions.add(self.execute_permission)
@@ -255,59 +254,6 @@ class PipelineTests(APITestCase):
         latest_step = Step.objects.latest("id")
         self.assertEqual(latest_step.status, Status.FAILED)
         mock_dispatch.assert_not_called()
-
-    def test_edit_manifests(self):
-        self.client.force_authenticate(user=self.testuser)
-
-        self.assertEqual(self.archive.manifest, None)
-
-        url = reverse("archives-save-manifest", args=[self.archive.id])
-        response = self.client.post(
-            url,
-            {"manifest": {"test": "test"}},
-            format="json",
-        )
-
-        self.archive.refresh_from_db()
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.manifest, {"test": "test"})
-
-    def test_edit_manifests_forbidden(self):
-        self.other_user.user_permissions.add(self.permission)
-        self.other_user.save()
-        self.client.force_authenticate(user=self.other_user)
-
-        self.assertEqual(self.archive.manifest, None)
-
-        url = reverse("archives-save-manifest", args=[self.archive.id])
-        response = self.client.post(
-            url,
-            {"manifest": {"test": "test"}},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_edit_manifests_with_perms(self):
-        self.other_user.user_permissions.add(self.permission)
-        self.other_user.user_permissions.add(self.edit_permission)
-        self.other_user.save()
-        self.client.force_authenticate(user=self.other_user)
-
-        self.assertEqual(self.archive.manifest, None)
-
-        url = reverse("archives-save-manifest", args=[self.archive.id])
-        response = self.client.post(
-            url,
-            {"manifest": {"test": "test"}},
-            format="json",
-        )
-
-        self.archive.refresh_from_db()
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.archive.manifest, {"test": "test"})
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_extract_title_success(self, mock_dispatch):

@@ -1,12 +1,11 @@
-import json
 import logging
-import os
 
 from celery import shared_task
 from celery import states as celery_states
 from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from django.db import transaction
+from oais_utils.validate import get_manifest
 
 from oais_platform.celery import app
 from oais_platform.oais.enums import StepFailureType
@@ -195,20 +194,22 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
             # If harvest, upload or announce is completed then add the audit of the sip.json to the
             #  archive.manifest field
             if step.step_type.has_sip:
-                sip_folder_name = archive.path_to_sip
-                sip_manifest_path = "data/meta/sip.json"
-                sip_location = os.path.join(sip_folder_name, sip_manifest_path)
                 try:
-                    with open(sip_location) as json_file:
-                        sip_json = json.load(json_file)
-                        # Populate some values in the Archive model from the SIP manifest
-                        # TODO: should other values be extracted ?
-                        # Save the audit log from the sip.json
-                        json_audit = sip_json["audit"]
-                        archive.set_archive_manifest(json_audit)
-                        logger.info("Sip.json audit saved at manifest field")
-                except Exception:
-                    logger.info(f"Sip.json was not found inside {sip_location}")
+                    sip_json = get_manifest(archive.path_to_sip)
+                    if not sip_json:
+                        raise Exception(
+                            f"Manifest file not found in {archive.path_to_sip}"
+                        )
+                    # Populate some values in the Archive model from the SIP manifest
+                    # TODO: should other values be extracted ?
+                    # Save the audit log from the sip.json
+                    json_audit = sip_json["audit"]
+                    archive.set_archive_manifest(json_audit)
+                    logger.info("Sip.json audit saved at manifest field")
+                except Exception as e:
+                    logger.info(
+                        f"Retrieving manifest from {archive.path_to_sip} failed: {str(e)}"
+                    )
 
             # Set last_completed_step to the successful step
             with transaction.atomic():
