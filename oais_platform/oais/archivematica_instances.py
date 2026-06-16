@@ -1,19 +1,17 @@
 import random
 
-from oais_platform.oais.models import Archive
+from oais_platform.oais.models import Archive, Step
 from oais_platform.settings import AM_INSTANCES
 
 
 class ArchivematicaInstances:
 
     @staticmethod
-    def assign(archive: Archive):
-        if archive.archivematica_instance:
-            return ArchivematicaInstances.get_instance_config(
-                archive.archivematica_instance
-            )
+    def assign(step: Step):
         am_instance_config = random.choice(AM_INSTANCES)
-        archive.set_archivematica_instance(am_instance_config["AM_INSTANCE"])
+        step.set_input_data_field(
+            "archivematica_instance", am_instance_config["AM_INSTANCE"]
+        )
         return am_instance_config
 
     @staticmethod
