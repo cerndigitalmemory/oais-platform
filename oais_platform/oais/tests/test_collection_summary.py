@@ -36,18 +36,25 @@ class CollectionSummaryTest(APITestCase):
         return archive
 
     def get_summary(
-        self, user, type, collection_id=None, permission=None, return_response=False
+        self,
+        user,
+        summary_type,
+        collection_id=None,
+        permission=None,
+        return_response=False,
+        authenticate=True,
     ):
         if permission:
             user.user_permissions.set(permission)
-        self.client.force_authenticate(user=user)
+        if authenticate:
+            self.client.force_authenticate(user=user)
         url = reverse(
             "tags-summary",
             args=[collection_id or self.collection.id],
         )
         response = self.client.get(
             url,
-            {"type": type},
+            {"type": summary_type},
             format="json",
         )
         if return_response:
@@ -162,7 +169,7 @@ class CollectionSummaryTest(APITestCase):
             failure_type=StepFailureType.HTTP_404,
         )
 
-        failure_summary = self.get_failure_summary()
+        failure_summary = self.get_summary(self.creator, "failure")
 
         self.assertEqual(
             failure_summary["ARCHIVE"], [{"failure_type": "TIMEOUT", "count": 1}]
@@ -234,8 +241,10 @@ class CollectionSummaryTest(APITestCase):
         self.add_archive_with_steps(
             [{"step_name": StepName.HARVEST, "status": Status.COMPLETED}]
         )
-        response = self.get_summary(self.user, "step", return_response=True)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        response = self.get_summary(
+            self.user, "step", return_response=True, authenticate=False
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_summary_invalid_type_returns_bad_request(self):
         self.add_archive_with_steps(
