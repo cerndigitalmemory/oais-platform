@@ -11,7 +11,8 @@ from django.db.models import (
     Q,
     Subquery,
 )
-from django.db.models.functions import TruncDate
+from django.db.models.functions import Coalesce, TruncDate
+from django.utils import timezone
 
 from oais_platform.oais.enums import COMPLETED_STATUSES, ArchiveState, StepName
 from oais_platform.oais.models import Archive, Status, Step
@@ -145,6 +146,48 @@ def count_failures_by_type():
             "count": row["count"],
         }
         for row in failures_by_type()
+    ]
+
+
+def step_status_summary(steps=None):
+    """
+    Returns the count and average duration of current Steps grouped by step name and
+    status. Pass a pre-filtered queryset to scope the result.
+    """
+    return (
+        latest_steps(steps)
+        .annotate(
+            duration=ExpressionWrapper(
+                Coalesce(
+                    F("finish_date") - F("start_date"),
+                    timezone.now() - Coalesce(F("start_date"), F("create_date")),
+                ),
+                output_field=DurationField(),
+            ),
+        )
+        .values("step_type__name", "status")
+        .annotate(count=Count("id"), avg_duration=Avg("duration"))
+    )
+
+
+def avg_in_progress_duration_by_step():
+    """
+    Returns the average duration (seconds) of current in-progress Steps per step name.
+    """
+    durations = {
+        row["step_type__name"]: row["avg_duration"]
+        for row in step_status_summary().filter(status=Status.IN_PROGRESS)
+    }
+    return [
+        {
+            "step": step,
+            "avg_duration": (
+                float(f"{durations[step].total_seconds():.2f}")
+                if durations.get(step)
+                else None
+            ),
+        }
+        for step in StepName.values
     ]
 
 

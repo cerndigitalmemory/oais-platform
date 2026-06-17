@@ -84,6 +84,7 @@ from oais_platform.oais.serializers import (
     SearchResultSerializer,
     StatisticsSerializer,
     StepFailureStatisticsSerializer,
+    StepDurationStatisticsSerializer,
     StepSerializer,
     StepStatisticsSerializer,
     StepStatusStatisticsSerializer,
@@ -92,6 +93,7 @@ from oais_platform.oais.serializers import (
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
 from oais_platform.oais.statistics import (
+    avg_in_progress_duration_by_step,
     count_failures_by_type,
     count_steps_by_status,
     step_statistics_counts,
@@ -1053,6 +1055,15 @@ def step_status_statistics(request):
 @api_view(["GET"])
 def step_failure_statistics(request):
     return Response(count_failures_by_type())
+
+
+@extend_schema(
+    request=None,
+    responses={200: StepDurationStatisticsSerializer(many=True)},
+)
+@api_view(["GET"])
+def step_in_progress_duration_statistics(request):
+    return Response(avg_in_progress_duration_by_step())
 
 
 @extend_schema(
