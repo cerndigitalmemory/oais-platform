@@ -88,7 +88,10 @@ def archivematica(self, step_id):
             errormsg = error_lookup(package)
             return set_and_return_error(
                 current_step,
-                f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
+                {
+                    "message": f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
+                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                },
             )
         else:
             current_step.set_output_data(
@@ -98,6 +101,7 @@ def archivematica(self, step_id):
                     "package_uuid": package["id"],
                     "transfer_name": am.transfer_name,
                     "errormsg": None,
+                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 }
             )
             current_step.set_status(Status.SUBMITTED)
@@ -106,13 +110,20 @@ def archivematica(self, step_id):
     except requests.HTTPError as e:
         return set_and_return_error(
             current_step,
-            f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
+            {
+                "message": f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
+                "archivematica_instance": am_instance_config["AM_INSTANCE"],
+            },
             extra_log=f"HTTPError: {e}",
             failure_type=get_failure_type_from_status_code(e.request.status_code),
         )
     except Exception as e:
         return set_and_return_error(
-            current_step, f"Error while archiving {current_step.id}: {str(e)}"
+            current_step,
+            {
+                "message": f"Error while archiving {current_step.id}: {str(e)}",
+                "archivematica_instance": am_instance_config["AM_INSTANCE"],
+            },
         )
 
 
@@ -200,12 +211,11 @@ def check_am_status(self, step_id):
     microservice = am_status.get("microservice", None)
     am_status["transfer_name"] = step.output_data_json.get("transfer_name", None)
     am_status["package_uuid"] = uuid
+    am_status["archivematica_instance"] = step.input_data_json.get(
+        "archivematica_instance"
+    )
 
     logger.info(f"Status for {step_id} is: {status}")
-
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
 
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
@@ -219,7 +229,11 @@ def check_am_status(self, step_id):
                 failure_type = StepFailureType.PACKAGE_NOT_FOUND
             set_and_return_error(
                 step,
-                {"status": "FAILED", "errormsg": str(e)},
+                {
+                    "status": "FAILED",
+                    "errormsg": str(e),
+                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                },
                 failure_type=failure_type,
             )
 
@@ -262,7 +276,14 @@ def check_am_status(self, step_id):
                 "Error: Archivematica processing time limit reached."
             )
             am_status["retry"] = True
-            set_and_return_error(step, am_status, failure_type=StepFailureType.TIMEOUT)
+            set_and_return_error(
+                step,
+                {
+                    **am_status,
+                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                },
+                failure_type=StepFailureType.TIMEOUT,
+            )
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
