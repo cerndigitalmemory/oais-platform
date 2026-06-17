@@ -41,15 +41,20 @@ def archivematica(self, step_id):
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
-    current_step = Step.objects.get(pk=step_id)
+    current_step: Step = Step.objects.get(pk=step_id)
     current_step.set_start_date()
     archive = current_step.archive
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        archive.archivematica_instance
-    )
+    # Get AM instance config or assign instance if not done yet
+    assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
+    if not assigned_am_instance:
+        am_instance_config = ArchivematicaInstances.assign(current_step)
+    else:
+        am_instance_config = ArchivematicaInstances.get_instance_config(
+            assigned_am_instance
+        )
 
     path_to_sip = archive.path_to_sip
     sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
