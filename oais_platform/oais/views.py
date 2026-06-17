@@ -33,7 +33,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import (
     BadRequest,
@@ -114,6 +113,7 @@ from oais_platform.settings import (
     LOCAL_UPLOAD_PATH,
     OIDC_OP_LOGOUT_ENDPOINT,
     PIPELINE_SIZE_LIMIT,
+    SIP_STAGING_BASEPATH,
     STEP_FILTER_CONDITION_LIMIT,
 )
 
@@ -1170,8 +1170,6 @@ def upload_sip(request):
         approver=request.user,
     )
 
-    am_instance_config = ArchivematicaInstances.assign(archive)
-
     step = Step.objects.create(
         archive=archive,
         step_name=StepName.SIP_UPLOAD,
@@ -1184,7 +1182,7 @@ def upload_sip(request):
 
     try:
         # Save compressed SIP
-        base_path = os.path.join(am_instance_config["SIP_UPSTREAM_BASEPATH"], "upload")
+        base_path = os.path.join(SIP_STAGING_BASEPATH, "upload")
         os.makedirs(base_path, exist_ok=True)
         compressed_path = os.path.join(base_path, f"compressed_{file.name}")
         with open(compressed_path, "wb+") as destination:

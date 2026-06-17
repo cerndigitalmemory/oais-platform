@@ -7,7 +7,6 @@ from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
@@ -19,6 +18,7 @@ from oais_platform.oais.tasks.utils import (
     create_step,
     generate_directory_structure,
 )
+from oais_platform.settings import SIP_STAGING_BASEPATH
 
 logger = get_task_logger(__name__)
 
@@ -93,8 +93,6 @@ def announce_sip(announce_path, user):
         f"Archive created with id {archive.id} for announced SIP {announce_path}"
     )
 
-    ArchivematicaInstances.assign(archive)
-
     # Create the starting Announce step
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
@@ -121,10 +119,6 @@ def copy_sip(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
     archive = Archive.objects.get(pk=archive_id)
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        archive.archivematica_instance
-    )
-
     if not step.input_data_json:
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
@@ -132,11 +126,9 @@ def copy_sip(self, archive_id, step_id):
     foldername = step.input_data_json.get("foldername")
     announce_path = step.input_data_json.get("announce_path")
 
-    if am_instance_config["SIP_UPSTREAM_BASEPATH"]:
+    if SIP_STAGING_BASEPATH:
         target_path = os.path.join(
-            generate_directory_structure(
-                am_instance_config["SIP_UPSTREAM_BASEPATH"], archive
-            ),
+            generate_directory_structure(SIP_STAGING_BASEPATH, archive),
             foldername,
         )
     else:
@@ -144,9 +136,7 @@ def copy_sip(self, archive_id, step_id):
     try:
         os.mkdir(target_path)
     except FileExistsError:
-        cleanup_empty_path(
-            target_path, am_instance_config["SIP_UPSTREAM_BASEPATH"], archive.source
-        )
+        cleanup_empty_path(target_path, SIP_STAGING_BASEPATH, archive.source)
         step.set_failure_type(StepFailureType.FILE_ALREADY_EXISTS)
         return {
             "status": 1,
@@ -174,7 +164,7 @@ def copy_sip(self, archive_id, step_id):
         # Create a SIP path artifact
         output_artifact = create_path_artifact(
             "SIP",
-            os.path.join(am_instance_config["SIP_UPSTREAM_BASEPATH"], target_path),
+            os.path.join(SIP_STAGING_BASEPATH, target_path),
             target_path,
         )
         return {
@@ -186,9 +176,7 @@ def copy_sip(self, archive_id, step_id):
 
     except Exception as e:
         # In case of exception delete the target folder
-        cleanup_empty_path(
-            target_path, am_instance_config["SIP_UPSTREAM_BASEPATH"], archive.source
-        )
+        cleanup_empty_path(target_path, SIP_STAGING_BASEPATH, archive.source)
         return {"status": 1, "errormsg": e}
 
 
