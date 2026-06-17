@@ -129,7 +129,7 @@ def check_am_status(self, step_id):
     """
     step = Step.objects.get(pk=step_id)
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.archive.archivematica_instance
+        step.input_data_json.get("archivematica_instance")
     )
 
     am = get_am_client(am_instance_config)
@@ -204,7 +204,7 @@ def check_am_status(self, step_id):
     logger.info(f"Status for {step_id} is: {status}")
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.archive.archivematica_instance
+        step.input_data_json.get("archivematica_instance")
     )
 
     # Needs to validate both because just status=complete does not guarantee that aip is stored
