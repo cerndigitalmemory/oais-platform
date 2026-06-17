@@ -319,6 +319,9 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
 }
 
+# SIP Staging folder
+SIP_STAGING_BASEPATH = "/oais_platform/oais-data/sips/staging"
+
 # ARCHIVEMATICA integration
 AM_INSTANCES = [
     {
