@@ -88,7 +88,7 @@ def push_to_cta(self, archive_id, step_id):
         )
         return
 
-    cta_file_path = _get_cta_path(archive)
+    cta_file_path = _get_cta_path(step)
 
     try:
         if _verify_file(archive.path_to_aip, cta_file_path):
@@ -147,20 +147,20 @@ def fts_delegate(self):
         logger.error(e)
 
 
-def _get_cta_path(archive):
+def _get_cta_path(step):
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        archive.archivematica_instance
+        step.input_data_json.get("archivematica_instance")
     )
     try:
         return os.path.join(
             "aips",
-            Path(archive.path_to_aip).relative_to(
+            Path(step.archive.path_to_aip).relative_to(
                 am_instance_config["AIP_UPSTREAM_BASEPATH"]
             ),
         )
     except ValueError:
-        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
-        return os.path.join("aips", os.path.basename(archive.path_to_aip))
+        logger.warning(f"Unusual AIP path {step.archive.path_to_aip}")
+        return os.path.join("aips", os.path.basename(step.archive.path_to_aip))
 
 
 def _check_in_progress_jobs(self):
@@ -196,7 +196,7 @@ def _check_in_progress_jobs(self):
         step = steps_by_job_id.get(job["job_id"])
 
         if job["job_state"] == "FINISHED":
-            cta_file_path = _get_cta_path(step.archive)
+            cta_file_path = _get_cta_path(step)
             _handle_successful_fts_job(
                 self, step.id, step.archive.id, job["job_id"], cta_file_path
             )
