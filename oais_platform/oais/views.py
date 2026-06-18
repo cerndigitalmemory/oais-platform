@@ -1062,7 +1062,7 @@ def step_failure_statistics(request):
     responses={200: StepDurationStatisticsSerializer(many=True)},
 )
 @api_view(["GET"])
-def step_in_progress_duration_statistics(request):
+def step_duration_statistics(request):
     return Response(avg_in_progress_duration_by_step())
 
 

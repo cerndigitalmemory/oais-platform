@@ -110,8 +110,8 @@ urlpatterns = [
                 ),
                 path(
                     "stats/steps/duration",
-                    views.step_in_progress_duration_statistics,
-                    name="step_in_progress_duration_statistics",
+                    views.step_duration_statistics,
+                    name="step_duration_statistics",
                 ),
                 path("sources/", views.sources, name="sources"),
                 path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
