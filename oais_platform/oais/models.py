@@ -9,6 +9,17 @@ from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
+from django.db.models import (
+    Avg,
+    Case,
+    Count,
+    DurationField,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    When,
+)
+from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -435,6 +446,14 @@ class Step(models.Model):
 
     objects = StepManager()
 
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["archive", "step_type", "-start_date", "-create_date"]
+            ),
+            models.Index(fields=["status", "step_type"]),
+        ]
+
     @property
     def is_user_initiated(self):
         """Check if this step was initiated by a user"""
@@ -610,6 +629,100 @@ class Collection(models.Model):
     def remove_archive(self, archive):
         self.archives.remove(archive)
         self.save()
+
+    STEP_ORDER_CASE = Case(
+        When(step_type__has_sip=True, then=0),
+        When(step_type__name=StepName.VALIDATION, then=1),
+        When(step_type__name=StepName.EXTRACT_TITLE, then=2),
+        When(step_type__name=StepName.ARCHIVE, then=3),
+        When(step_type__name=StepName.NOTIFY_SOURCE, then=4),
+        When(step_type__name=StepName.PUSH_TO_CTA, then=5),
+        default=99,
+        output_field=IntegerField(),
+    )
+
+    def get_step_summary(self):
+        from oais_platform.oais.statistics import latest_steps
+
+        qs = (
+            latest_steps(Step.objects.filter(archive__in=self.archives.all()))
+            .annotate(
+                step_name=F("step_type__name"),
+                step_status=F("status"),
+                duration=ExpressionWrapper(
+                    Coalesce(
+                        F("finish_date") - F("start_date"),
+                        timezone.now() - Coalesce(F("start_date"), F("create_date")),
+                    ),
+                    output_field=DurationField(),
+                ),
+            )
+            .values("step_name", "step_status")
+            .annotate(
+                count=Count("id"),
+                avg_duration=Avg("duration"),
+                order_index=self.STEP_ORDER_CASE,
+            )
+            .order_by("order_index")
+        )
+
+        summary = {}
+        for row in qs:
+            step = row["step_name"]
+            status = str(row["step_status"])
+
+            summary.setdefault(step, {})[status] = {
+                "count": row["count"],
+                "avg_duration": (
+                    float(f"{row['avg_duration'].total_seconds():.2f}")
+                    if row["avg_duration"]
+                    else None
+                ),
+            }
+
+        return summary
+
+    def get_failure_summary(self):
+        from oais_platform.oais.statistics import latest_steps
+
+        qs = (
+            latest_steps(
+                Step.objects.filter(
+                    archive__in=self.archives.all(), status=Status.FAILED
+                )
+            )
+            .values("step_type__name", "failure_type")
+            .annotate(
+                count=Count("id"),
+                order_index=self.STEP_ORDER_CASE,
+            )
+            .order_by("order_index")
+        )
+
+        summary = {}
+        for row in qs:
+            step_name = row["step_type__name"]
+            failure_type = row["failure_type"] or "Unknown"
+
+            summary.setdefault(step_name, []).append(
+                {
+                    "failure_type": failure_type,
+                    "count": row["count"],
+                }
+            )
+
+        return summary
+
+    def get_execution_summary(self):
+        from oais_platform.oais.statistics import avg_duration_per_day
+
+        summary = {}
+        step_names = [StepName.ARCHIVE, StepName.PUSH_TO_CTA]
+        for step_name in step_names:
+            summary[step_name] = avg_duration_per_day(
+                collection_id=self.id, step_name=step_name
+            )
+        return summary
 
     @staticmethod
     def get_source_collection_title(source):

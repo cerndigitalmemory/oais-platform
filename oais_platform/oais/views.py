@@ -1017,6 +1017,21 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionNameSerializer(tags.order_by("-timestamp"), many=True)
         return Response({"result": serializer.data})
 
+    @action(detail=True, methods=["GET"], url_path="summary", url_name="summary")
+    def get_summary(self, request, pk=None):
+        collection = self.get_object()
+        summary_type = request.GET.get("type", "step")
+        match summary_type:
+            case "step":
+                summary = collection.get_step_summary()
+            case "failure":
+                summary = collection.get_failure_summary()
+            case "execution":
+                summary = collection.get_execution_summary()
+            case _:
+                raise BadRequest("Invalid summary type")
+        return Response({"summary": summary})
+
 
 class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """

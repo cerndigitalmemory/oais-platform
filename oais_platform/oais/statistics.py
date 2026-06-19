@@ -161,7 +161,7 @@ def avg_duration_per_day(
 
     if collection_id:
         steps = steps.filter(archive__archive_collections__id=collection_id)
-    return (
+    return list(
         steps.exclude(start_date__isnull=True, finish_date__isnull=True)
         .annotate(
             day=TruncDate("finish_date"),
