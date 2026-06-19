@@ -381,7 +381,7 @@ class StepStatusStatisticsSerializer(serializers.Serializer):
 class StepDurationStatisticsSerializer(serializers.Serializer):
     step = serializers.CharField(help_text="Step name")
     avg_duration = serializers.FloatField(
-        help_text="Average time (seconds) records currently spend in progress in this step"
+        help_text="Average duration (seconds) of currently in-progress steps"
     )
 
 

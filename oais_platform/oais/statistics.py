@@ -149,24 +149,16 @@ def count_failures_by_type():
     ]
 
 
-def step_status_summary(steps=None):
+def _current_duration():
     """
-    Returns the count and average duration of current Steps grouped by step name and
-    status. Pass a pre-filtered queryset to scope the result.
+    Returns an expression for annotating the duration of a Step.
     """
-    return (
-        latest_steps(steps)
-        .annotate(
-            duration=ExpressionWrapper(
-                Coalesce(
-                    F("finish_date") - F("start_date"),
-                    timezone.now() - Coalesce(F("start_date"), F("create_date")),
-                ),
-                output_field=DurationField(),
-            ),
-        )
-        .values("step_type__name", "status")
-        .annotate(count=Count("id"), avg_duration=Avg("duration"))
+    return ExpressionWrapper(
+        Coalesce(
+            F("finish_date") - F("start_date"),
+            timezone.now() - Coalesce(F("start_date"), F("create_date")),
+        ),
+        output_field=DurationField(),
     )
 
 
@@ -176,7 +168,13 @@ def avg_in_progress_duration_by_step():
     """
     durations = {
         row["step_type__name"]: row["avg_duration"]
-        for row in step_status_summary().filter(status=Status.IN_PROGRESS)
+        for row in (
+            latest_steps()
+            .filter(status__in=[Status.IN_PROGRESS, Status.SUBMITTED])
+            .annotate(duration=_current_duration())
+            .values("step_type__name")
+            .annotate(avg_duration=Avg("duration"))
+        )
     }
     return [
         {
