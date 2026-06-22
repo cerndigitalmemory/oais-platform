@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import random
+import shutil
 
 import requests
 from amclient import AMClient
@@ -22,10 +24,15 @@ from oais_platform.oais.models import (
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     create_path_artifact,
+    generate_directory_structure,
     get_failure_type_from_status_code,
     set_and_return_error,
 )
-from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
+from oais_platform.settings import (
+    AM_INSTANCES,
+    AM_PROCESSING_TIME_LIMIT,
+    AM_WAITING_TIME_LIMIT,
+)
 
 logger = get_task_logger(__name__)
 
@@ -48,23 +55,35 @@ def archivematica(self, step_id):
         return res
 
     # Get AM instance config or assign instance if not done yet
-    assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
+    assigned_am_instance = current_step.input_data_json.get(
+        "archivematica_instance", None
+    )
     if not assigned_am_instance:
-        am_instance_config = ArchivematicaInstances.assign(current_step)
-    else:
-        am_instance_config = ArchivematicaInstances.get_instance_config(
-            assigned_am_instance
+        return set_and_return_error(
+            current_step,
+            {
+                "status": 1,
+                "errormsg": "No Archivematica instance assigned",
+                "archivematica_instance": None,
+            },
         )
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        assigned_am_instance
+    )
 
-    path_to_sip = archive.path_to_sip
+    path_to_sip = Path(archive.path_to_sip)
     sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
+    transfer_source_path = Path(generate_directory_structure(sip_base_path, archive))
+    transfer_sip_path = transfer_source_path / path_to_sip.name
+    if not transfer_sip_path.exists():
+        shutil.copytree(path_to_sip, transfer_sip_path)
 
     logger.info(f"Starting archiving {path_to_sip}")
 
     # Path to SIP inside Archivematica transfer source directory
     archivematica_dst = os.path.join(
         "/",
-        Path(path_to_sip).relative_to(sip_base_path),
+        transfer_sip_path.relative_to(sip_base_path),
     )
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
@@ -86,10 +105,13 @@ def archivematica(self, step_id):
             Check 'amclient/errors' for more information.
             """
             errormsg = error_lookup(package)
+            message = f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}"
             return set_and_return_error(
                 current_step,
                 {
-                    "message": f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}",
+                    "status": 1,
+                    "errormsg": message,
+                    "message": message,
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 },
             )
@@ -108,20 +130,29 @@ def archivematica(self, step_id):
             current_step.set_task(self.request.id)
             return current_step.output_data_json
     except requests.HTTPError as e:
+        message = (
+            f"Error while archiving {current_step.id}: status code "
+            f"{e.request.status_code}."
+        )
         return set_and_return_error(
             current_step,
             {
-                "message": f"Error while archiving {current_step.id}: status code {e.request.status_code}.",
+                "status": 1,
+                "errormsg": message,
+                "message": message,
                 "archivematica_instance": am_instance_config["AM_INSTANCE"],
             },
             extra_log=f"HTTPError: {e}",
             failure_type=get_failure_type_from_status_code(e.request.status_code),
         )
     except Exception as e:
+        message = f"Error while archiving {current_step.id}: {str(e)}"
         return set_and_return_error(
             current_step,
             {
-                "message": f"Error while archiving {current_step.id}: {str(e)}",
+                "status": 1,
+                "errormsg": message,
+                "message": message,
                 "archivematica_instance": am_instance_config["AM_INSTANCE"],
             },
         )
@@ -634,30 +665,69 @@ def am_manager(self):
 def start_am_transfers(self, chord_results=None):
     logger.info("Starting Archivematica transfers...")
     step_type = StepType.objects.get(name=StepName.ARCHIVE)
-    capacity = step_type.concurrency_limit - step_type.current_count
 
-    if capacity <= 0:
-        logger.info("Maximum number of Archivematica steps currently in progress.")
-        return
+    submitted_steps = Step.objects.filter(
+        step_type__name=StepName.ARCHIVE,
+        status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
+    )
+
+    # Calculate & determine capacity per Archivematica instance
+    am_instance_task_capacity = {}
+
+    for instance in AM_INSTANCES:
+        instance_capacity = (
+            step_type.concurrency_limit
+            - submitted_steps.filter(
+                input_data_json__archivematica_instance=instance["AM_INSTANCE"]
+            ).count()
+        )
+        if instance_capacity > 0:
+            am_instance_task_capacity[instance["AM_INSTANCE"]] = instance_capacity
+        logger.info(
+            f"Available capacity for instance {instance['AM_INSTANCE']} is {instance_capacity}."
+        )
 
     if not step_type.enabled:
         logger.info("Archivematica step type is currently disabled.")
         return
-    logger.info(
-        f"Checking for waiting Archivematica steps to run, capacity: {capacity}..."
-    )
+
+    if len(am_instance_task_capacity) <= 0:
+        logger.info("Maximum number of Archivematica steps currently in progress.")
+        return
+
     waiting_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
         status=Status.WAITING,
         archive__last_step=models.F(
             "id"
         ),  # It is the last step of the archive, not in pipeline
-    ).order_by("create_date")[:capacity]
+    ).order_by("create_date")[: sum(am_instance_task_capacity.values())]
 
     if not waiting_steps.exists():
         logger.info("No waiting Archivematica steps to start")
         return
 
     logger.info(f"Starting {waiting_steps.count()} waiting Archivematica steps to run.")
+
     for step in waiting_steps:
-        archivematica.apply_async(args=[step.id])
+        if not step.input_data_json.get("archivematica_instance", None):
+            am_instance = random.choice(list(am_instance_task_capacity))
+            am_instance_task_capacity[am_instance] = (
+                am_instance_task_capacity[am_instance] - 1
+            )
+            step.set_input_data_field("archivematica_instance", am_instance)
+            archivematica.apply_async(args=[step.id])
+        else:
+            # When archivematica instance is predefined, only remove it from the capacity
+            am_instance = step.input_data_json.get("archivematica_instance")
+            if am_instance in am_instance_task_capacity:
+                am_instance_task_capacity[am_instance] = (
+                    am_instance_task_capacity[am_instance] - 1
+                )
+                archivematica.apply_async(args=[step.id])
+
+        if (
+            am_instance in am_instance_task_capacity
+            and am_instance_task_capacity[am_instance] <= 0
+        ):
+            am_instance_task_capacity.pop(am_instance, None)
