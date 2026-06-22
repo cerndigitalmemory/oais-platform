@@ -5,7 +5,6 @@ import shutil
 
 from django.core.management.base import BaseCommand
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.models import Archive
 from oais_platform.oais.tasks.utils import generate_directory_structure
 from oais_platform.settings import SIP_STAGING_BASEPATH
