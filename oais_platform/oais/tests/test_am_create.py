@@ -1,3 +1,5 @@
+import os
+import tempfile
 from unittest.mock import patch
 
 import requests
@@ -6,22 +8,30 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica
+from oais_platform.oais.tasks.utils import generate_directory_structure
 from oais_platform.settings import AM_INSTANCES
 
 
 class ArchivematicaCreateTests(APITestCase):
     def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.sip_base_path = os.path.join(self.tmpdir.name, "sips")
+        self.path_to_sip = os.path.join(self.sip_base_path, "test_path")
+        os.makedirs(self.path_to_sip)
+
         self.archive = Archive.objects.create(
             recid="1",
             source="test",
             source_url="",
-            path_to_sip="basepath/sips/test_path",
+            title="Test archive",
+            path_to_sip=self.path_to_sip,
             sip_size=1000,
-            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
 
         self.step = Step.objects.create(
-            archive=self.archive, step_name=StepName.ARCHIVE
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
@@ -30,7 +40,7 @@ class ArchivematicaCreateTests(APITestCase):
             "oais_platform.oais.tasks.archivematica.ArchivematicaInstances.get_instance_config",
             return_value={
                 **AM_INSTANCES[0],
-                "SIP_UPSTREAM_BASEPATH": "basepath/sips",
+                "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
                 "AM_TRANSFER_SOURCE": "test-transfer-source",
             },
         )
@@ -38,6 +48,7 @@ class ArchivematicaCreateTests(APITestCase):
 
     def tearDown(self):
         self.instance_patch.stop()
+        self.tmpdir.cleanup()
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
@@ -52,6 +63,33 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(self.step.step_type.current_size_bytes, self.archive.sip_size)
+
+    def test_archivematica_uses_path_relative_to_transfer_source_root(self):
+        class FakeAMClient:
+            def create_package(self):
+                return {"id": "test_package_id"}
+
+        fake_am = FakeAMClient()
+
+        with patch(
+            "oais_platform.oais.tasks.archivematica.get_am_client",
+            return_value=fake_am,
+        ):
+            result = archivematica.apply(args=[self.step.id])
+
+        result.get()
+        transfer_source_path = generate_directory_structure(
+            self.sip_base_path, self.archive
+        )
+        expected_transfer_directory = os.path.join(
+            "/",
+            os.path.relpath(
+                os.path.join(transfer_source_path, os.path.basename(self.path_to_sip)),
+                self.sip_base_path,
+            ),
+        )
+
+        self.assertEqual(fake_am.transfer_directory, expected_transfer_directory)
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_create_package(self, create_package):
