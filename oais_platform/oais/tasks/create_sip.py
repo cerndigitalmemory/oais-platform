@@ -22,8 +22,8 @@ from oais_platform.oais.tasks.utils import (
 from oais_platform.settings import (
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
-    UPLOAD_DELETION_CUTOFF_DAYS,
     SIP_STAGING_BASEPATH,
+    UPLOAD_DELETION_CUTOFF_DAYS,
 )
 
 logger = get_task_logger(__name__)

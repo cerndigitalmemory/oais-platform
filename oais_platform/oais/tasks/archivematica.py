@@ -1,7 +1,7 @@
 import os
-from pathlib import Path
 import random
 import shutil
+from pathlib import Path
 
 import requests
 from amclient import AMClient
