@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import Status
 from oais_platform.oais.models import Archive, Step, StepName, StepType
-from oais_platform.settings import AM_INSTANCES, BIC_WORKDIR
+from oais_platform.settings import AM_INSTANCES, BIC_WORKDIR, SIP_STAGING_BASEPATH
 
 
 class UploadTests(APITestCase):
@@ -79,7 +79,6 @@ class UploadTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_upload_sip(self, mock_dispatch):
-        am_sip_upstream_basepath = AM_INSTANCES[0]["SIP_UPSTREAM_BASEPATH"]
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create real SIP using bic
             res = bic.process(
@@ -113,7 +112,7 @@ class UploadTests(APITestCase):
         latest_step = Step.objects.latest("id")
         latest_archive = Archive.objects.latest("id")
         expected_path = os.path.join(
-            am_sip_upstream_basepath, "upload", f"Archive-{latest_archive.id}"
+            SIP_STAGING_BASEPATH, "upload", f"Archive-{latest_archive.id}"
         )
 
         mock_dispatch.assert_called_once_with(

@@ -34,15 +34,14 @@ class PushToCTATests(APITestCase):
         )
         self.archive = Archive.objects.create(
             path_to_aip=path_to_aip,
-            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now(),
             status=Status.WAITING,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
-        self.step.set_input_data({"test": "test"})
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
         self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
@@ -148,9 +147,12 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.failure_type, StepFailureType.PATH_NOT_FOUND)
 
+    @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
-    def test_push_to_cta_http_error(self, mock_checksum, mock_stat, mock_gfal2):
+    def test_push_to_cta_http_error(
+        self, mock_checksum, mock_stat, mock_retry_step, mock_gfal2
+    ):
         self._setup_gfal2_mocks(mock_gfal2)
         mock_stat.return_value.st_size = 123456
         mock_checksum.return_value = "test-checksum"

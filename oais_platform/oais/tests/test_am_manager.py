@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import am_manager, start_am_transfers
+from oais_platform.settings import AM_INSTANCES
 
 
 class ArchivematicaManagerTests(APITestCase):
@@ -72,12 +73,35 @@ class ArchivematicaManagerTests(APITestCase):
     def test_am_manager_start_transfer_concurrency_limit(self, mock_archivematica):
         self.step.step_type.concurrency_limit = 1
         self.step.step_type.save()
+        self.step.set_input_data_field(
+            "archivematica_instance", AM_INSTANCES[0]["AM_INSTANCE"]
+        )
         self.step.set_status(Status.IN_PROGRESS)
+        self.step2.set_input_data_field(
+            "archivematica_instance", AM_INSTANCES[0]["AM_INSTANCE"]
+        )
 
         start_am_transfers.apply()
         self.step2.refresh_from_db()
         self.assertEqual(self.step2.status, Status.WAITING)
         mock_archivematica.assert_not_called()
+
+    @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
+    def test_am_manager_start_transfer_uses_instance_capacity(self, mock_archivematica):
+        am_instances = [
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
+        ]
+        self.step.step_type.concurrency_limit = 1
+        self.step.step_type.save()
+        self.step.set_input_data_field("archivematica_instance", "AM1")
+        self.step.set_status(Status.IN_PROGRESS)
+        self.step2.set_input_data_field("archivematica_instance", "AM2")
+
+        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+            start_am_transfers.apply()
+
+        mock_archivematica.assert_called_once_with(args=[self.step2.id])
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfer_step_disabled(self, mock_archivematica):

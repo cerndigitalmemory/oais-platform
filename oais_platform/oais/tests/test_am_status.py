@@ -30,12 +30,12 @@ class ArchivematicaStatusTests(APITestCase):
             source="test",
             source_url="",
             path_to_sip="test_path",
-            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
 
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
             output_data_json={"package_uuid": "5678"},
         )
 
@@ -507,7 +507,12 @@ class ArchivematicaStatusTests(APITestCase):
         mock_create_retry_step,
     ):
         am_instance_url = AM_INSTANCES[0]["AM_URL"]
-        self.step.set_input_data({"retry_count": 1})
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "retry_count": 1,
+            }
+        )
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
@@ -599,7 +604,12 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_retry_exceeded(self, get_unit_status, create_retry_step):
         am_instance_retry_limit = AM_INSTANCES[0]["AM_RETRY_LIMIT"]
-        self.step.set_input_data({"retry_count": am_instance_retry_limit})
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "retry_count": am_instance_retry_limit,
+            }
+        )
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
