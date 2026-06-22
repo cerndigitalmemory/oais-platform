@@ -378,6 +378,13 @@ class StepStatusStatisticsSerializer(serializers.Serializer):
     )
 
 
+class StepDurationStatisticsSerializer(serializers.Serializer):
+    step = serializers.CharField(help_text="Step name")
+    avg_duration = serializers.FloatField(
+        help_text="Average duration (seconds) of currently in-progress steps"
+    )
+
+
 class StepFailureStatisticsSerializer(serializers.Serializer):
     step = serializers.CharField(help_text="Step name")
     failure_type = serializers.CharField(help_text="Failure type")
