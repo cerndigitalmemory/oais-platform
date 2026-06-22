@@ -1,5 +1,16 @@
 # Changes
 
+## Version 5.0.0 (released 2026-06-22)
+- Add filter for in pipeline steps
+- Monitoring: create endpoints for statistics for steps by status, failed steps by failure type and step duration
+- Management command: reprocess collection on an instance
+- Archivematica: change user input to warning
+- Announce: add to collection defined in sip.json
+- Fix: get step statistics with a single query
+- Add is_staff to UserSerializer
+- Optimize collection summaries
+- Remove edit manifest functionality
+
 ## Version 4.0.1 (released 2026-05-15)
 - Archivematica: execute retry step
 
@@ -68,7 +79,7 @@
 - Pipeline: remove API key and input data propagation
 - CTA: fix task finalization in all cases
 - FTS: filter concurrent job count based on user DN
-- API: improve archive selection based on ID 
+- API: improve archive selection based on ID
 
 ## Version 2.8.2 (released 2026-02-09)
 - AM: periodically reset failed count
