@@ -48,16 +48,14 @@ def archivematica(self, step_id):
     preparing the call to the Archivematica API
     Once done, spawn a periodic task to check on the progress
     """
-    current_step: Step = Step.objects.get(pk=step_id)
+    current_step = Step.objects.get(pk=step_id)
     current_step.set_start_date()
     archive = current_step.archive
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
     # Get AM instance config or assign instance if not done yet
-    assigned_am_instance = current_step.input_data_json.get(
-        "archivematica_instance", None
-    )
+    assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
     if not assigned_am_instance:
         return set_and_return_error(
             current_step,
@@ -110,7 +108,7 @@ def archivematica(self, step_id):
                 current_step,
                 {
                     "status": 1,
-                    "errormsg": message,
+                    "errormsg": errormsg,
                     "message": message,
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 },
@@ -170,73 +168,85 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
+    am_instance = step.input_data_json.get("archivematica_instance")
+    if am_instance:
 
-    am = get_am_client(am_instance_config)
-    uuid = step.output_data_json.get("package_uuid", None)
+        am_instance_config = ArchivematicaInstances.get_instance_config(
+            step.input_data_json.get("archivematica_instance")
+        )
 
-    try:
-        failure_type = None
-        am_status = None
-        if uuid is None:
-            failure_type = StepFailureType.MISSING_OUTPUT_DATA
-            raise ValueError("No package UUID found in step output data.")
-        else:
-            am_status = am.get_unit_status(uuid)
-        logger.info(f"Current unit status for {am_status}")
-    except requests.HTTPError as e:
-        logger.info(f"Error {e.response.status_code} for archivematica")
-        failure_type = get_failure_type_from_status_code(e.response.status_code)
-        if e.response.status_code == 400:
-            try:
-                # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
-                executed_jobs = get_executed_jobs(am, uuid)
-                if executed_jobs > 0:
-                    am_status = {
-                        "status": "PROCESSING",
-                        "microservice": "Waiting for archivematica to continue the processing",
-                    }
+        am = get_am_client(am_instance_config)
+        uuid = step.output_data_json.get("package_uuid", None)
+
+        try:
+            failure_type = None
+            am_status = None
+            if uuid is None:
+                failure_type = StepFailureType.MISSING_OUTPUT_DATA
+                raise ValueError("No package UUID found in step output data.")
+            else:
+                am_status = am.get_unit_status(uuid)
+            logger.info(f"Current unit status for {am_status}")
+        except requests.HTTPError as e:
+            logger.info(f"Error {e.response.status_code} for archivematica")
+            failure_type = get_failure_type_from_status_code(e.response.status_code)
+            if e.response.status_code == 400:
+                try:
+                    # It is possible that the package is in queue between transfer and ingest - in this case it returns 400 but there are executed jobs
+                    executed_jobs = get_executed_jobs(am, uuid)
+                    if executed_jobs > 0:
+                        am_status = {
+                            "status": "PROCESSING",
+                            "microservice": "Waiting for archivematica to continue the processing",
+                        }
+                        logger.info(
+                            f"Archivematica package has executed jobs ({executed_jobs}) - waiting for the continuation of the processing"
+                        )
+                    else:
+                        logger.info(
+                            "No executed jobs for the given Archivematica package."
+                        )
+                except requests.HTTPError as e:
                     logger.info(
-                        f"Archivematica package has executed jobs ({executed_jobs}) - waiting for the continuation of the processing"
+                        f"Error {e.response.status_code} for archivematica retreiving jobs"
                     )
-                else:
-                    logger.info("No executed jobs for the given Archivematica package.")
-            except requests.HTTPError as e:
-                logger.info(
-                    f"Error {e.response.status_code} for archivematica retreiving jobs"
-                )
 
-            if not am_status:
-                # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
-                # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
-                time_passed = (timezone.now() - step.start_date).total_seconds()
-                logger.info(f"Waiting in AM queue, time passed: {time_passed}s")
-                if time_passed > 60 * AM_WAITING_TIME_LIMIT:
-                    logger.info(
-                        f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - setting to failed for step {step.id}"
-                    )
-                    am_status = {
-                        "status": "FAILED",
-                        "errormsg": "Archivematica delayed to respond.",
-                    }
-                    failure_type = StepFailureType.TIMEOUT
-                else:
-                    am_status = {
-                        "status": "WAITING",
-                        "microservice": "Waiting for archivematica to respond",
-                    }
-        else:
-            # If there is other type of error code then archivematica connection could not be established.
-            am_status = {
-                "status": "FAILED",
-                "errormsg": "Error: Could not connect to archivematica",
-            }
-            failure_type = StepFailureType.CONNECTION_ERROR
-    except Exception as e:
-        # In any other case make task fail (Archivematica crashed or not responding)
-        am_status = {"status": "FAILED", "errormsg": str(e)}
+                if not am_status:
+                    # As long as the package is in queue to upload get_unit_status returns nothing so the waiting limit is checked
+                    # If step has been waiting for more than AM_WAITING_TIME_LIMIT (mins), delete task
+                    time_passed = (timezone.now() - step.start_date).total_seconds()
+                    logger.info(f"Waiting in AM queue, time passed: {time_passed}s")
+                    if time_passed > 60 * AM_WAITING_TIME_LIMIT:
+                        logger.info(
+                            f"Status Waiting limit reached ({AM_WAITING_TIME_LIMIT} mins) - setting to failed for step {step.id}"
+                        )
+                        am_status = {
+                            "status": "FAILED",
+                            "errormsg": "Archivematica delayed to respond.",
+                        }
+                        failure_type = StepFailureType.TIMEOUT
+                    else:
+                        am_status = {
+                            "status": "WAITING",
+                            "microservice": "Waiting for archivematica to respond",
+                        }
+            else:
+                # If there is other type of error code then archivematica connection could not be established.
+                am_status = {
+                    "status": "FAILED",
+                    "errormsg": "Error: Could not connect to archivematica",
+                }
+                failure_type = StepFailureType.CONNECTION_ERROR
+        except Exception as e:
+            # In any other case make task fail (Archivematica crashed or not responding)
+            am_status = {"status": "FAILED", "errormsg": str(e)}
+    else:
+        # Make task fail (Archivematica instance unknown)
+        am_status = {
+            "status": "FAILED",
+            "errormsg": "Error: Archivematica instance is unknown",
+        }
+        failure_type = StepFailureType.AM_JOB_FAILED_OTHER
 
     status = am_status["status"]
     microservice = am_status.get("microservice", None)
@@ -393,27 +403,20 @@ def get_am_client(am_instance_config):
     am.am_url = am_instance_config["AM_URL"]
     am.am_user_name = am_instance_config["AM_USERNAME"]
     am.am_api_key = am_instance_config["AM_API_KEY"]
-    if am_instance_config.get("AM_TRANSFER_SOURCE") is None:
-        am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(
-            am_instance_config
-        )
-    am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
     am.ss_url = am_instance_config["AM_SS_URL"]
     am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
     am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
     am.processing_config = "automated"
+    if not am_instance_config.get("AM_TRANSFER_SOURCE"):
+        am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
+    am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
 
     return am
 
 
-def get_transfer_source(am_instance_config):
+def get_transfer_source(am):
     DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
     try:
-        am = AMClient()
-        am.ss_url = am_instance_config["AM_SS_URL"]
-        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
-        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
-
         locations = am.list_storage_locations()
         # Archivematica returns integers for errors
         if not locations or not isinstance(locations, dict):
@@ -421,7 +424,7 @@ def get_transfer_source(am_instance_config):
 
     except Exception as exc:
         raise Exception(
-            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
+            f"Failed to connect to Archivematica Storage Service instance': {exc}"
         ) from exc
 
     objects = locations.get("objects") or []
@@ -434,8 +437,7 @@ def get_transfer_source(am_instance_config):
 
     raise Exception(
         "Transfer source is not defined, and no enabled location with "
-        "description 'Default transfer source' was found for instance "
-        f"{am_instance_config['AM_INSTANCE']}."
+        "description 'Default transfer source' was found"
     )
 
 
