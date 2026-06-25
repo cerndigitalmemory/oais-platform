@@ -81,7 +81,7 @@ deploy-prod:
     BUILD_NAME: oais
     IMAGE_STREAM_NAME: $CI_PROJECT_NAME
   script:
-    - oc login $SERVER --token=$DEPLOY_TOKEN
+    - oc login $SERVER --token=$OPENSHIFT_DEPLOY_TOKEN
     - oc project preserve-$ENV
     - echo "Triggering ImageStream update for $IMAGE_STREAM_NAME on preserve-$ENV"
     - sleep 10 && oc import-image $IMAGE_STREAM_NAME --all
@@ -91,6 +91,7 @@ trigger-dev:
   stage: deploy-dev
   variables:
     ENV: "dev"
+    OPENSHIFT_DEPLOY_TOKEN: $DEPLOY_TOKEN
   needs:
     job: deploy-dev
   rules:
@@ -101,6 +102,7 @@ trigger-qa:
   stage: deploy-qa
   variables:
     ENV: "qa"
+    OPENSHIFT_DEPLOY_TOKEN: $DEPLOY_TOKEN
   needs:
     job: deploy-qa
   rules:
@@ -111,6 +113,7 @@ trigger-prod:
   stage: deploy-prod
   variables:
     ENV: "prod"
+    OPENSHIFT_DEPLOY_TOKEN: $DEPLOY_TOKEN_PROD
   needs:
     job: deploy-prod
   rules:
