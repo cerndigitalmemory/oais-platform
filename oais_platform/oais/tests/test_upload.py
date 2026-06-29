@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import Status
 from oais_platform.oais.models import Archive, Step, StepName, StepType
-from oais_platform.settings import AM_INSTANCES, BIC_WORKDIR, SIP_STAGING_BASEPATH
+from oais_platform.settings import AM_INSTANCES, BIC_WORKDIR, SIP_STORE_BASEPATH
 
 
 class UploadTests(APITestCase):
@@ -112,7 +112,7 @@ class UploadTests(APITestCase):
         latest_step = Step.objects.latest("id")
         latest_archive = Archive.objects.latest("id")
         expected_path = os.path.join(
-            SIP_STAGING_BASEPATH, "upload", f"Archive-{latest_archive.id}"
+            SIP_STORE_BASEPATH, "upload", f"Archive-{latest_archive.id}"
         )
 
         mock_dispatch.assert_called_once_with(
