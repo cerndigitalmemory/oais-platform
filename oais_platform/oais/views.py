@@ -113,7 +113,7 @@ from oais_platform.settings import (
     LOCAL_UPLOAD_PATH,
     OIDC_OP_LOGOUT_ENDPOINT,
     PIPELINE_SIZE_LIMIT,
-    SIP_STAGING_BASEPATH,
+    SIP_STORE_BASEPATH,
     STEP_FILTER_CONDITION_LIMIT,
 )
 
@@ -1182,7 +1182,7 @@ def upload_sip(request):
 
     try:
         # Save compressed SIP
-        base_path = os.path.join(SIP_STAGING_BASEPATH, "upload")
+        base_path = os.path.join(SIP_STORE_BASEPATH, "upload")
         os.makedirs(base_path, exist_ok=True)
         compressed_path = os.path.join(base_path, f"compressed_{file.name}")
         with open(compressed_path, "wb+") as destination:

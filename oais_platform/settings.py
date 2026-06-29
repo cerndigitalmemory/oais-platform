@@ -320,7 +320,7 @@ SIMPLE_JWT = {
 }
 
 # SIP Staging folder
-SIP_STAGING_BASEPATH = "/oais_platform/oais-data/sips/staging"
+SIP_STORE_BASEPATH = "/oais_platform/oais-data/sips/store"
 
 # ARCHIVEMATICA integration
 AM_INSTANCES = [

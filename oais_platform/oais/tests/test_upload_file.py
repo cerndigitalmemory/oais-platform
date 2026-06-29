@@ -17,7 +17,7 @@ from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
-    SIP_STAGING_BASEPATH,
+    SIP_STORE_BASEPATH,
 )
 
 
@@ -67,7 +67,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                SIP_STAGING_BASEPATH,
+                SIP_STORE_BASEPATH,
                 "local",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -77,7 +77,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         expected_path = (
-            Path(SIP_STAGING_BASEPATH)
+            Path(SIP_STORE_BASEPATH)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -118,7 +118,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         expected_path = (
-            Path(SIP_STAGING_BASEPATH)
+            Path(SIP_STORE_BASEPATH)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )

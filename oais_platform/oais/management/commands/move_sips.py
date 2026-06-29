@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 
 from oais_platform.oais.models import Archive
 from oais_platform.oais.tasks.utils import generate_directory_structure
-from oais_platform.settings import SIP_STAGING_BASEPATH
+from oais_platform.settings import SIP_STORE_BASEPATH
 
 
 class Command(BaseCommand):
@@ -38,7 +38,7 @@ class Command(BaseCommand):
                 continue
 
             folder_name = os.path.basename(current_path)
-            new_structure = generate_directory_structure(SIP_STAGING_BASEPATH, archive)
+            new_structure = generate_directory_structure(SIP_STORE_BASEPATH, archive)
             new_path = os.path.join(new_structure, folder_name)
 
             if current_path == new_path:
