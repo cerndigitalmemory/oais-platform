@@ -57,14 +57,12 @@ def archivematica(self, step_id):
     # Get AM instance config or assign instance if not done yet
     assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
     if not assigned_am_instance:
-        return set_and_return_error(
-            current_step,
-            {
-                "status": 1,
-                "errormsg": "No Archivematica instance assigned",
-                "archivematica_instance": None,
-            },
+        logger.info(
+            "No Archivematica instance set, returning step for instance assigment"
         )
+        current_step.set_status(Status.WAITING)
+        return current_step.output_data_json
+
     am_instance_config = ArchivematicaInstances.get_instance_config(
         assigned_am_instance
     )
