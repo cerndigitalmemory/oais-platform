@@ -18,7 +18,7 @@ from oais_platform.oais.tasks.utils import (
     create_step,
     generate_directory_structure,
 )
-from oais_platform.settings import SIP_STAGING_BASEPATH
+from oais_platform.settings import SIP_STORE_BASEPATH
 
 logger = get_task_logger(__name__)
 
@@ -126,9 +126,9 @@ def copy_sip(self, archive_id, step_id):
     foldername = step.input_data_json.get("foldername")
     announce_path = step.input_data_json.get("announce_path")
 
-    if SIP_STAGING_BASEPATH:
+    if SIP_STORE_BASEPATH:
         target_path = os.path.join(
-            generate_directory_structure(SIP_STAGING_BASEPATH, archive),
+            generate_directory_structure(SIP_STORE_BASEPATH, archive),
             foldername,
         )
     else:
@@ -136,7 +136,7 @@ def copy_sip(self, archive_id, step_id):
     try:
         os.mkdir(target_path)
     except FileExistsError:
-        cleanup_empty_path(target_path, SIP_STAGING_BASEPATH, archive.source)
+        cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)
         step.set_failure_type(StepFailureType.FILE_ALREADY_EXISTS)
         return {
             "status": 1,
@@ -164,7 +164,7 @@ def copy_sip(self, archive_id, step_id):
         # Create a SIP path artifact
         output_artifact = create_path_artifact(
             "SIP",
-            os.path.join(SIP_STAGING_BASEPATH, target_path),
+            os.path.join(SIP_STORE_BASEPATH, target_path),
             target_path,
         )
         return {
@@ -176,7 +176,7 @@ def copy_sip(self, archive_id, step_id):
 
     except Exception as e:
         # In case of exception delete the target folder
-        cleanup_empty_path(target_path, SIP_STAGING_BASEPATH, archive.source)
+        cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)
         return {"status": 1, "errormsg": e}
 
 
