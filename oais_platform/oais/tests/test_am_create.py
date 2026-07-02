@@ -98,13 +98,16 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        errormsg = f"AM create returned error {create_package.return_value}"
+        message = f"AM create returned error {create_package.return_value}"
+        errormsg = "Unknown return from amclient, check logs"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.output_data_json["status"], 1)
         self.assertIn(errormsg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(errormsg, result["errormsg"])
+        self.assertIn(message, self.step.output_data_json["message"])
+        self.assertIn(message, result["message"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
 
