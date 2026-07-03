@@ -104,6 +104,49 @@ class ArchivematicaManagerTests(APITestCase):
         mock_archivematica.assert_called_once_with(args=[self.step2.id])
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
+    def test_am_manager_assigns_unpinned_steps_to_highest_capacity_first(
+        self, mock_archivematica
+    ):
+        am_instances = [
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
+        ]
+        archive3 = Archive.objects.create(
+            recid="3",
+            source="test",
+            source_url="",
+            path_to_sip="basepath/sips/test_path3",
+            sip_size=1000,
+        )
+        step3 = Step.objects.create(
+            archive=archive3, step_name=StepName.ARCHIVE, status=Status.WAITING
+        )
+        archive3.set_last_step(step3.id)
+
+        self.step.step_type.concurrency_limit = 2
+        self.step.step_type.save()
+        in_progress_step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.IN_PROGRESS,
+            input_data_json={"archivematica_instance": "AM1"},
+        )
+        self.archive.set_last_step(self.step.id)
+
+        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+            start_am_transfers.apply()
+
+        self.step.refresh_from_db()
+        self.step2.refresh_from_db()
+        step3.refresh_from_db()
+        self.assertEqual(self.step.input_data_json["archivematica_instance"], "AM2")
+        self.assertEqual(self.step2.input_data_json["archivematica_instance"], "AM1")
+        self.assertEqual(step3.input_data_json["archivematica_instance"], "AM2")
+        self.assertEqual(mock_archivematica.call_count, 3)
+        in_progress_step.refresh_from_db()
+        self.assertEqual(in_progress_step.status, Status.IN_PROGRESS)
+
+    @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfer_step_disabled(self, mock_archivematica):
         self.step.step_type.enabled = False
         self.step.step_type.save()

@@ -1,5 +1,4 @@
 import os
-import random
 import shutil
 from pathlib import Path
 
@@ -796,23 +795,29 @@ def start_am_transfers(self, chord_results=None):
 
     for step in waiting_steps:
         if not step.input_data_json.get("archivematica_instance", None):
-            am_instance = random.choice(list(am_instance_task_capacity))
-            am_instance_task_capacity[am_instance] = (
-                am_instance_task_capacity[am_instance] - 1
-            )
+            am_instance = get_next_am_instance(am_instance_task_capacity)
+            decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
             step.set_input_data_field("archivematica_instance", am_instance)
             archivematica.apply_async(args=[step.id])
         else:
             # When archivematica instance is predefined, only remove it from the capacity
             am_instance = step.input_data_json.get("archivematica_instance")
             if am_instance in am_instance_task_capacity:
-                am_instance_task_capacity[am_instance] = (
-                    am_instance_task_capacity[am_instance] - 1
-                )
+                decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
                 archivematica.apply_async(args=[step.id])
 
-        if (
-            am_instance in am_instance_task_capacity
-            and am_instance_task_capacity[am_instance] <= 0
-        ):
-            am_instance_task_capacity.pop(am_instance, None)
+
+def get_next_am_instance(am_instance_task_capacity):
+    return min(
+        am_instance_task_capacity,
+        key=lambda am_instance: (
+            -am_instance_task_capacity[am_instance],
+            am_instance,
+        ),
+    )
+
+
+def decrement_am_instance_capacity(am_instance_task_capacity, am_instance):
+    am_instance_task_capacity[am_instance] -= 1
+    if am_instance_task_capacity[am_instance] <= 0:
+        am_instance_task_capacity.pop(am_instance, None)
