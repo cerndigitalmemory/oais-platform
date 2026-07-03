@@ -147,6 +147,53 @@ class ArchivematicaManagerTests(APITestCase):
         self.assertEqual(in_progress_step.status, Status.IN_PROGRESS)
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
+    def test_am_manager_balances_400_waiting_archives(self, mock_archivematica):
+        am_instances = [
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
+            {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
+        ]
+        self.step.step_type.concurrency_limit = 33
+        self.step.step_type.save()
+
+        for index in range(3, 401):
+            archive = Archive.objects.create(
+                recid=str(index),
+                source="test",
+                source_url="",
+                path_to_sip=f"basepath/sips/test_path{index}",
+                sip_size=1000,
+            )
+            step = Step.objects.create(
+                archive=archive,
+                step_name=StepName.ARCHIVE,
+                status=Status.WAITING,
+            )
+            archive.set_last_step(step.id)
+
+        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+            start_am_transfers.apply()
+
+        assigned_steps = Step.objects.filter(
+            step_type__name=StepName.ARCHIVE,
+            input_data_json__has_key="archivematica_instance",
+        )
+
+        self.assertEqual(assigned_steps.count(), 66)
+        self.assertEqual(
+            assigned_steps.filter(
+                input_data_json__archivematica_instance="AM1"
+            ).count(),
+            33,
+        )
+        self.assertEqual(
+            assigned_steps.filter(
+                input_data_json__archivematica_instance="AM2"
+            ).count(),
+            33,
+        )
+        self.assertEqual(mock_archivematica.call_count, 66)
+
+    @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfer_step_disabled(self, mock_archivematica):
         self.step.step_type.enabled = False
         self.step.step_type.save()
