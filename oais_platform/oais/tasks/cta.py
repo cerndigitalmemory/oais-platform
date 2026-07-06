@@ -88,7 +88,14 @@ def push_to_cta(self, archive_id, step_id):
         )
         return
 
-    cta_file_path = _get_cta_path(step)
+    try:
+        cta_file_path = _get_cta_path(step)
+    except ValueError as e:
+        return set_and_return_error(
+            step,
+            {"status": 1, "errormsg": str(e)},
+            failure_type=StepFailureType.MISSING_INPUT_DATA,
+        )
 
     try:
         if _verify_file(archive.path_to_aip, cta_file_path):
@@ -151,6 +158,10 @@ def _get_cta_path(step):
     am_instance_config = ArchivematicaInstances.get_instance_config(
         step.input_data_json.get("archivematica_instance")
     )
+    if not am_instance_config:
+        raise ValueError(
+            f"Unable to retrieve Archivematica config for: {step.input_data_json.get('archivematica_instance')}"
+        )
     try:
         return os.path.join(
             "aips",
@@ -196,7 +207,15 @@ def _check_in_progress_jobs(self):
         step = steps_by_job_id.get(job["job_id"])
 
         if job["job_state"] == "FINISHED":
-            cta_file_path = _get_cta_path(step)
+            try:
+                cta_file_path = _get_cta_path(step)
+            except ValueError as e:
+                return set_and_return_error(
+                    step,
+                    {"status": 1, "errormsg": str(e)},
+                    failure_type=StepFailureType.MISSING_INPUT_DATA,
+                )
+
             _handle_successful_fts_job(
                 self, step.id, step.archive.id, job["job_id"], cta_file_path
             )
