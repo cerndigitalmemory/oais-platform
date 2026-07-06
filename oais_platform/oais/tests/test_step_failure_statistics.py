@@ -120,6 +120,9 @@ class StepFailureStatisticsEndpointTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(any(row["failure_type"] is None for row in response.data))
         self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            self.get_count(response.data, StepName.ARCHIVE, StepFailureType.OTHER), 2
+        )
 
     def test_retried_step_counted_when_latest_attempt_fails(self):
         self.create_archive_with_steps(
