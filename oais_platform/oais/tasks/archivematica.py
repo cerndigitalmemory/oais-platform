@@ -298,9 +298,6 @@ def check_am_status(self, step_id):
         step.set_output_data(am_status)
     if step.status in TERMINAL_STATUSES and step.finish_date is None:
         step.set_finish_date()
-    elif step.status not in TERMINAL_STATUSES and step.finish_date is not None:
-        step.finish_date = None
-        step.save(update_fields=["finish_date"])
 
 
 def resource_check(task, current_step, archive):
