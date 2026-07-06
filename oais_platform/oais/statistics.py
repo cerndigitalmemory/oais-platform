@@ -10,11 +10,17 @@ from django.db.models import (
     OuterRef,
     Q,
     Subquery,
+    Value,
 )
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
-from oais_platform.oais.enums import COMPLETED_STATUSES, ArchiveState, StepName
+from oais_platform.oais.enums import (
+    COMPLETED_STATUSES,
+    ArchiveState,
+    StepFailureType,
+    StepName,
+)
 from oais_platform.oais.models import Archive, Status, Step
 
 
@@ -130,7 +136,10 @@ def failures_by_type(steps=None):
     return (
         latest_steps(steps)
         .filter(status=Status.FAILED)
-        .values("step_type__name", "failure_type")
+        .annotate(
+            grouped_failure_type=Coalesce("failure_type", Value(StepFailureType.OTHER))
+        )
+        .values("step_type__name", "grouped_failure_type")
         .annotate(count=Count("id"))
     )
 
@@ -142,7 +151,7 @@ def count_failures_by_type():
     return [
         {
             "step": row["step_type__name"],
-            "failure_type": row["failure_type"],
+            "failure_type": row["grouped_failure_type"],
             "count": row["count"],
         }
         for row in failures_by_type()
