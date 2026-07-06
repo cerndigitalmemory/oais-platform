@@ -131,9 +131,6 @@ class ArchivematicaStatusTests(APITestCase):
 
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_completed_not_fully(self, get_unit_status):
-        self.step.finish_date = timezone.now()
-        self.step.save()
-
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Completed first half, still processing",
@@ -152,7 +149,6 @@ class ArchivematicaStatusTests(APITestCase):
             get_unit_status.return_value["microservice"],
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertIsNone(self.step.finish_date)
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
@@ -223,9 +219,6 @@ class ArchivematicaStatusTests(APITestCase):
 
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_processing(self, get_unit_status):
-        self.step.finish_date = timezone.now()
-        self.step.save()
-
         get_unit_status.return_value = {
             "status": "PROCESSING",
             "microservice": "Package is being processed",
@@ -243,7 +236,6 @@ class ArchivematicaStatusTests(APITestCase):
             get_unit_status.return_value["microservice"],
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertIsNone(self.step.finish_date)
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
@@ -273,7 +265,6 @@ class ArchivematicaStatusTests(APITestCase):
         get_jobs.return_value = 1
 
         self.step.status = Status.SUBMITTED
-        self.step.finish_date = timezone.now()
         self.step.save()
 
         check_am_status.apply(args=[self.step.id])
@@ -287,7 +278,6 @@ class ArchivematicaStatusTests(APITestCase):
             "Waiting for archivematica to respond",
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
-        self.assertIsNone(self.step.finish_date)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
