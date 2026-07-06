@@ -12,7 +12,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from oais_platform.oais.archivematica_instances import ArchivematicaInstances
-from oais_platform.oais.enums import StepFailureType
+from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
     COMPLETED_STATUSES,
@@ -36,8 +36,6 @@ from oais_platform.settings import (
 )
 
 logger = get_task_logger(__name__)
-
-TERMINAL_STATUSES = [Status.FAILED] + COMPLETED_STATUSES
 
 
 @shared_task(
