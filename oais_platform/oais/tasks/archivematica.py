@@ -37,8 +37,6 @@ from oais_platform.settings import (
 
 logger = get_task_logger(__name__)
 
-TERMINAL_STATUSES = [Status.FAILED] + COMPLETED_STATUSES
-
 
 @shared_task(
     name="archivematica",
