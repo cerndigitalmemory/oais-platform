@@ -205,7 +205,6 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    am_instance = step.input_data_json.get("archivematica_instance")
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
         step.input_data_json.get("archivematica_instance")
