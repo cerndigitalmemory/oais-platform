@@ -324,7 +324,7 @@ def check_am_status(self, step_id):
                 },
                 failure_type=failure_type,
             )
-            _cleanup_transfer_sip(step, am_instance_config)
+            _cleanup_transfer_sip_path(step, am_instance_config)
 
     elif status == "FAILED" or status == "REJECTED":
         if not am_status.get("errormsg", None):
@@ -343,7 +343,7 @@ def check_am_status(self, step_id):
         if failure_type == StepFailureType.TIMEOUT:
             am_status["retry"] = True
         set_and_return_error(step, am_status, failure_type=failure_type)
-        _cleanup_transfer_sip(step, am_instance_config)
+        _cleanup_transfer_sip_path(step, am_instance_config)
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
@@ -355,7 +355,7 @@ def check_am_status(self, step_id):
         set_and_return_error(
             step, am_status, failure_type=StepFailureType.USER_INPUT_REQUIRED
         )
-        _cleanup_transfer_sip(step, am_instance_config)
+        _cleanup_transfer_sip_path(step, am_instance_config)
 
     elif status == "PROCESSING" or status == "COMPLETE":
         time_passed = (timezone.now() - step.start_date).total_seconds()
@@ -375,7 +375,7 @@ def check_am_status(self, step_id):
                 },
                 failure_type=StepFailureType.TIMEOUT,
             )
-            _cleanup_transfer_sip(step, am_instance_config)
+            _cleanup_transfer_sip_path(step, am_instance_config)
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
@@ -576,14 +576,9 @@ def get_am_failure_type_from_failed_job(job):
             return StepFailureType.AM_JOB_FAILED_OTHER
 
 
-def _cleanup_transfer_sip(step, am_instance_config):
-    transfer_sip_path = step.output_data_json.get("transfer_sip_path")
-    _cleanup_transfer_sip_path(step, am_instance_config, transfer_sip_path)
-
-
-def _cleanup_transfer_sip_path(step, am_instance_config, transfer_sip_path):
+def _cleanup_transfer_sip_path(step, am_instance_config, transfer_sip_path=None):
     if not transfer_sip_path:
-        return
+        transfer_sip_path = step.output_data_json.get("transfer_sip_path")
 
     sip_base_path = Path(am_instance_config["SIP_UPSTREAM_BASEPATH"]).resolve()
     transfer_sip_path = Path(transfer_sip_path).resolve()
@@ -676,7 +671,7 @@ def handle_completed_am_package(self, am, am_instance_config, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            _cleanup_transfer_sip(step, am_instance_config)
+            _cleanup_transfer_sip_path(step, am_instance_config)
         else:
             finalize(
                 self=self,
@@ -688,7 +683,7 @@ def handle_completed_am_package(self, am, am_instance_config, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            _cleanup_transfer_sip(step, am_instance_config)
+            _cleanup_transfer_sip_path(step, am_instance_config)
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
@@ -768,6 +763,10 @@ def start_am_transfers(self, chord_results=None):
     logger.info("Starting Archivematica transfers...")
     step_type = StepType.objects.get(name=StepName.ARCHIVE)
 
+    if not step_type.enabled:
+        logger.info("Archivematica step type is currently disabled.")
+        return
+
     submitted_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
         status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
@@ -788,10 +787,6 @@ def start_am_transfers(self, chord_results=None):
         logger.info(
             f"Available capacity for instance {instance['AM_INSTANCE']} is {instance_capacity}."
         )
-
-    if not step_type.enabled:
-        logger.info("Archivematica step type is currently disabled.")
-        return
 
     if len(am_instance_task_capacity) <= 0:
         logger.info("Maximum number of Archivematica steps currently in progress.")
