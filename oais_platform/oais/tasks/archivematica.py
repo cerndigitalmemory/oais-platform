@@ -59,7 +59,7 @@ def archivematica(self, step_id):
     assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
     if not assigned_am_instance:
         logger.info(
-            "No Archivematica instance set, returning step for instance assigment"
+            f"No Archivematica instance set for Archive Step: {current_step.id} for Archive: {archive.id}, returning step for instance assigment"
         )
         current_step.set_status(Status.WAITING)
         return current_step.output_data_json
@@ -77,7 +77,7 @@ def archivematica(self, step_id):
             shutil.copytree(path_to_sip, transfer_sip_path)
     except Exception as e:
         _cleanup_transfer_sip_path(current_step, am_instance_config, transfer_sip_path)
-        message = f"Error while preparing Archivematica transfer for {current_step.id}: {str(e)}"
+        message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
         return set_and_return_error(
             current_step,
             {
@@ -104,7 +104,7 @@ def archivematica(self, step_id):
 
     # Create archivematica package
     logger.info(
-        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']}"
+        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']} for Archive: {archive.id}"
     )
 
     try:
