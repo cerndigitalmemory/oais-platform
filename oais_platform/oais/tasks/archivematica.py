@@ -81,7 +81,7 @@ def archivematica(self, step_id):
             current_step,
             {
                 "status": 1,
-                "errormsg": message,
+                "errormsg": str(e),
                 "message": message,
                 "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 "transfer_sip_path": str(transfer_sip_path),
