@@ -1,3 +1,5 @@
+import os
+import tempfile
 from unittest.mock import Mock, patch
 
 import requests
@@ -19,11 +21,26 @@ from oais_platform.settings import (
 
 class ArchivematicaStatusTests(APITestCase):
     def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.sip_base_path = os.path.join(self.tmpdir.name, "sips")
+        self.aip_base_path = os.path.join(self.tmpdir.name, "aips")
+        self.transfer_sip_path = os.path.join(self.sip_base_path, "test", "test_path")
+        os.makedirs(self.transfer_sip_path)
+
         self.transfer_source_patch = patch(
             "oais_platform.oais.tasks.archivematica.get_transfer_source",
             return_value="test-transfer-source",
         )
         self.transfer_source_patch.start()
+        self.instance_patch = patch(
+            "oais_platform.oais.tasks.archivematica.ArchivematicaInstances.get_instance_config",
+            return_value={
+                **AM_INSTANCES[0],
+                "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
+                "AIP_UPSTREAM_BASEPATH": self.aip_base_path,
+            },
+        )
+        self.instance_patch.start()
 
         self.archive = Archive.objects.create(
             recid="1",
@@ -36,14 +53,19 @@ class ArchivematicaStatusTests(APITestCase):
             archive=self.archive,
             step_name=StepName.ARCHIVE,
             input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
-            output_data_json={"package_uuid": "5678"},
+            output_data_json={
+                "package_uuid": "5678",
+                "transfer_sip_path": self.transfer_sip_path,
+            },
         )
 
         # simulate archivematica step started
         self.step.set_start_date()
 
     def tearDown(self):
+        self.instance_patch.stop()
         self.transfer_source_patch.stop()
+        self.tmpdir.cleanup()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_package_details")
@@ -167,7 +189,13 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_completed_uuid_not_found_retry_limit(
         self, get_unit_status, get_package_details
     ):
-        self.step.set_output_data({"package_retry": 5, "package_uuid": 5678})
+        self.step.set_output_data(
+            {
+                "package_retry": 5,
+                "package_uuid": 5678,
+                "transfer_sip_path": self.transfer_sip_path,
+            }
+        )
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Remove the processing directory",
@@ -653,7 +681,12 @@ class ArchivematicaStatusTests(APITestCase):
         create_retry_step.assert_not_called()
 
     def test_am_status_no_package_uuid(self):
-        self.step.set_output_data({"package_uuid": None})
+        self.step.set_output_data(
+            {
+                "package_uuid": None,
+                "transfer_sip_path": self.transfer_sip_path,
+            }
+        )
         check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
