@@ -98,7 +98,20 @@ def archivematica(self, step_id):
     )
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
-    am = get_am_client(am_instance_config)
+    try:
+        am = get_am_client(am_instance_config)
+    except Exception as e:
+        logger.error(
+            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {current_step.id} for Archive: {archive.id}: {str(e)}"
+        )
+        set_and_return_error(
+            current_step,
+            {
+                "status": 1,
+                "errormsg": str(e),
+                "archivematica_instance": am_instance_config["AM_INSTANCE"],
+            },
+        )
     am.transfer_directory = archivematica_dst
     am.transfer_name = get_transfer_name(archive, current_step)
 
@@ -199,7 +212,20 @@ def check_am_status(self, step_id):
         step.input_data_json.get("archivematica_instance")
     )
 
-    am = get_am_client(am_instance_config)
+    try:
+        am = get_am_client(am_instance_config)
+    except Exception as e:
+        logger.error(
+            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {step.id}: {str(e)}"
+        )
+        set_and_return_error(
+            step,
+            {
+                "status": 1,
+                "errormsg": str(e),
+                "archivematica_instance": am_instance_config["AM_INSTANCE"],
+            },
+        )
     uuid = step.output_data_json.get("package_uuid", None)
 
     try:
