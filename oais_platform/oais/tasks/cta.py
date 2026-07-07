@@ -210,11 +210,15 @@ def _check_in_progress_jobs(self):
             try:
                 cta_file_path = _get_cta_path(step)
             except ValueError as e:
-                return set_and_return_error(
-                    step,
-                    {"status": 1, "errormsg": str(e)},
-                    failure_type=StepFailureType.MISSING_INPUT_DATA,
+                result = {"status": 1}
+                if step.output_data_json.get("artifact"):
+                    result["artifact"] = step.output_data_json["artifact"]
+                result["message"] = str(e)
+                set_and_return_error(
+                    step, result, failure_type=StepFailureType.PATH_NOT_FOUND
                 )
+                failed_job_count += 1
+                continue
 
             _handle_successful_fts_job(
                 self, step.id, step.archive.id, job["job_id"], cta_file_path
