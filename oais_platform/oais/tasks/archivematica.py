@@ -581,25 +581,16 @@ def get_am_failure_type_from_failed_job(job):
             return StepFailureType.AM_JOB_FAILED_OTHER
 
 
-def _cleanup_transfer_sip_path(step, am_instance_config, transfer_sip_path=None):
+def _cleanup_transfer_sip_path(step, transfer_sip_path=None):
+
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.input_data.json.get("archivematica_instance")
+    )
+
     if not transfer_sip_path:
         transfer_sip_path = step.output_data_json.get("transfer_sip_path")
 
-    sip_base_path = Path(am_instance_config["SIP_UPSTREAM_BASEPATH"]).resolve()
     transfer_sip_path = Path(transfer_sip_path).resolve()
-
-    try:
-        transfer_sip_path.relative_to(sip_base_path)
-    except ValueError:
-        logger.error(
-            "Refusing to clean Archivematica transfer path outside "
-            f"SIP upstream base path: {transfer_sip_path}"
-        )
-        return
-
-    if transfer_sip_path == sip_base_path:
-        logger.error("Refusing to clean Archivematica SIP upstream base path")
-        return
 
     if not transfer_sip_path.exists():
         logger.info(
@@ -610,7 +601,11 @@ def _cleanup_transfer_sip_path(step, am_instance_config, transfer_sip_path=None)
 
     try:
         shutil.rmtree(transfer_sip_path)
-        cleanup_empty_path(transfer_sip_path.parent, sip_base_path, step.archive.source)
+        cleanup_empty_path(
+            transfer_sip_path.parent,
+            am_instance_config["SIP_UPSTREAM_BASEPATH"],
+            step.archive.source,
+        )
         logger.info(
             f"Cleaned Archivematica transfer path for step {step.id}: {transfer_sip_path}"
         )
