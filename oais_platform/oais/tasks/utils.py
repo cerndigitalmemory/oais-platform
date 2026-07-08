@@ -60,7 +60,9 @@ def create_path_artifact(name, path, localpath):
     }
 
 
-def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
+def set_and_return_error(
+    step, errormsg=None, output_data={}, status=None, extra_log=None, failure_type=None
+):
     """
     Set the step as failed and return the error message
     """
@@ -70,14 +72,15 @@ def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
     step.set_finish_date()
-    if type(errormsg) is dict:
-        step.set_output_data(errormsg)
-        return_value = errormsg
-    else:
-        return_value = {"status": 1, "errormsg": errormsg}
-        step.set_output_data(return_value)
-        logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-    return return_value
+    if status is not None:
+        output_data["status"] = status
+    elif "status" not in output_data:
+        output_data["status"] = 1
+    if errormsg:
+        output_data["errormsg"] = errormsg
+        logger.error(str(errormsg) + (f" {extra_log}" if extra_log else ""))
+    step.set_output_data(output_data)
+    return output_data
 
 
 def remove_periodic_task_on_failure(task_name, step, output_data, failure_type=None):
