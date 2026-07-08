@@ -435,7 +435,7 @@ def resource_check(task, current_step, archive):
             return 0
 
 
-def get_am_client(step: Step):
+def get_am_client(step):
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
         step.input_data_json.get("archivematica_instance")
