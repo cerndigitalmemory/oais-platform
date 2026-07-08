@@ -107,9 +107,7 @@ def archivematica(self, step_id):
                     "transfer_sip_path": str(transfer_sip_path),
                 },
             )
-            _cleanup_transfer_sip_path(
-                current_step, am_instance_config, transfer_sip_path
-            )
+            _cleanup_transfer_sip_path(current_step, transfer_sip_path)
             return result
         else:
             current_step.set_output_data(
@@ -142,7 +140,7 @@ def archivematica(self, step_id):
             extra_log=f"HTTPError: {e}",
             failure_type=get_failure_type_from_status_code(e.request.status_code),
         )
-        _cleanup_transfer_sip_path(current_step, am_instance_config, transfer_sip_path)
+        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
         return result
     except Exception as e:
         errormsg = f"Error while archiving {current_step.id}: {str(e)}"
@@ -155,7 +153,7 @@ def archivematica(self, step_id):
                 "transfer_sip_path": str(transfer_sip_path),
             },
         )
-        _cleanup_transfer_sip_path(current_step, am_instance_config, transfer_sip_path)
+        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
         return result
 
 
@@ -173,7 +171,7 @@ def _create_sip_directory(current_step, archive, sip_base_path):
         )
         return False, transfer_sip_path, archivematica_dst
     except Exception as e:
-        _cleanup_transfer_sip_path(current_step, sip_base_path, transfer_sip_path)
+        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
         message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
         return (
             set_and_return_error(
@@ -311,7 +309,7 @@ def check_am_status(self, step_id):
                 status="FAILED",
                 failure_type=failure_type,
             )
-            _cleanup_transfer_sip_path(step, am_instance_config)
+            _cleanup_transfer_sip_path(step)
 
     elif status == "FAILED" or status == "REJECTED":
         if not am_status.get("errormsg", None):
@@ -330,7 +328,7 @@ def check_am_status(self, step_id):
         if failure_type == StepFailureType.TIMEOUT:
             am_status["retry"] = True
         set_and_return_error(step, output_data=am_status, failure_type=failure_type)
-        _cleanup_transfer_sip_path(step, am_instance_config)
+        _cleanup_transfer_sip_path(step)
 
     elif status == "USER_INPUT":
         # this should not be possible with the automated pipeline but it happens sometimes
@@ -344,7 +342,7 @@ def check_am_status(self, step_id):
             am_status,
             failure_type=StepFailureType.USER_INPUT_REQUIRED,
         )
-        _cleanup_transfer_sip_path(step, am_instance_config)
+        _cleanup_transfer_sip_path(step)
 
     elif status == "PROCESSING" or status == "COMPLETE":
         time_passed = (timezone.now() - step.start_date).total_seconds()
@@ -362,7 +360,7 @@ def check_am_status(self, step_id):
                 am_status,
                 failure_type=StepFailureType.TIMEOUT,
             )
-            _cleanup_transfer_sip_path(step, am_instance_config)
+            _cleanup_transfer_sip_path(step)
         else:
             step.set_output_data(am_status)
             step.set_status(Status.IN_PROGRESS)
@@ -581,10 +579,6 @@ def get_am_failure_type_from_failed_job(job):
 
 def _cleanup_transfer_sip_path(step, transfer_sip_path=None):
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data.json.get("archivematica_instance")
-    )
-
     if not transfer_sip_path:
         transfer_sip_path = step.output_data_json.get("transfer_sip_path")
 
@@ -597,11 +591,16 @@ def _cleanup_transfer_sip_path(step, transfer_sip_path=None):
         )
         return
 
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.input_data_json.get("archivematica_instance")
+    )
+    sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
+
     try:
         shutil.rmtree(transfer_sip_path)
         cleanup_empty_path(
             transfer_sip_path.parent,
-            am_instance_config["SIP_UPSTREAM_BASEPATH"],
+            sip_base_path,
             step.archive.source,
         )
         logger.info(
@@ -669,7 +668,7 @@ def handle_completed_am_package(self, am, am_instance_config, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            _cleanup_transfer_sip_path(step, am_instance_config)
+            _cleanup_transfer_sip_path(step)
         else:
             finalize(
                 self=self,
@@ -681,7 +680,7 @@ def handle_completed_am_package(self, am, am_instance_config, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            _cleanup_transfer_sip_path(step, am_instance_config)
+            _cleanup_transfer_sip_path(step)
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
