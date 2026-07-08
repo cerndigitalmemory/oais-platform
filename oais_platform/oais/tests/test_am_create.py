@@ -73,7 +73,7 @@ class ArchivematicaCreateTests(APITestCase):
 
         with patch(
             "oais_platform.oais.tasks.archivematica.get_am_client",
-            return_value=fake_am,
+            return_value=(False, fake_am),
         ):
             result = archivematica.apply(args=[self.step.id])
 
