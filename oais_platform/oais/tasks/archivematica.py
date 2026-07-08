@@ -769,7 +769,7 @@ def start_am_transfers(self, chord_results=None):
 
     submitted_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
-        status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
+        status__in=[Status.ASSIGNED, Status.IN_PROGRESS, Status.SUBMITTED],
     )
 
     # Calculate & determine capacity per Archivematica instance
@@ -792,13 +792,36 @@ def start_am_transfers(self, chord_results=None):
         logger.info("Maximum number of Archivematica steps currently in progress.")
         returnarchivematica_instance
 
-    waiting_steps = Step.objects.filter(
+    waiting_assigned_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
         status=Status.WAITING,
-        archive__last_step=models.F(
-            "id"
-        ),  # It is the last step of the archive, not in pipeline
+        archive__last_step=models.F("id"),
+        input_data_json__has_key="archivematica_instance",
     ).order_by("create_date")[: sum(am_instance_task_capacity.values())]
+
+    if waiting_assigned_steps.exists():
+        for step in waiting_assigned_steps:
+            am_instance = step.input_data_json.get("archivematica_instance")
+            if am_instance not in am_instance_task_capacity:
+                continue
+            assign_and_start_archivematica_step(
+                step, am_instance, am_instance_task_capacity
+            )
+
+    else:
+        logger.info("No assinged waiting Archivematica steps to start")
+
+    waiting_steps = (
+        Step.objects.filter(
+            step_type__name=StepName.ARCHIVE,
+            status=Status.WAITING,
+            archive__last_step=models.F(
+                "id"
+            ),  # It is the last step of the archive, not in pipeline
+        )
+        .exclude(input_data_json__has_key="archivematica_instance")
+        .order_by("create_date")[: sum(am_instance_task_capacity.values())]
+    )
 
     if not waiting_steps.exists():
         logger.info("No waiting Archivematica steps to start")
@@ -807,19 +830,19 @@ def start_am_transfers(self, chord_results=None):
     logger.info(f"Starting {waiting_steps.count()} waiting Archivematica steps to run.")
 
     for step in waiting_steps:
-        if not step.input_data_json.get("archivematica_instance", None):
-            am_instance = get_next_am_instance(am_instance_task_capacity)
-            decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
-            step.set_input_data_field("archivematica_instance", am_instance)
-            step.archive.set_archivematica_instance(am_instance)
-            archivematica.apply_async(args=[step.id])
-        else:
-            # When archivematica instance is predefined, only remove it from the capacity
-            am_instance = step.input_data_json.get("archivematica_instance")
-            if am_instance in am_instance_task_capacity:
-                decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
-                step.archive.set_archivematica_instance(am_instance)
-                archivematica.apply_async(args=[step.id])
+        am_instance = get_next_am_instance(am_instance_task_capacity)
+        assign_and_start_archivematica_step(
+            step, am_instance, am_instance_task_capacity
+        )
+
+
+def assign_and_start_archivematica_step(step, am_instance, am_instance_task_capacity):
+    decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
+    if step.input_data_json.get("archivematica_instance") != am_instance:
+        step.set_input_data_field("archivematica_instance", am_instance)
+    step.archive.set_archivematica_instance(am_instance)
+    step.set_status(Status.ASSIGNED)
+    archivematica.apply_async(args=[step.id])
 
 
 def get_next_am_instance(am_instance_task_capacity):
