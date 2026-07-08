@@ -101,9 +101,8 @@ def archivematica(self, step_id):
             message = f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}"
             result = set_and_return_error(
                 current_step,
+                errormsg,
                 {
-                    "status": 1,
-                    "errormsg": errormsg,
                     "message": message,
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                     "transfer_sip_path": str(transfer_sip_path),
@@ -129,16 +128,15 @@ def archivematica(self, step_id):
             current_step.set_task(self.request.id)
             return current_step.output_data_json
     except requests.HTTPError as e:
-        message = (
+        errormsg = (
             f"Error while archiving {current_step.id}: status code "
             f"{e.request.status_code}."
         )
         result = set_and_return_error(
             current_step,
+            errormsg,
             {
-                "status": 1,
-                "errormsg": message,
-                "message": message,
+                "message": errormsg,
                 "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 "transfer_sip_path": str(transfer_sip_path),
             },
@@ -148,13 +146,12 @@ def archivematica(self, step_id):
         _cleanup_transfer_sip_path(current_step, am_instance_config, transfer_sip_path)
         return result
     except Exception as e:
-        message = f"Error while archiving {current_step.id}: {str(e)}"
+        errormsg = f"Error while archiving {current_step.id}: {str(e)}"
         result = set_and_return_error(
             current_step,
+            errormsg,
             {
-                "status": 1,
-                "errormsg": message,
-                "message": message,
+                "message": errormsg,
                 "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 "transfer_sip_path": str(transfer_sip_path),
             },
@@ -182,9 +179,8 @@ def _create_sip_directory(current_step, archive, sip_base_path):
         return (
             set_and_return_error(
                 current_step,
+                str(e),
                 {
-                    "status": 1,
-                    "errormsg": str(e),
                     "message": message,
                     "archivematica_instance": current_step.input_data_json.get(
                         "archivematica_instance"
@@ -306,14 +302,14 @@ def check_am_status(self, step_id):
                 failure_type = StepFailureType.PACKAGE_NOT_FOUND
             set_and_return_error(
                 step,
+                str(e),
                 {
-                    "status": "FAILED",
-                    "errormsg": str(e),
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                     "transfer_sip_path": step.output_data_json.get(
                         "transfer_sip_path", None
                     ),
                 },
+                status="FAILED",
                 failure_type=failure_type,
             )
             _cleanup_transfer_sip_path(step, am_instance_config)
@@ -334,7 +330,7 @@ def check_am_status(self, step_id):
             am_status["retry"] = True
         if failure_type == StepFailureType.TIMEOUT:
             am_status["retry"] = True
-        set_and_return_error(step, am_status, failure_type=failure_type)
+        set_and_return_error(step, output_data=am_status, failure_type=failure_type)
         _cleanup_transfer_sip_path(step, am_instance_config)
 
     elif status == "USER_INPUT":
@@ -342,10 +338,12 @@ def check_am_status(self, step_id):
         logger.warning(
             f"Package requires user input for step {step.id} - automatic pipeline failed"
         )
-        am_status["errormsg"] = "Error: Archivematica requires user input."
         am_status["retry"] = True
         set_and_return_error(
-            step, am_status, failure_type=StepFailureType.USER_INPUT_REQUIRED
+            step,
+            "Error: Archivematica requires user input.",
+            am_status,
+            failure_type=StepFailureType.USER_INPUT_REQUIRED,
         )
         _cleanup_transfer_sip_path(step, am_instance_config)
 
@@ -355,16 +353,14 @@ def check_am_status(self, step_id):
             logger.info(
                 f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - setting step {step.id} to failed"
             )
-            am_status["errormsg"] = (
-                "Error: Archivematica processing time limit reached."
+            am_status["archivematica_instance"] = step.input_data_json.get(
+                "archivematica_instance"
             )
             am_status["retry"] = True
             set_and_return_error(
                 step,
-                {
-                    **am_status,
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                },
+                "Error: Archivematica processing time limit reached.",
+                am_status,
                 failure_type=StepFailureType.TIMEOUT,
             )
             _cleanup_transfer_sip_path(step, am_instance_config)
@@ -415,10 +411,7 @@ def resource_check(task, current_step, archive):
     if archive.sip_size > archive_step_type.size_limit_bytes:
         return set_and_return_error(
             current_step,
-            {
-                "status": 1,
-                "errormsg": f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
-            },
+            f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
             failure_type=StepFailureType.SIZE_EXCEEDED,
         )
     with transaction.atomic():
@@ -469,9 +462,8 @@ def get_am_client(step: Step):
         return (
             set_and_return_error(
                 step,
+                str(e),
                 {
-                    "status": 1,
-                    "errormsg": str(e),
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 },
             ),
