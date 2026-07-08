@@ -67,50 +67,19 @@ def archivematica(self, step_id):
         assigned_am_instance
     )
 
-    path_to_sip = Path(archive.path_to_sip)
-    sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
-    transfer_source_path = Path(generate_directory_structure(sip_base_path, archive))
-    transfer_sip_path = transfer_source_path / path_to_sip.name
-    try:
-        if not transfer_sip_path.exists():
-            shutil.copytree(path_to_sip, transfer_sip_path)
-    except Exception as e:
-        _cleanup_transfer_sip_path(current_step, am_instance_config, transfer_sip_path)
-        message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
-        return set_and_return_error(
-            current_step,
-            {
-                "status": 1,
-                "errormsg": str(e),
-                "message": message,
-                "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                "transfer_sip_path": str(transfer_sip_path),
-            },
-        )
-
-    logger.info(f"Starting archiving {path_to_sip}")
-
-    # Path to SIP inside Archivematica transfer source directory
-    archivematica_dst = os.path.join(
-        "/",
-        transfer_sip_path.relative_to(sip_base_path),
+    error, transfer_sip_path, archivematica_dst = _create_sip_directory(
+        current_step, archive, am_instance_config["SIP_UPSTREAM_BASEPATH"]
     )
+    if error:
+        return error
+
+    logger.info(f"Starting archiving {archive.path_to_sip}")
 
     # Set up the AMClient to interact with the AM configuration provided in the settings
-    try:
-        am = get_am_client(am_instance_config)
-    except Exception as e:
-        logger.error(
-            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {current_step.id} for Archive: {archive.id}: {str(e)}"
-        )
-        set_and_return_error(
-            current_step,
-            {
-                "status": 1,
-                "errormsg": str(e),
-                "archivematica_instance": am_instance_config["AM_INSTANCE"],
-            },
-        )
+    error, am = get_am_client(current_step)
+    if error:
+        return error
+
     am.transfer_directory = archivematica_dst
     am.transfer_name = get_transfer_name(archive, current_step)
 
@@ -193,6 +162,40 @@ def archivematica(self, step_id):
         return result
 
 
+def _create_sip_directory(current_step, archive, sip_base_path):
+    path_to_sip = Path(archive.path_to_sip)
+    transfer_source_path = Path(generate_directory_structure(sip_base_path, archive))
+    transfer_sip_path = transfer_source_path / path_to_sip.name
+    try:
+        if not transfer_sip_path.exists():
+            shutil.copytree(path_to_sip, transfer_sip_path)
+        # Path to SIP inside Archivematica transfer source directory
+        archivematica_dst = os.path.join(
+            "/",
+            transfer_sip_path.relative_to(sip_base_path),
+        )
+        return False, transfer_sip_path, archivematica_dst
+    except Exception as e:
+        _cleanup_transfer_sip_path(current_step, sip_base_path, transfer_sip_path)
+        message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
+        return (
+            set_and_return_error(
+                current_step,
+                {
+                    "status": 1,
+                    "errormsg": str(e),
+                    "message": message,
+                    "archivematica_instance": current_step.input_data_json.get(
+                        "archivematica_instance"
+                    ),
+                    "transfer_sip_path": str(transfer_sip_path),
+                },
+            ),
+            None,
+            None,
+        )
+
+
 @shared_task(
     name="check_am_status",
     bind=True,
@@ -210,20 +213,10 @@ def check_am_status(self, step_id):
         step.input_data_json.get("archivematica_instance")
     )
 
-    try:
-        am = get_am_client(am_instance_config)
-    except Exception as e:
-        logger.error(
-            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {step.id}: {str(e)}"
-        )
-        set_and_return_error(
-            step,
-            {
-                "status": 1,
-                "errormsg": str(e),
-                "archivematica_instance": am_instance_config["AM_INSTANCE"],
-            },
-        )
+    error, am = get_am_client(step)
+    if error:
+        return error
+
     uuid = step.output_data_json.get("package_uuid", None)
 
     try:
@@ -447,20 +440,41 @@ def resource_check(task, current_step, archive):
             return 0
 
 
-def get_am_client(am_instance_config):
-    am = AMClient()
-    am.am_url = am_instance_config["AM_URL"]
-    am.am_user_name = am_instance_config["AM_USERNAME"]
-    am.am_api_key = am_instance_config["AM_API_KEY"]
-    am.ss_url = am_instance_config["AM_SS_URL"]
-    am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
-    am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
-    am.processing_config = "automated"
-    if not am_instance_config.get("AM_TRANSFER_SOURCE"):
-        am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
-    am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
+def get_am_client(step: Step):
 
-    return am
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.input_data_json.get("archivematica_instance")
+    )
+
+    am = AMClient()
+    try:
+        am.am_url = am_instance_config["AM_URL"]
+        am.am_user_name = am_instance_config["AM_USERNAME"]
+        am.am_api_key = am_instance_config["AM_API_KEY"]
+        am.ss_url = am_instance_config["AM_SS_URL"]
+        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
+        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+        am.processing_config = "automated"
+        if not am_instance_config.get("AM_TRANSFER_SOURCE"):
+            am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
+        am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
+        return False, am
+    except Exception as e:
+        logger.error(
+            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {step.id} for Archive: {step.archive.id}: {str(e)}"
+        )
+
+        return (
+            set_and_return_error(
+                step,
+                {
+                    "status": 1,
+                    "errormsg": str(e),
+                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                },
+            ),
+            None,
+        )
 
 
 def get_transfer_source(am):
