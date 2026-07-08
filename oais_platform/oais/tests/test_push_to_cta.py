@@ -34,6 +34,7 @@ class PushToCTATests(APITestCase):
         )
         self.archive = Archive.objects.create(
             path_to_aip=path_to_aip,
+            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,

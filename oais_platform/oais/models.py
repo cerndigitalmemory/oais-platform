@@ -130,6 +130,7 @@ class Archive(models.Model):
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
     sip_size = models.BigIntegerField(default=0)
     original_file_size = models.BigIntegerField(default=0)
+    archivematica_instance = models.CharField(max_length=50, null=True)
     # Timestamp from the upstream source
     version_timestamp = models.DateTimeField(default=None, null=True)
 
@@ -190,6 +191,10 @@ class Archive(models.Model):
 
     def set_original_file_size(self, size):
         self.original_file_size = size
+        self.save()
+
+    def set_archivematica_instance(self, archivematica_instance):
+        self.archivematica_instance = archivematica_instance
         self.save()
 
     def save(self, *args, **kwargs):
