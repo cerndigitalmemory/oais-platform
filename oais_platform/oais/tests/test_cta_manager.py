@@ -18,6 +18,7 @@ class CTAManagerTests(APITestCase):
 
         self.archive = Archive.objects.create(
             path_to_aip=f"{AM_INSTANCES[0]['AIP_UPSTREAM_BASEPATH']}/test/path/filename.zip",
+            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,
