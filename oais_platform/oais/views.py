@@ -1102,7 +1102,10 @@ def upload_file(request):
         initiated_by_user=request.user,
     )
     archive.set_last_step(step.id)
-
+    error = False
+    error_msg = ""
+    user_message = "Error occurred while processing the file, please try again or contact the admins."
+    output_data = {}
     try:
         original_filename = sanitize_filename(os.path.basename(file.name))
         tmp_dir = os.path.join(LOCAL_UPLOAD_PATH, recid)
@@ -1111,25 +1114,23 @@ def upload_file(request):
         destination_path = os.path.join(tmp_dir, original_filename)
         shutil.move(file_path, destination_path)
     except OSError as e:
+        error = True
         if e.errno == errno.ENOSPC:
             error_msg = f"Upload storage is full. Cannot complete file move: {e}"
             user_message = "Upload storage is full. Please contact the admins."
             step.set_failure_type(StepFailureType.STORAGE_FULL)
+            output_data["message"] = user_message
         else:
             error_msg = (
                 f"An operating system error occurred while processing the file: {e}"
             )
-            user_message = "Error occurred while processing the file, please try again or contact the admins."
-        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
-        set_and_return_error(step, error)
-        raise InternalServerError(user_message)
     except Exception as e:
+        error = True
         error_msg = f"Error occurred while processing file: {e}"
-        error = {"status": 1, "errormsg": error_msg, "archive": archive.id}
-        set_and_return_error(step, error)
-        raise InternalServerError(
-            "Error occurred while processing the file, please try again or contact the admins."
-        )
+        output_data["archive"] = archive.id
+    if error:
+        set_and_return_error(step, error_msg, output_data)
+        raise InternalServerError(user_message)
 
     step.set_input_data(
         {
