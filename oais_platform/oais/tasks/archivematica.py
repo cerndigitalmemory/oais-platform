@@ -290,7 +290,7 @@ def check_am_status(self, step_id):
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
         try:
-            handle_completed_am_package(self, am, am_instance_config, step, am_status)
+            handle_completed_am_package(self, am, step, am_status)
         except Exception as e:
             logger.warning(
                 f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
@@ -630,13 +630,16 @@ def get_transfer_name(archive, step):
     return transfer_name
 
 
-def handle_completed_am_package(self, am, am_instance_config, step, am_status):
+def handle_completed_am_package(self, am, step, am_status):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
     uuid = am_status["uuid"]
     am.package_uuid = uuid
     aip = am.get_package_details()
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.input_data_json.get("archivematica_instance")
+    )
     if type(aip) is dict:
         aip_path = aip["current_path"]
         aip_uuid = aip["uuid"]
@@ -787,7 +790,7 @@ def start_am_transfers(self, chord_results=None):
 
     if len(am_instance_task_capacity) <= 0:
         logger.info("Maximum number of Archivematica steps currently in progress.")
-        return
+        returnarchivematica_instance
 
     waiting_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
@@ -808,12 +811,14 @@ def start_am_transfers(self, chord_results=None):
             am_instance = get_next_am_instance(am_instance_task_capacity)
             decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
             step.set_input_data_field("archivematica_instance", am_instance)
+            step.archive.set_archivematica_instance(am_instance)
             archivematica.apply_async(args=[step.id])
         else:
             # When archivematica instance is predefined, only remove it from the capacity
             am_instance = step.input_data_json.get("archivematica_instance")
             if am_instance in am_instance_task_capacity:
                 decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
+                step.archive.set_archivematica_instance(am_instance)
                 archivematica.apply_async(args=[step.id])
 
 

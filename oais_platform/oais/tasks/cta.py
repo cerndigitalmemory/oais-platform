@@ -89,7 +89,7 @@ def push_to_cta(self, archive_id, step_id):
         return
 
     try:
-        cta_file_path = _get_cta_path(step)
+        cta_file_path = _get_cta_path(step.archive)
     except ValueError as e:
         return set_and_return_error(
             step,
@@ -156,24 +156,24 @@ def fts_delegate(self):
         logger.error(e)
 
 
-def _get_cta_path(step):
+def _get_cta_path(archive):
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
+        archive.archivematica_instance
     )
     if not am_instance_config:
         raise ValueError(
-            f"Unable to retrieve Archivematica config for: {step.input_data_json.get('archivematica_instance')}"
+            f"Unable to retrieve Archivematica config for: {archive.archivematica_instance}"
         )
     try:
         return os.path.join(
             "aips",
-            Path(step.archive.path_to_aip).relative_to(
+            Path(archive.path_to_aip).relative_to(
                 am_instance_config["AIP_UPSTREAM_BASEPATH"]
             ),
         )
     except ValueError:
-        logger.warning(f"Unusual AIP path {step.archive.path_to_aip}")
-        return os.path.join("aips", os.path.basename(step.archive.path_to_aip))
+        logger.warning(f"Unusual AIP path {archive.path_to_aip}")
+        return os.path.join("aips", os.path.basename(archive.path_to_aip))
 
 
 def _check_in_progress_jobs(self):
@@ -210,7 +210,7 @@ def _check_in_progress_jobs(self):
 
         if job["job_state"] == "FINISHED":
             try:
-                cta_file_path = _get_cta_path(step)
+                cta_file_path = _get_cta_path(step.archive)
             except ValueError as e:
                 output_data = {}
                 if step.output_data_json.get("artifact"):
