@@ -215,9 +215,9 @@ def _check_in_progress_jobs(self):
                 output_data = {}
                 if step.output_data_json.get("artifact"):
                     output_data["artifact"] = step.output_data_json["artifact"]
-                output_data["message"] = str(e)
                 set_and_return_error(
                     step,
+                    str(e),
                     output_data=output_data,
                     failure_type=StepFailureType.PATH_NOT_FOUND,
                 )
