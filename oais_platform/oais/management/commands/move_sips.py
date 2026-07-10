@@ -42,7 +42,6 @@ class Command(BaseCommand):
                 archive.archivematica_instance
             )
             folder_name = os.path.basename(current_path)
-<<<<<<< HEAD
             try:
                 new_structure = generate_directory_structure(
                     SIP_STORE_BASEPATH, archive
@@ -54,11 +53,6 @@ class Command(BaseCommand):
                     )
                 )
                 continue
-=======
-            new_structure = generate_directory_structure(
-                am_instance_config["SIP_UPSTREAM_BASEPATH"], archive
-            )
->>>>>>> 9f62afe (Update tasks & view with new configuration structure)
             new_path = os.path.join(new_structure, folder_name)
 
             if current_path == new_path:
