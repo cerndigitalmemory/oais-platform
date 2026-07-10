@@ -139,6 +139,11 @@ def _start_archiving(
         f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']} for Archive: {step.archive.id}"
     )
     try:
+        result = None
+        message = None
+        errormsg = None
+        failure_type = None
+        extra_log = None
         package = am.create_package()
         if not isinstance(package, (str, int)) or package not in error_codes:
             step.set_output_data(
@@ -165,48 +170,30 @@ def _start_archiving(
             """
             errormsg = error_lookup(package)
             message = f"Error while archiving {step.id}. AM create returned error {package}: {errormsg}"
-            result = set_and_return_error(
-                step,
-                errormsg,
-                {
-                    "message": message,
-                    "archivematica_instance": step.archive.archivematica_instance,
-                    "transfer_sip_path": str(transfer_sip_path),
-                },
-            )
-            return result, True
+
     except requests.HTTPError as e:
         errormsg = (
             f"Error while archiving {step.id}: status code " f"{e.request.status_code}."
         )
-        result = set_and_return_error(
-            step,
-            errormsg,
-            {
-                "message": errormsg,
-                "archivematica_instance": step.input_data_json.get(
-                    "archivematica_instance"
-                ),
-                "transfer_sip_path": str(transfer_sip_path),
-            },
-            extra_log=f"HTTPError: {e}",
-            failure_type=get_failure_type_from_status_code(e.request.status_code),
-        )
-        return result, True
+        extra_log = (f"HTTPError: {e}",)
+        failure_type = (get_failure_type_from_status_code(e.request.status_code),)
     except Exception as e:
         errormsg = f"Error while archiving {step.id}: {str(e)}"
-        result = set_and_return_error(
-            step,
-            errormsg,
-            {
-                "message": errormsg,
-                "archivematica_instance": step.input_data_json.get(
-                    "archivematica_instance"
-                ),
-                "transfer_sip_path": str(transfer_sip_path),
-            },
-        )
-        return result, True
+
+    result = set_and_return_error(
+        step,
+        errormsg,
+        {
+            "message": message,
+            "archivematica_instance": step.input_data_json.get(
+                "archivematica_instance"
+            ),
+            "transfer_sip_path": str(transfer_sip_path),
+        },
+        extra_log=extra_log,
+        failure_type=failure_type,
+    )
+    return result, True
 
 
 @shared_task(
@@ -808,7 +795,7 @@ def start_am_transfers(self, chord_results=None):
     for instance in AM_INSTANCES:
         instance_capacity = (
             step_type.concurrency_limit
-            - submitted_count_by_instance[instance["AM_INSTANCE"]]
+            - submitted_count_by_instance.get(instance["AM_INSTANCE"], 0)
         )
         if instance_capacity > 0:
             am_instance_task_capacity[instance["AM_INSTANCE"]] = instance_capacity
