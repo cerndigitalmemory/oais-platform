@@ -9,6 +9,7 @@ from celery import chord, shared_task, states
 from celery.utils.log import get_task_logger
 from django.db import models, transaction
 from django.utils import timezone
+from django.db.models import Count
 
 
 from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
@@ -769,9 +770,15 @@ def start_am_transfers(self, chord_results=None):
         logger.info("Archivematica step type is currently disabled.")
         return
 
-    submitted_steps = Step.objects.filter(
-        step_type__name=StepName.ARCHIVE,
-        status__in=[Status.ASSIGNED, Status.IN_PROGRESS, Status.SUBMITTED],
+    submitted_count_by_instance = dict(
+        Step.objects.filter(
+            step_type__name=StepName.ARCHIVE,
+            status__in=[Status.ASSIGNED, Status.IN_PROGRESS, Status.SUBMITTED],
+            input_data_json__has_key="archivematica_instance",
+        )
+        .values("input_data_json__archivematica_instance")
+        .annotate(count=Count("id"))
+        .values_list("input_data_json__archivematica_instance", "count")
     )
 
     # Calculate & determine capacity per Archivematica instance
@@ -780,9 +787,7 @@ def start_am_transfers(self, chord_results=None):
     for instance in AM_INSTANCES:
         instance_capacity = (
             step_type.concurrency_limit
-            - submitted_steps.filter(
-                input_data_json__archivematica_instance=instance["AM_INSTANCE"]
-            ).count()
+            - submitted_count_by_instance[instance["AM_INSTANCE"]]
         )
         if instance_capacity > 0:
             am_instance_task_capacity[instance["AM_INSTANCE"]] = instance_capacity
