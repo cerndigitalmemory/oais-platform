@@ -506,7 +506,7 @@ def get_am_client(step):
         am.ss_url = am_instance_config["AM_SS_URL"]
         am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
         am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
-        am.processing_config = "automated"
+        am.processing_configneeds = "automated"
         if not am_instance_config.get("AM_TRANSFER_SOURCE"):
             am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
         am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
