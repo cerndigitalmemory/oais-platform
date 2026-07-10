@@ -545,6 +545,7 @@ class ArchivematicaStatusTests(APITestCase):
             archive=self.archive,
             step_name=StepName.ARCHIVE,
             status=Status.COMPLETED,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
         self.step.save()
 
