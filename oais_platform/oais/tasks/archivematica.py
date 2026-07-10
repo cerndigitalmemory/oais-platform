@@ -8,8 +8,8 @@ from amclient.errors import error_codes, error_lookup
 from celery import chord, shared_task, states
 from celery.utils.log import get_task_logger
 from django.db import models, transaction
-from django.utils import timezone
 from django.db.models import Count
+from django.utils import timezone
 
 
 from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
@@ -679,7 +679,7 @@ def get_transfer_name(archive, step):
     return transfer_name
 
 
-def handle_completed_am_package(self, am, step, am_status):
+def handle_completed_am_package(celery_task, am, step, am_status):
     """
     Archivematica returns the uuid of the package, with this the storage service can be queried to get the AIP location.
     """
@@ -723,7 +723,7 @@ def handle_completed_am_package(self, am, step, am_status):
             _cleanup_transfer_sip_path(step)
         else:
             finalize(
-                self=self,
+                self=celery_task,
                 current_status=states.SUCCESS,
                 retval={"status": 0},
                 task_id=None,
