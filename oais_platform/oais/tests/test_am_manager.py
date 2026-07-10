@@ -116,10 +116,14 @@ class ArchivematicaManagerTests(APITestCase):
             source="test",
             source_url="",
             path_to_sip="basepath/sips/test_path3",
+            archivematica_instance=am_instances[0]["AM_INSTANCE"],
             sip_size=1000,
         )
         step3 = Step.objects.create(
-            archive=archive3, step_name=StepName.ARCHIVE, status=Status.WAITING
+            archive=archive3,
+            step_name=StepName.ARCHIVE,
+            status=Status.WAITING,
+            input_data_json={"archivematica_instance": am_instances[0]["AM_INSTANCE"]},
         )
         archive3.set_last_step(step3.id)
 
@@ -129,7 +133,7 @@ class ArchivematicaManagerTests(APITestCase):
             archive=self.archive,
             step_name=StepName.ARCHIVE,
             status=Status.IN_PROGRESS,
-            input_data_json={"archivematica_instance": "AM1"},
+            input_data_json={"archivematica_instance": am_instances[0]["AM_INSTANCE"]},
         )
         self.archive.set_last_step(self.step.id)
 
@@ -140,8 +144,8 @@ class ArchivematicaManagerTests(APITestCase):
         self.step2.refresh_from_db()
         step3.refresh_from_db()
         self.assertEqual(self.step.input_data_json["archivematica_instance"], "AM2")
-        self.assertEqual(self.step2.input_data_json["archivematica_instance"], "AM1")
-        self.assertEqual(step3.input_data_json["archivematica_instance"], "AM2")
+        self.assertEqual(self.step2.input_data_json["archivematica_instance"], "AM2")
+        self.assertEqual(step3.input_data_json["archivematica_instance"], "AM1")
         self.assertEqual(mock_archivematica.call_count, 3)
         in_progress_step.refresh_from_db()
         self.assertEqual(in_progress_step.status, Status.IN_PROGRESS)

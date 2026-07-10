@@ -176,7 +176,7 @@ def _start_archiving(
             f"Error while archiving {step.id}: status code " f"{e.request.status_code}."
         )
         extra_log = (f"HTTPError: {e}",)
-        failure_type = (get_failure_type_from_status_code(e.request.status_code),)
+        failure_type = get_failure_type_from_status_code(e.request.status_code)
     except Exception as e:
         errormsg = f"Error while archiving {step.id}: {str(e)}"
 
@@ -213,17 +213,58 @@ def check_am_status(self, step_id):
     if error:
         return error
 
+    am_status, failure_type = _get_am_status(am, step)
+    _handle_am_status(self, step, am, am_status, failure_type)
+    _handle_am_retry(step, am_status)
+
+    step.set_finish_date()
+
+
+def _handle_am_retry(step, am_status):
+    if not am_status.get("retry", False):
+        return
+
+    retry_count = 0
+    if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
+        retry_count = step.input_data_json.get("retry_count", 0)
+
+    am_config = ArchivematicaInstances.get_instance_config(
+        step.input_data_json.get("archivematica_instance")
+    )
+    if retry_count + 1 > am_config["AM_RETRY_LIMIT"]:
+        logger.warning("Max retries exceeded for failed Archivematica jobs.")
+        am_status["retry_count"] = retry_count
+        am_status["retry_limit_exceeded"] = True
+        am_status["retry"] = False
+    else:
+        am_status["retry_count"] = retry_count + 1
+        am_status["retry"] = True
+        logger.info(f"Creating Archivematica retry step for archive {step.archive.id}")
+        create_retry_step.apply_async(
+            args=(
+                step.archive.id,
+                step.initiated_by_user.id if step.initiated_by_user else None,
+                True,
+                StepName.ARCHIVE,
+            )
+        )
+
+    step.set_output_data(am_status)
+
+
+def _get_am_status(am, step):
+
     uuid = step.output_data_json.get("package_uuid", None)
 
     try:
         failure_type = None
         am_status = None
-        if uuid is None:
+        if uuid:
+            am_status = am.get_unit_status(uuid)
+            logger.info(f"Current unit status for {am_status}")
+        else:
             failure_type = StepFailureType.MISSING_OUTPUT_DATA
             raise ValueError("No package UUID found in step output data.")
-        else:
-            am_status = am.get_unit_status(uuid)
-        logger.info(f"Current unit status for {am_status}")
     except requests.HTTPError as e:
         logger.info(f"Error {e.response.status_code} for archivematica")
         failure_type = get_failure_type_from_status_code(e.response.status_code)
@@ -276,8 +317,6 @@ def check_am_status(self, step_id):
         # In any other case make task fail (Archivematica crashed or not responding)
         am_status = {"status": "FAILED", "errormsg": str(e)}
 
-    status = am_status["status"]
-    microservice = am_status.get("microservice", None)
     am_status["transfer_name"] = step.output_data_json.get("transfer_name", None)
     am_status["package_uuid"] = uuid
     am_status["transfer_sip_path"] = step.output_data_json.get(
@@ -286,88 +325,27 @@ def check_am_status(self, step_id):
     am_status["archivematica_instance"] = step.input_data_json.get(
         "archivematica_instance"
     )
+    return am_status, failure_type
 
-    logger.info(f"Status for {step_id} is: {status}")
 
+def _handle_am_status(celery_task, step, am, am_status, failure_type):
+
+    status = am_status["status"]
+    microservice = am_status.get("microservice", None)
+
+    logger.info(f"Status for {step.id} is: {status}")
+    error = False
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
-        try:
-            handle_completed_am_package(self, am, step, am_status)
-        except Exception as e:
-            logger.warning(
-                f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
-            )
-            if isinstance(e, MaxRetriesExceeded):
-                failure_type = StepFailureType.PACKAGE_NOT_FOUND
-            set_and_return_error(
-                step,
-                str(e),
-                {
-                    "archivematica_instance": step.input_data_json.get(
-                        "archivematica_instance"
-                    ),
-                    "transfer_sip_path": step.output_data_json.get(
-                        "transfer_sip_path", None
-                    ),
-                },
-                status="FAILED",
-                failure_type=failure_type,
-            )
-            _cleanup_transfer_sip_path(step)
-
-    elif status == "FAILED" or status == "REJECTED":
-        if not am_status.get("errormsg", None):
-            errors, failure_type = get_executed_jobs(am, uuid, check_for_failed=True)
-            ingest_uuid = am_status.get("uuid", None)
-            if ingest_uuid and ingest_uuid != uuid:
-                errors2, failure_type = get_executed_jobs(
-                    am, ingest_uuid, check_for_failed=True
-                )
-                errors.extend(errors2)
-            logger.warning(
-                f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
-            )
-            am_status["errormsg"] = errors
-            am_status["retry"] = True
-        if failure_type == StepFailureType.TIMEOUT:
-            am_status["retry"] = True
-        set_and_return_error(step, output_data=am_status, failure_type=failure_type)
-        _cleanup_transfer_sip_path(step)
-
+        error = _handle_complete_status(celery_task, step, am, am_status)
+    elif status in {"FAILED", "REJECTED"}:
+        error = True
+        _handle_failed_rejected_status(step, am, am_status, failure_type)
     elif status == "USER_INPUT":
-        # this should not be possible with the automated pipeline but it happens sometimes
-        logger.warning(
-            f"Package requires user input for step {step.id} - automatic pipeline failed"
-        )
-        am_status["retry"] = True
-        set_and_return_error(
-            step,
-            "Error: Archivematica requires user input.",
-            am_status,
-            failure_type=StepFailureType.USER_INPUT_REQUIRED,
-        )
-        _cleanup_transfer_sip_path(step)
-
+        error = True
+        _handle_user_input_status(step, am_status)
     elif status == "PROCESSING" or status == "COMPLETE":
-        time_passed = (timezone.now() - step.start_date).total_seconds()
-        if time_passed > 60 * AM_PROCESSING_TIME_LIMIT:  # Probably stuck in processing
-            logger.info(
-                f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - setting step {step.id} to failed"
-            )
-            am_status["archivematica_instance"] = step.input_data_json.get(
-                "archivematica_instance"
-            )
-            am_status["retry"] = True
-            set_and_return_error(
-                step,
-                "Error: Archivematica processing time limit reached.",
-                am_status,
-                failure_type=StepFailureType.TIMEOUT,
-            )
-            _cleanup_transfer_sip_path(step)
-        else:
-            step.set_output_data(am_status)
-            step.set_status(Status.IN_PROGRESS)
+        error = _handle_active_status(step, am_status)
     elif status == "WAITING":
         step.set_status(Status.SUBMITTED)
         step.set_output_data(am_status)
@@ -376,33 +354,93 @@ def check_am_status(self, step_id):
             f"Unknown status from Archivematica: {status}, for step {step.id}"
         )
         step.set_output_data(am_status)
+    if error:
+        _cleanup_transfer_sip_path(step)
 
-    if am_status.get("retry", False):
-        retry_count = 0
-        if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
-            retry_count = step.input_data_json.get("retry_count", 0)
-        if retry_count + 1 > am_instance_config["AM_RETRY_LIMIT"]:
-            logger.warning("Max retries exceeded for failed Archivematica jobs.")
-            am_status["retry_count"] = retry_count
-            am_status["retry_limit_exceeded"] = True
-            am_status["retry"] = False
-        else:
-            am_status["retry_count"] = retry_count + 1
-            am_status["retry"] = True
-            logger.info(
-                f"Creating Archivematica retry step for archive {step.archive.id}"
+
+def _handle_complete_status(celery_task, step, am, am_status):
+    try:
+        handle_completed_am_package(celery_task, am, step, am_status)
+        return False
+    except Exception as e:
+        failure_type = None
+        logger.warning(
+            f"Error while archiving {step.id}. Archivematica error while querying AIP details: {str(e)}"
+        )
+        if isinstance(e, MaxRetriesExceeded):
+            failure_type = StepFailureType.PACKAGE_NOT_FOUND
+        set_and_return_error(
+            step,
+            str(e),
+            {
+                "archivematica_instance": step.input_data_json.get(
+                    "archivematica_instance"
+                ),
+                "transfer_sip_path": step.output_data_json.get(
+                    "transfer_sip_path", None
+                ),
+            },
+            status="FAILED",
+            failure_type=failure_type,
+        )
+        return True
+
+
+def _handle_failed_rejected_status(step, am, am_status, failure_type):
+    uuid = am_status.get("package_uuid") or am_status.get("uuid")
+    if not am_status.get("errormsg", None):
+        errors, failure_type = get_executed_jobs(am, uuid, check_for_failed=True)
+        ingest_uuid = am_status.get("uuid", None)
+        if ingest_uuid and ingest_uuid != uuid:
+            errors2, failure_type = get_executed_jobs(
+                am, ingest_uuid, check_for_failed=True
             )
-            create_retry_step.apply_async(
-                args=(
-                    step.archive.id,
-                    step.initiated_by_user.id if step.initiated_by_user else None,
-                    True,
-                    StepName.ARCHIVE,
-                )
-            )
+            errors.extend(errors2)
+        logger.warning(
+            f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
+        )
+        am_status["errormsg"] = errors
+        am_status["retry"] = True
+    if failure_type == StepFailureType.TIMEOUT:
+        am_status["retry"] = True
+    set_and_return_error(step, output_data=am_status, failure_type=failure_type)
+
+
+def _handle_user_input_status(step, am_status):
+    # this should not be possible with the automated pipeline but it happens sometimes
+    logger.warning(
+        f"Package requires user input for step {step.id} - automatic pipeline failed"
+    )
+    am_status["retry"] = True
+    set_and_return_error(
+        step,
+        "Error: Archivematica requires user input.",
+        am_status,
+        failure_type=StepFailureType.USER_INPUT_REQUIRED,
+    )
+
+
+def _handle_active_status(step, am_status):
+    time_passed = (timezone.now() - step.start_date).total_seconds()
+    if time_passed < 60 * AM_PROCESSING_TIME_LIMIT:  # Probably stuck in processing
         step.set_output_data(am_status)
-    if step.status in TERMINAL_STATUSES:
-        step.set_finish_date()
+        step.set_status(Status.IN_PROGRESS)
+        return False
+    else:
+        logger.info(
+            f"Processing time limit reached ({AM_PROCESSING_TIME_LIMIT} mins) - setting step {step.id} to failed"
+        )
+        am_status["archivematica_instance"] = step.input_data_json.get(
+            "archivematica_instance"
+        )
+        am_status["retry"] = True
+        set_and_return_error(
+            step,
+            "Error: Archivematica processing time limit reached.",
+            am_status,
+            failure_type=StepFailureType.TIMEOUT,
+        )
+        return True
 
 
 def resource_check(task, current_step, archive):
@@ -456,7 +494,7 @@ def get_am_client(step):
         am.ss_url = am_instance_config["AM_SS_URL"]
         am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
         am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
-        am.processing_config = "automated"
+        am.processing_configneeds = "automated"
         if not am_instance_config.get("AM_TRANSFER_SOURCE"):
             am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
         am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
