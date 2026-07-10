@@ -55,107 +55,39 @@ def archivematica(self, step_id):
     if (res := resource_check(self, current_step, archive)) != 0:
         return res
 
-    # Get AM instance config or assign instance if not done yet
-    assigned_am_instance = current_step.input_data_json.get("archivematica_instance")
-    if not assigned_am_instance:
-        logger.info(
-            f"No Archivematica instance set for Archive Step: {current_step.id} for Archive: {archive.id}, returning step for instance assigment"
-        )
-        current_step.set_status(Status.WAITING)
-        return current_step.output_data_json
+    # Create AM client & create required directories and return important paths
+    error, am, transfer_sip_path, archivematica_dst = _setup_archiving(current_step)
+    if error:
+        return error
+
+    result, cleanup = _start_archiving(
+        self, current_step, am, transfer_sip_path, archivematica_dst
+    )
+    if cleanup:
+        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
+
+    return result
+
+
+def _setup_archiving(step):
+    # Get AM instance config or assign instance if get_am_clientnot done yet
+    error, am = get_am_client(step)
+    assigned_am_instance = step.input_data_json.get("archivematica_instance")
+    if error:
+        return error
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
         assigned_am_instance
     )
 
     error, transfer_sip_path, archivematica_dst = _create_sip_directory(
-        current_step, archive, am_instance_config["SIP_UPSTREAM_BASEPATH"]
+        step, step.archive, am_instance_config["SIP_UPSTREAM_BASEPATH"]
     )
-    if error:
-        return error
-
-    logger.info(f"Starting archiving {archive.path_to_sip}")
-
-    # Set up the AMClient to interact with the AM configuration provided in the settings
-    error, am = get_am_client(current_step)
-    if error:
-        return error
-
     am.transfer_directory = archivematica_dst
-    am.transfer_name = get_transfer_name(archive, current_step)
-
-    # Create archivematica package
-    logger.info(
-        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']} for Archive: {archive.id}"
-    )
-
-    try:
-        package = am.create_package()
-        if isinstance(package, (str, int)) and package in error_codes:
-            """
-            The AMClient will return error codes when there was an error in the request to the AM API.
-            We can't do much in these cases, a part from suggesting to take a look at the AM logs.
-            Check 'amclient/errors' for more information.
-            """
-            errormsg = error_lookup(package)
-            message = f"Error while archiving {current_step.id}. AM create returned error {package}: {errormsg}"
-            result = set_and_return_error(
-                current_step,
-                errormsg,
-                {
-                    "message": message,
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                    "transfer_sip_path": str(transfer_sip_path),
-                },
-            )
-            _cleanup_transfer_sip_path(current_step, transfer_sip_path)
-            return result
-        else:
-            current_step.set_output_data(
-                {
-                    "status": 0,
-                    "details": "Uploaded to Archivematica - waiting for processing",
-                    "package_uuid": package["id"],
-                    "transfer_name": am.transfer_name,
-                    "transfer_sip_path": str(transfer_sip_path),
-                    "errormsg": None,
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                }
-            )
-            current_step.set_status(Status.SUBMITTED)
-            current_step.set_task(self.request.id)
-            return current_step.output_data_json
-    except requests.HTTPError as e:
-        errormsg = (
-            f"Error while archiving {current_step.id}: status code "
-            f"{e.request.status_code}."
-        )
-        result = set_and_return_error(
-            current_step,
-            errormsg,
-            {
-                "message": errormsg,
-                "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                "transfer_sip_path": str(transfer_sip_path),
-            },
-            extra_log=f"HTTPError: {e}",
-            failure_type=get_failure_type_from_status_code(e.request.status_code),
-        )
-        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
-        return result
-    except Exception as e:
-        errormsg = f"Error while archiving {current_step.id}: {str(e)}"
-        result = set_and_return_error(
-            current_step,
-            errormsg,
-            {
-                "message": errormsg,
-                "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                "transfer_sip_path": str(transfer_sip_path),
-            },
-        )
-        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
-        return result
+    am.transfer_name = get_transfer_name(step.archive, step)
+    if error:
+        return error, None, None, None, None
+    return False, am, transfer_sip_path, archivematica_dst
 
 
 def _create_sip_directory(current_step, archive, sip_base_path):
@@ -191,6 +123,91 @@ def _create_sip_directory(current_step, archive, sip_base_path):
         )
 
 
+def _start_archiving(
+    celery_task, step, am: AMClient, transfer_sip_path, archivematica_dst
+):
+
+    am_instance_config = ArchivematicaInstances.get_instance_config(
+        step.input_data_json.get("archivematica_instance")
+    )
+
+    logger.info(f"Starting archiving {step.archive.path_to_sip}")
+
+    # Create archivematica package
+    logger.info(
+        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']} for Archive: {step.archive.id}"
+    )
+    try:
+        package = am.create_package()
+        if not isinstance(package, (str, int)) or package not in error_codes:
+            step.set_output_data(
+                {
+                    "status": 0,
+                    "details": "Uploaded to Archivematica - waiting for processing",
+                    "package_uuid": package["id"],
+                    "transfer_name": am.transfer_name,
+                    "transfer_sip_path": str(transfer_sip_path),
+                    "errormsg": None,
+                    "archivematica_instance": step.input_data_json.get(
+                        "archivematica_instance"
+                    ),
+                }
+            )
+            step.set_status(Status.SUBMITTED)
+            step.set_task(celery_task.request.id)
+            return step.output_data_json, False
+        else:
+            """
+            The AMClient will return error codes when there was an error in the request to the AM API.
+            We can't do much in these cases, a part from suggesting to take a look at the AM logs.
+            Check 'amclient/errors' for more information.
+            """
+            errormsg = error_lookup(package)
+            message = f"Error while archiving {step.id}. AM create returned error {package}: {errormsg}"
+            result = set_and_return_error(
+                step,
+                errormsg,
+                {
+                    "message": message,
+                    "archivematica_instance": step.archive.archivematica_instance,
+                    "transfer_sip_path": str(transfer_sip_path),
+                },
+            )
+            return result, True
+    except requests.HTTPError as e:
+        errormsg = (
+            f"Error while archiving {step.id}: status code " f"{e.request.status_code}."
+        )
+        result = set_and_return_error(
+            step,
+            errormsg,
+            {
+                "message": errormsg,
+                "archivematica_instance": step.input_data_json.get(
+                    "archivematica_instance"
+                ),
+                "transfer_sip_path": str(transfer_sip_path),
+            },
+            extra_log=f"HTTPError: {e}",
+            failure_type=get_failure_type_from_status_code(e.request.status_code),
+        )
+        return result, True
+    except Exception as e:
+        errormsg = f"Error while archiving {step.id}: {str(e)}"
+        result = set_and_return_error(
+            step,
+            errormsg,
+            {
+                "message": errormsg,
+                "archivematica_instance": step.input_data_json.get(
+                    "archivematica_instance"
+                ),
+                "transfer_sip_path": str(transfer_sip_path),
+            },
+        )
+        return result, True
+
+
 @shared_task(
     name="check_am_status",
     bind=True,
@@ -203,10 +220,6 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
 
     error, am = get_am_client(step)
     if error:
@@ -302,7 +315,9 @@ def check_am_status(self, step_id):
                 step,
                 str(e),
                 {
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                    "archivematica_instance": step.input_data_json.get(
+                        "archivematica_instance"
+                    ),
                     "transfer_sip_path": step.output_data_json.get(
                         "transfer_sip_path", None
                     ),
@@ -435,8 +450,14 @@ def resource_check(task, current_step, archive):
 def get_am_client(step):
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
+        step.archive.archivematica_instance
     )
+    if not am_instance_config:
+        logger.info(
+            f"Unable to create AM client, no Archivematica instance set for Archive Step: {step.id} for Archive: {step.id}"
+        )
+        step.set_status(Status.WAITING)
+        return step.output_data_json, None
 
     am = AMClient()
     try:
