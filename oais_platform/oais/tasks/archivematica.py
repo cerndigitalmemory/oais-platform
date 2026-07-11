@@ -135,7 +135,7 @@ def _start_archiving(
 
     # Create archivematica package
     logger.info(
-        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for user {am_instance_config['AM_USERNAME']} for Archive: {step.archive.id}"
+        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for Archive: {step.archive.id}"
     )
     try:
         result = None
