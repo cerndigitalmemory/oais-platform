@@ -66,6 +66,11 @@ class ArchivematicaCreateTests(APITestCase):
 
     def test_archivematica_uses_path_relative_to_transfer_source_root(self):
         class FakeAMClient:
+
+            am_url = ""
+            sip_upstream_basepath = ""
+            aip_upstream_basepath = ""
+
             def create_package(self):
                 return {"id": "test_package_id"}
 
