@@ -61,11 +61,19 @@ def create_path_artifact(name, path, localpath):
 
 
 def set_and_return_error(
-    step, errormsg=None, output_data={}, status=None, extra_log=None, failure_type=None
+    step,
+    errormsg=None,
+    output_data=None,
+    status=None,
+    extra_log=None,
+    failure_type=None,
 ):
     """
     Set the step as failed and return the error message
     """
+    if output_data is None:
+        output_data = {}
+
     if failure_type and not step.failure_type:
         step.set_failure_type(failure_type)
     else:
