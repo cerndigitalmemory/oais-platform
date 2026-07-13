@@ -59,11 +59,16 @@ def archivematica(self, step_id):
     # Create AM client & create required directories and return important paths
     error, am, transfer_sip_path, archivematica_dst = _setup_archiving(current_step)
     if error:
-        return error
-
-    result, cleanup = _start_archiving(
-        self, current_step, am, transfer_sip_path, archivematica_dst
-    )
+        result = error
+        cleanup = (
+            am is not None
+            and transfer_sip_path is not None
+            and transfer_sip_path.exists()
+        )
+    else:
+        result, cleanup = _start_archiving(
+            self, current_step, am, transfer_sip_path, archivematica_dst
+        )
     if cleanup:
         _cleanup_transfer_sip_path(
             current_step, am.sip_upstream_basepath, transfer_sip_path
@@ -76,15 +81,15 @@ def _setup_archiving(step):
     # Get AM instance config or assign instance if get_am_clientnot done yet
     error, am = get_am_client(step)
     if error:
-        return error
+        return error, None, None, None
 
     error, transfer_sip_path, archivematica_dst = _create_sip_directory(
         step, step.archive, am.sip_upstream_basepath
     )
+    if error:
+        return error, am, transfer_sip_path, None
     am.transfer_directory = archivematica_dst
     am.transfer_name = get_transfer_name(step.archive, step)
-    if error:
-        return error, None, None, None, None
     return False, am, transfer_sip_path, archivematica_dst
 
 
@@ -102,8 +107,8 @@ def _create_sip_directory(current_step, archive, sip_base_path):
         )
         return False, transfer_sip_path, archivematica_dst
     except Exception as e:
-        _cleanup_transfer_sip_path(current_step, sip_base_path, transfer_sip_path)
         message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
+        logger.error(message)
         return (
             set_and_return_error(
                 current_step,
@@ -116,7 +121,7 @@ def _create_sip_directory(current_step, archive, sip_base_path):
                     "transfer_sip_path": str(transfer_sip_path),
                 },
             ),
-            None,
+            transfer_sip_path,
             None,
         )
 

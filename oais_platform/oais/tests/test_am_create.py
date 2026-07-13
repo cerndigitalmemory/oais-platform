@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import requests
@@ -63,18 +64,19 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(self.step.step_type.current_size_bytes, self.archive.sip_size)
+        self.assertTrue(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     def test_archivematica_uses_path_relative_to_transfer_source_root(self):
         class FakeAMClient:
 
             am_url = ""
-            sip_upstream_basepath = ""
             aip_upstream_basepath = ""
 
             def create_package(self):
                 return {"id": "test_package_id"}
 
         fake_am = FakeAMClient()
+        fake_am.sip_upstream_basepath = self.sip_base_path
 
         with patch(
             "oais_platform.oais.tasks.archivematica.get_am_client",
@@ -97,6 +99,27 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(fake_am.transfer_directory, expected_transfer_directory)
 
     @patch("amclient.AMClient.create_package")
+    def test_archivematica_cleans_up_when_setup_fails(self, create_package):
+        def fail_after_creating_destination(source, destination):
+            Path(destination).mkdir(parents=True)
+            raise OSError("Unable to copy SIP")
+
+        with patch(
+            "oais_platform.oais.tasks.archivematica.shutil.copytree",
+            side_effect=fail_after_creating_destination,
+        ) as copytree:
+            result = archivematica.apply(args=[self.step.id]).get()
+
+        self.step.refresh_from_db()
+        transfer_sip_path = Path(self.step.output_data_json["transfer_sip_path"])
+
+        self.assertEqual(result["status"], 1)
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertFalse(transfer_sip_path.exists())
+        copytree.assert_called_once()
+        create_package.assert_not_called()
+
+    @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_create_package(self, create_package):
         create_package.return_value = -1
         result = archivematica.apply(args=[self.step.id])
@@ -115,6 +138,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertIn(message, result["message"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_authentication(self, create_package):
@@ -137,6 +161,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_403)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_httperror(self, create_package):
@@ -157,6 +182,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_400)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_exception(self, create_package):
@@ -174,6 +200,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertIn(exception_msg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     def test_archivematica_file_size_exceeded(self):
         self.archive.sip_size = self.step.step_type.size_limit_bytes + 1
