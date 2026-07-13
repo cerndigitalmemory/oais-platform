@@ -326,9 +326,10 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
 
     logger.info(f"Status for {step.id} is: {status}")
     error = False
+    cleanup = False
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
-        error = _handle_complete_status(celery_task, step, am, am_status)
+        error, cleanup = _handle_complete_status(celery_task, step, am, am_status)
     elif status in {"FAILED", "REJECTED"}:
         error = True
         _handle_failed_rejected_status(step, am, am_status, failure_type)
@@ -345,14 +346,14 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
             f"Unknown status from Archivematica: {status}, for step {step.id}"
         )
         step.set_output_data(am_status)
-    if error:
+    if error or cleanup:
         _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
 
 
 def _handle_complete_status(celery_task, step, am, am_status):
     try:
-        handle_completed_am_package(celery_task, am, step, am_status)
-        return False
+        error, cleanup = handle_completed_am_package(celery_task, am, step, am_status)
+        return error, cleanup
     except Exception as e:
         failure_type = None
         logger.warning(
@@ -374,7 +375,7 @@ def _handle_complete_status(celery_task, step, am, am_status):
             status="FAILED",
             failure_type=failure_type,
         )
-        return True
+        return True, True
 
 
 def _handle_failed_rejected_status(step, am, am_status, failure_type):
@@ -715,7 +716,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
+            return True, False
         else:
             finalize(
                 self=celery_task,
@@ -727,7 +728,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
+            return False, True
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
@@ -742,6 +743,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
+            return False, False
 
 
 @shared_task(name="archive_failed_count_reset")
