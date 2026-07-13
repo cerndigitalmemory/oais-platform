@@ -65,7 +65,9 @@ def archivematica(self, step_id):
         self, current_step, am, transfer_sip_path, archivematica_dst
     )
     if cleanup:
-        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
+        _cleanup_transfer_sip_path(
+            current_step, am.sip_upstream_basepath, transfer_sip_path
+        )
 
     return result
 
@@ -73,16 +75,11 @@ def archivematica(self, step_id):
 def _setup_archiving(step):
     # Get AM instance config or assign instance if get_am_clientnot done yet
     error, am = get_am_client(step)
-    assigned_am_instance = step.input_data_json.get("archivematica_instance")
     if error:
         return error
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        assigned_am_instance
-    )
-
     error, transfer_sip_path, archivematica_dst = _create_sip_directory(
-        step, step.archive, am_instance_config["SIP_UPSTREAM_BASEPATH"]
+        step, step.archive, am.sip_upstream_basepath
     )
     am.transfer_directory = archivematica_dst
     am.transfer_name = get_transfer_name(step.archive, step)
@@ -105,7 +102,7 @@ def _create_sip_directory(current_step, archive, sip_base_path):
         )
         return False, transfer_sip_path, archivematica_dst
     except Exception as e:
-        _cleanup_transfer_sip_path(current_step, transfer_sip_path)
+        _cleanup_transfer_sip_path(current_step, sip_base_path, transfer_sip_path)
         message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
         return (
             set_and_return_error(
@@ -127,16 +124,11 @@ def _create_sip_directory(current_step, archive, sip_base_path):
 def _start_archiving(
     celery_task, step, am: AMClient, transfer_sip_path, archivematica_dst
 ):
-
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
-
     logger.info(f"Starting archiving {step.archive.path_to_sip}")
 
     # Create archivematica package
     logger.info(
-        f"Creating archivematica package on Archivematica instance: {am_instance_config['AM_URL']} at directory {archivematica_dst} for Archive: {step.archive.id}"
+        f"Creating archivematica package on Archivematica instance: {am.am_url} at directory {archivematica_dst} for Archive: {step.archive.id}"
     )
     try:
         result = None
@@ -355,7 +347,7 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
         )
         step.set_output_data(am_status)
     if error:
-        _cleanup_transfer_sip_path(step)
+        _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
 
 
 def _handle_complete_status(celery_task, step, am, am_status):
@@ -486,7 +478,7 @@ def get_am_client(step):
         step.set_status(Status.WAITING)
         return step.output_data_json, None
 
-    am = AMClient()
+    am = ArchivematicaClient()
     try:
         am.am_url = am_instance_config["AM_URL"]
         am.am_user_name = am_instance_config["AM_USERNAME"]
@@ -498,6 +490,8 @@ def get_am_client(step):
         if not am_instance_config.get("AM_TRANSFER_SOURCE"):
             am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
         am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
+        am.aip_upstream_basepath = am_instance_config["AIP_UPSTREAM_BASEPATH"]
+        am.sip_upstream_basepath = am_instance_config["SIP_UPSTREAM_BASEPATH"]
         return False, am
     except Exception as e:
         logger.error(
@@ -514,6 +508,16 @@ def get_am_client(step):
             ),
             None,
         )
+
+
+class ArchivematicaClient(AMClient):
+
+    sip_upstream_basepath = None
+    aip_upstream_basepath = None
+    retry_limit = None
+
+    def __init__(self):
+        super().__init__()
 
 
 def get_transfer_source(am):
@@ -626,7 +630,7 @@ def get_am_failure_type_from_failed_job(job):
             return StepFailureType.AM_JOB_FAILED_OTHER
 
 
-def _cleanup_transfer_sip_path(step, transfer_sip_path=None):
+def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
 
     if not transfer_sip_path:
         transfer_sip_path = step.output_data_json.get("transfer_sip_path")
@@ -639,11 +643,6 @@ def _cleanup_transfer_sip_path(step, transfer_sip_path=None):
             f"{transfer_sip_path}"
         )
         return
-
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
-    sip_base_path = am_instance_config["SIP_UPSTREAM_BASEPATH"]
 
     try:
         shutil.rmtree(transfer_sip_path)
@@ -686,9 +685,6 @@ def handle_completed_am_package(celery_task, am, step, am_status):
     uuid = am_status["uuid"]
     am.package_uuid = uuid
     aip = am.get_package_details()
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.input_data_json.get("archivematica_instance")
-    )
     if type(aip) is dict:
         aip_path = aip["current_path"]
         aip_uuid = aip["uuid"]
@@ -697,7 +693,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
 
         am_status["artifact"] = create_path_artifact(
             "AIP",
-            os.path.join(am_instance_config["AIP_UPSTREAM_BASEPATH"], aip_path),
+            os.path.join(am.aip_upstream_basepath, aip_path),
             aip_path,
         )
 
@@ -720,7 +716,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            _cleanup_transfer_sip_path(step)
+            _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
         else:
             finalize(
                 self=celery_task,
@@ -732,17 +728,17 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            _cleanup_transfer_sip_path(step)
+            _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
         if retry_count + 1 > retry_limit:
-            error_msg = f"AIP package with UUID {uuid} not found on {am_instance_config['AM_SS_URL']} after retrying {retry_limit} times."
+            error_msg = f"AIP package with UUID {uuid} not found on {am.ss_url} after retrying {retry_limit} times."
             logger.error(error_msg)
             raise MaxRetriesExceeded(error_msg)
         else:
             logger.warning(
-                f"AIP package with UUID {uuid} not found on {am_instance_config['AM_SS_URL']}, retrying..."
+                f"AIP package with UUID {uuid} not found on {am.ss_url}, retrying..."
             )
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
