@@ -294,7 +294,7 @@ def check_am_status(self, step_id):
                 )
             )
         step.set_output_data(am_status)
-    if step.status in TERMINAL_STATUSES and step.finish_date is None:
+    if step.status in TERMINAL_STATUSES:
         step.set_finish_date()
 
 
