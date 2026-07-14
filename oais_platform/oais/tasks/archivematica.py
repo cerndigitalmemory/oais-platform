@@ -478,7 +478,7 @@ def get_am_client(step):
     am_instance = step.input_data_json.get("archivematica_instance")
     if not am_instance:
         logger.info(
-            f"Unable to create AM client, no Archivematica instance set for Archive Step: {step.id} for Archive: {step.id}"
+            f"Unable to create AM client, no Archivematica instance set for Archive Step: {step.id} for Archive: {step.archive.id}"
         )
         step.set_status(Status.WAITING)
         return step.input_data_json, None
@@ -488,7 +488,7 @@ def get_am_client(step):
         return (
             set_and_return_error(
                 step,
-                f"Configuration for set Archivematica instance {am_instance} could not be found for Archive Step: {step.id} for Archive: {step.id}",
+                f"Configuration for set Archivematica instance {am_instance} could not be found for Archive Step: {step.id} for Archive: {step.archive.id}",
                 {
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 },
