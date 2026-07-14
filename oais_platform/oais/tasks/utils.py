@@ -96,7 +96,7 @@ def remove_periodic_task_on_failure(task_name, step, output_data, failure_type=N
     """
     Set step as failed/timed out and remove the scheduled task
     """
-    set_and_return_error(step, output_data, failure_type=failure_type)
+    set_and_return_error(step, output_data=output_data, failure_type=failure_type)
     logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:
