@@ -37,10 +37,6 @@ class Command(BaseCommand):
                     )
                 )
                 continue
-            # Get archivematica instance config to calculate sip path
-            am_instance_config = ArchivematicaInstances.get_instance_config(
-                archive.archivematica_instance
-            )
             folder_name = os.path.basename(current_path)
             try:
                 new_structure = generate_directory_structure(
