@@ -126,24 +126,16 @@ def copy_sip(self, archive_id, step_id):
     foldername = step.input_data_json.get("foldername")
     announce_path = step.input_data_json.get("announce_path")
 
-    if SIP_STORE_BASEPATH:
-        target_path = os.path.join(
-            generate_directory_structure(SIP_STORE_BASEPATH, archive),
-            foldername,
-        )
-    else:
-        target_path = foldername
     try:
+        if SIP_STORE_BASEPATH:
+            target_path = os.path.join(
+                generate_directory_structure(SIP_STORE_BASEPATH, archive),
+                foldername,
+            )
+        else:
+            target_path = foldername
         os.mkdir(target_path)
-    except FileExistsError:
-        cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)
-        step.set_failure_type(StepFailureType.FILE_ALREADY_EXISTS)
-        return {
-            "status": 1,
-            "errormsg": "The SIP couldn't be copied to the platform \
-            because it already exists in the target destination.",
-        }
-    try:
+
         for dirpath, dirnames, filenames in os.walk(announce_path, followlinks=False):
             logger.info(f"Starting copy of {announce_path} to {target_path}..")
             if announce_path == dirpath:
@@ -173,7 +165,14 @@ def copy_sip(self, archive_id, step_id):
             "foldername": foldername,
             "artifact": output_artifact,
         }
-
+    except FileExistsError:
+        cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)
+        step.set_failure_type(StepFailureType.FILE_ALREADY_EXISTS)
+        return {
+            "status": 1,
+            "errormsg": "The SIP couldn't be copied to the platform \
+            because it already exists in the target destination.",
+        }
     except Exception as e:
         # In case of exception delete the target folder
         cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)

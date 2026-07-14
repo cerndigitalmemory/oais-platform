@@ -38,7 +38,17 @@ class Command(BaseCommand):
                 continue
 
             folder_name = os.path.basename(current_path)
-            new_structure = generate_directory_structure(SIP_STORE_BASEPATH, archive)
+            try:
+                new_structure = generate_directory_structure(
+                    SIP_STORE_BASEPATH, archive
+                )
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"Error creating store directory for archive {archive.id}: {str(e)}"
+                    )
+                )
+                continue
             new_path = os.path.join(new_structure, folder_name)
 
             if current_path == new_path:
