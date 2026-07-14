@@ -1230,7 +1230,7 @@ def upload_sip(request):
         if os.path.exists(compressed_path):
             os.remove(compressed_path)
         if step:
-            set_and_return_error(step, {"status": 1, "errormsg": str(e)})
+            set_and_return_error(step, str(e))
             return Response(
                 {
                     "status": 1,
