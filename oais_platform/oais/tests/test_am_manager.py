@@ -1,10 +1,16 @@
+from datetime import timedelta
 from unittest.mock import patch
 
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tasks.archivematica import am_manager, start_am_transfers
-from oais_platform.settings import AM_INSTANCES
+from oais_platform.oais.tasks.archivematica import (
+    am_manager,
+    recover_stale_assigned_archivematica_steps,
+    start_am_transfers,
+)
+from oais_platform.settings import AM_INSTANCES, AM_WAITING_TIME_LIMIT
 
 
 class ArchivematicaManagerTests(APITestCase):
@@ -56,6 +62,7 @@ class ArchivematicaManagerTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfers_called(self, mock_archivematica):
+        mock_archivematica.return_value.id = "test-task-id"
         start_am_transfers.apply()
         mock_archivematica.assert_any_call(args=[self.step.id])
         mock_archivematica.assert_any_call(args=[self.step2.id])
@@ -64,6 +71,7 @@ class ArchivematicaManagerTests(APITestCase):
     def test_am_manager_start_transfers_not_called_for_non_waiting_steps(
         self, mock_archivematica
     ):
+        mock_archivematica.return_value.id = "test-task-id"
         self.step.set_status(Status.SUBMITTED)
         self.step2.set_status(Status.IN_PROGRESS)
         start_am_transfers.apply()
@@ -71,6 +79,7 @@ class ArchivematicaManagerTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfer_concurrency_limit(self, mock_archivematica):
+        mock_archivematica.return_value.id = "test-task-id"
         self.step.step_type.concurrency_limit = 1
         self.step.step_type.save()
         self.step.set_input_data_field(
@@ -88,6 +97,7 @@ class ArchivematicaManagerTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.archivematica.archivematica.apply_async")
     def test_am_manager_start_transfer_uses_instance_capacity(self, mock_archivematica):
+        mock_archivematica.return_value.id = "test-task-id"
         am_instances = [
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
@@ -136,7 +146,7 @@ class ArchivematicaManagerTests(APITestCase):
             input_data_json={"archivematica_instance": am_instances[0]["AM_INSTANCE"]},
         )
         self.archive.set_last_step(self.step.id)
-
+        mock_archivematica.return_value.id = "test-task-id"
         with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
             start_am_transfers.apply()
 
@@ -173,7 +183,7 @@ class ArchivematicaManagerTests(APITestCase):
                 status=Status.WAITING,
             )
             archive.set_last_step(step.id)
-
+        mock_archivematica.return_value.id = "test-task-id"
         with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
             start_am_transfers.apply()
 
@@ -213,9 +223,78 @@ class ArchivematicaManagerTests(APITestCase):
     def test_am_manager_start_transfers_not_called_for_non_last_step(
         self, mock_archivematica
     ):
+        mock_archivematica.return_value.id = "test-task-id"
         cta_step = Step.objects.create(
             archive=self.archive, step_name=StepName.PUSH_TO_CTA, status=Status.WAITING
         )
         self.archive.set_last_step(cta_step.id)
         start_am_transfers.apply()
         mock_archivematica.assert_called_once_with(args=[self.step2.id])
+
+    @patch("oais_platform.oais.tasks.archivematica.app.control.revoke")
+    def test_recover_stale_assigned_archivematica_steps_requeues_step(
+        self, mock_revoke
+    ):
+        assigned_at = timezone.now() - timedelta(minutes=AM_WAITING_TIME_LIMIT + 1)
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "assigned_at": assigned_at.isoformat(),
+            }
+        )
+        self.step.set_status(Status.ASSIGNED)
+        self.step.set_task("stale-task-id")
+
+        recover_stale_assigned_archivematica_steps()
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.WAITING)
+        self.assertIsNone(self.step.celery_task_id)
+        self.assertNotIn("archivematica_instance", self.step.input_data_json)
+        mock_revoke.assert_called_once_with("stale-task-id", terminate=True)
+
+    @patch("oais_platform.oais.tasks.archivematica.app.control.revoke")
+    def test_recover_stale_assigned_archivematica_steps_ignores_fresh_step(
+        self, mock_revoke
+    ):
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "assigned_at": timezone.now().isoformat(),
+            }
+        )
+        self.step.set_status(Status.ASSIGNED)
+        self.step.set_task("fresh-task-id")
+
+        recover_stale_assigned_archivematica_steps()
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.ASSIGNED)
+        self.assertEqual(self.step.celery_task_id, "fresh-task-id")
+        self.assertEqual(
+            self.step.input_data_json["archivematica_instance"],
+            AM_INSTANCES[0]["AM_INSTANCE"],
+        )
+        mock_revoke.assert_not_called()
+
+    @patch("oais_platform.oais.tasks.archivematica.app.control.revoke")
+    def test_recover_stale_assigned_archivematica_steps_ignores_started_step(
+        self, mock_revoke
+    ):
+        assigned_at = timezone.now() - timedelta(minutes=AM_WAITING_TIME_LIMIT + 1)
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "assigned_at": assigned_at.isoformat(),
+            }
+        )
+        self.step.set_status(Status.ASSIGNED)
+        self.step.set_task("started-task-id")
+        self.step.set_start_date()
+
+        recover_stale_assigned_archivematica_steps()
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.ASSIGNED)
+        self.assertEqual(self.step.celery_task_id, "started-task-id")
+        mock_revoke.assert_not_called()
