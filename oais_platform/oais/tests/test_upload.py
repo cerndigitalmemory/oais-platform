@@ -19,16 +19,8 @@ from oais_platform.settings import AM_INSTANCES, BIC_WORKDIR, SIP_STORE_BASEPATH
 
 class UploadTests(APITestCase):
     def setUp(self):
-        self.random_instance_patch = patch(
-            "oais_platform.oais.archivematica_instances.random.choice",
-            return_value=AM_INSTANCES[0],
-        )
-        self.random_instance_patch.start()
         self.user = User.objects.create_superuser("user", "", "pw")
         self.client.force_authenticate(user=self.user)
-
-    def tearDown(self):
-        self.random_instance_patch.stop()
 
     def test_harvest_forbidden(self):
         testuser = User.objects.create_user("testuser", "", "pw")
