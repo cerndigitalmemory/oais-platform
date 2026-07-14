@@ -206,9 +206,6 @@ def check_am_status(self, step_id):
     e.g. the current microservice running or the final result.
     """
     step = Step.objects.get(pk=step_id)
-    am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.archive.archivematica_instance
-    )
 
     error, am = get_am_client(step)
     if error:
@@ -217,8 +214,6 @@ def check_am_status(self, step_id):
     am_status, failure_type = _get_am_status(am, step)
     _handle_am_status(self, step, am, am_status, failure_type)
     _handle_am_retry(step, am_status)
-
-    step.set_finish_date()
 
 
 def _handle_am_retry(step, am_status):
@@ -356,6 +351,8 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
             f"Unknown status from Archivematica: {status}, for step {step.id}"
         )
         step.set_output_data(am_status)
+    if step.status in TERMINAL_STATUSES:
+        step.set_finish_date()
     if error or cleanup:
         _cleanup_transfer_sip_path(step, am.sip_upstream_basepath)
 
@@ -601,39 +598,6 @@ def get_transfer_source(am_instance_config):
     )
 
 
-def get_transfer_source(am_instance_config):
-    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
-    try:
-        am = AMClient()
-        am.ss_url = am_instance_config["AM_SS_URL"]
-        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
-        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
-
-        locations = am.list_storage_locations()
-        # Archivematica returns integers for errors
-        if not locations or not isinstance(locations, dict):
-            raise Exception("Invalid storage locations response.")
-
-    except Exception as exc:
-        raise Exception(
-            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
-        ) from exc
-
-    objects = locations.get("objects") or []
-
-    for loc in objects:
-        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
-            "enabled"
-        ):
-            return loc.get("uuid")
-
-    raise Exception(
-        "Transfer source is not defined, and no enabled location with "
-        "description 'Default transfer source' was found for instance "
-        f"{am_instance_config['AM_INSTANCE']}."
-    )
-
-
 def get_executed_jobs(am, unit_uuid, check_for_failed=False):
     am.unit_uuid = unit_uuid
     executed_jobs = am.get_jobs()
@@ -719,8 +683,15 @@ def get_am_failure_type_from_failed_job(job):
 
 def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
 
+    transfer_sip_path = transfer_sip_path or step.output_data_json.get(
+        "transfer_sip_path", None
+    )
     if not transfer_sip_path:
-        transfer_sip_path = step.output_data_json.get("transfer_sip_path")
+        logger.info(
+            f"Archivematica transfer path unkown for step {step.id}: "
+            f"{transfer_sip_path}"
+        )
+        return
 
     transfer_sip_path = Path(transfer_sip_path).resolve()
     base_path = Path(sip_base_path).resolve()

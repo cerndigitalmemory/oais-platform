@@ -94,8 +94,6 @@ def announce_sip(announce_path, user):
         f"Archive created with id {archive.id} for announced SIP {announce_path}"
     )
 
-    ArchivematicaInstances.assign(archive)
-
     # Create the starting Announce step
     input_data = {"foldername": sip_folder_name, "announce_path": announce_path}
 
@@ -121,8 +119,6 @@ def copy_sip(self, archive_id, step_id):
     step = Step.objects.get(pk=step_id)
     step.set_status(Status.IN_PROGRESS)
     archive = Archive.objects.get(pk=archive_id)
-
-    am_instance_config = ArchivematicaInstances.get_instance_config(archive)
 
     if not step.input_data_json:
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
