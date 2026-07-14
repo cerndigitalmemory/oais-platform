@@ -13,11 +13,6 @@ from oais_platform.settings import AM_INSTANCES, SIP_STORE_BASEPATH
 
 class HarvestTest(APITestCase):
     def setUp(self):
-        self.random_instance_patch = patch(
-            "oais_platform.oais.archivematica_instances.random.choice",
-            return_value=AM_INSTANCES[0],
-        )
-        self.random_instance_patch.start()
         self.archive = Archive.objects.create(
             recid="1",
             source="test_source",
@@ -28,9 +23,6 @@ class HarvestTest(APITestCase):
         )
         self.step.step_type.size_limit_bytes = 200
         self.step.step_type.save()
-
-    def tearDown(self):
-        self.random_instance_patch.stop()
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
