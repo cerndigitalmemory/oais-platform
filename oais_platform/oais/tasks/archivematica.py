@@ -94,10 +94,12 @@ def _setup_archiving(step):
 
 
 def _create_sip_directory(current_step, archive, sip_base_path):
-    path_to_sip = Path(archive.path_to_sip)
-    transfer_source_path = Path(generate_directory_structure(sip_base_path, archive))
-    transfer_sip_path = transfer_source_path / path_to_sip.name
     try:
+        path_to_sip = Path(archive.path_to_sip)
+        transfer_source_path = Path(
+            generate_directory_structure(sip_base_path, archive)
+        )
+        transfer_sip_path = transfer_source_path / path_to_sip.name
         if not transfer_sip_path.exists():
             shutil.copytree(path_to_sip, transfer_sip_path)
         # Path to SIP inside Archivematica transfer source directory
@@ -475,7 +477,7 @@ def resource_check(task, current_step, archive):
 def get_am_client(step):
 
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        step.archive.archivematica_instance
+        step.input_data_json.get("archivematica_instance")
     )
     if not am_instance_config:
         logger.info(
@@ -642,6 +644,7 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
         transfer_sip_path = step.output_data_json.get("transfer_sip_path")
 
     transfer_sip_path = Path(transfer_sip_path).resolve()
+    base_path = Path(sip_base_path).resolve()
 
     if not transfer_sip_path.exists():
         logger.info(
@@ -651,6 +654,12 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
         return
 
     try:
+        if transfer_sip_path == base_path or not transfer_sip_path.is_relative_to(
+            base_path
+        ):
+            raise ValueError(
+                f"Refusing to clean path outside {base_path}: {transfer_sip_path}"
+            )
         shutil.rmtree(transfer_sip_path)
         cleanup_empty_path(
             transfer_sip_path.parent,
@@ -664,6 +673,11 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
         logger.error(
             f"Error deleting Archivematica transfer path for step {step.id}: "
             f"{transfer_sip_path}: {e}"
+        )
+    except ValueError as e:
+        logger.error(
+            f"Error deleting Archivematica transfer path for step {step.id}: "
+            f"{str(e)}"
         )
 
 
@@ -846,7 +860,7 @@ def start_am_transfers(self, chord_results=None):
 
     if len(am_instance_task_capacity) <= 0:
         logger.info("Maximum number of Archivematica steps currently in progress.")
-        returnarchivematica_instance
+        return
 
     waiting_assigned_steps = Step.objects.filter(
         step_type__name=StepName.ARCHIVE,
