@@ -15,4 +15,9 @@ class Migration(migrations.Migration):
             name='archivematica_instance',
             field=models.CharField(max_length=50, null=True),
         ),
+        migrations.AlterField(
+            model_name='step',
+            name='status',
+            field=models.IntegerField(choices=[(1, 'NOT_RUN'), (2, 'IN_PROGRESS'), (3, 'FAILED'), (4, 'COMPLETED'), (5, 'WAITING_APPROVAL'), (6, 'REJECTED'), (7, 'WAITING'), (8, 'COMPLETED_WITH_WARNINGS'), (10, 'OUTDATED'), (11, 'SUBMITTED'), (12, 'ASSIGNED')], default=1),
+        ),
     ]
