@@ -520,6 +520,12 @@ class Step(models.Model):
         self.input_data_json = data
         self.save(update_fields=["input_data_json"])
 
+    def remove_input_data_field(self, key):
+        data = self.input_data_json or {}
+        data.pop(key, None)
+        self.input_data_json = data
+        self.save(update_fields=["input_data_json"])
+
     def set_output_data(self, data):
         self.output_data_json = data
         self.save(update_fields=["output_data_json"])
