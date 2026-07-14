@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.enums import StepFailureType
+from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
 from oais_platform.oais.models import ApiKey, Profile, Status, Step
 from oais_platform.settings import FILES_URL
 
@@ -79,7 +79,8 @@ def set_and_return_error(
     else:
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
-    step.set_finish_date()
+    if step.status in TERMINAL_STATUSES:
+        step.set_finish_date()
     if status is not None:
         output_data["status"] = status
     elif "status" not in output_data:

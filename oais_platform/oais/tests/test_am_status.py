@@ -131,8 +131,6 @@ class ArchivematicaStatusTests(APITestCase):
 
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_completed_not_fully(self, get_unit_status):
-        self.step.finish_date = timezone.now()
-        self.step.save()
 
         get_unit_status.return_value = {
             "status": "COMPLETE",
@@ -223,9 +221,6 @@ class ArchivematicaStatusTests(APITestCase):
 
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_processing(self, get_unit_status):
-        self.step.finish_date = timezone.now()
-        self.step.save()
-
         get_unit_status.return_value = {
             "status": "PROCESSING",
             "microservice": "Package is being processed",
@@ -273,7 +268,6 @@ class ArchivematicaStatusTests(APITestCase):
         get_jobs.return_value = 1
 
         self.step.status = Status.SUBMITTED
-        self.step.finish_date = timezone.now()
         self.step.save()
 
         check_am_status.apply(args=[self.step.id])

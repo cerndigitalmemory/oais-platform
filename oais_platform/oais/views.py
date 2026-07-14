@@ -33,7 +33,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.exceptions import (
     BadRequest,
@@ -1171,8 +1170,6 @@ def upload_sip(request):
         requester=request.user,
         approver=request.user,
     )
-
-    am_instance_config = ArchivematicaInstances.assign(archive)
 
     step = Step.objects.create(
         archive=archive,
