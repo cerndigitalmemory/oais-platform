@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 import shutil
 from pathlib import Path
@@ -11,7 +12,8 @@ from django.db import models, transaction
 from django.db.models import Count
 from django.utils import timezone
 
-
+from oais_platform.celery import app
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
@@ -883,6 +885,8 @@ def start_am_transfers(self, chord_results=None):
         logger.info("Archivematica step type is currently disabled.")
         return
 
+    recover_stale_assigned_archivematica_steps()
+
     submitted_count_by_instance = dict(
         Step.objects.filter(
             step_type__name=StepName.ARCHIVE,
@@ -956,13 +960,36 @@ def start_am_transfers(self, chord_results=None):
         )
 
 
+def recover_stale_assigned_archivematica_steps():
+    cutoff = timezone.now() - timedelta(minutes=AM_WAITING_TIME_LIMIT)
+
+    stale_assigned_steps = Step.objects.filter(
+        step_type__name=StepName.ARCHIVE,
+        status=Status.ASSIGNED,
+        start_date__isnull=True,
+        input_data_json__assigned_at__lt=cutoff.isoformat(),
+    )
+
+    for step in stale_assigned_steps:
+        logger.warning(
+            f"Requeueing stale assigned Archivematica step {step.id} "
+            f"for archive {step.archive.id}."
+        )
+        step.set_status(Status.WAITING)
+        step.remove_input_data_field("archivematica_instance", None)
+        app.control.revoke(step.celerey_task_id, terminate=True)
+        step.set_task(None)
+
+
 def assign_and_start_archivematica_step(step, am_instance, am_instance_task_capacity):
     decrement_am_instance_capacity(am_instance_task_capacity, am_instance)
     if step.input_data_json.get("archivematica_instance") != am_instance:
         step.set_input_data_field("archivematica_instance", am_instance)
     step.archive.set_archivematica_instance(am_instance)
+    step.set_input_data_field("assigned_at", timezone.now().isoformat())
     step.set_status(Status.ASSIGNED)
-    archivematica.apply_async(args=[step.id])
+    result = archivematica.apply_async(args=[step.id])
+    step.set_task(result.id)
 
 
 def get_next_am_instance(am_instance_task_capacity):
