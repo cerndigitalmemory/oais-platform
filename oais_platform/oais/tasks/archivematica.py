@@ -975,9 +975,10 @@ def recover_stale_assigned_archivematica_steps():
             f"Requeueing stale assigned Archivematica step {step.id} "
             f"for archive {step.archive.id}."
         )
+        if step.celery_task_id:
+            app.control.revoke(step.celery_task_id, terminate=True)
         step.set_status(Status.WAITING)
-        step.remove_input_data_field("archivematica_instance", None)
-        app.control.revoke(step.celerey_task_id, terminate=True)
+        step.remove_input_data_field("archivematica_instance")
         step.set_task(None)
 
 
