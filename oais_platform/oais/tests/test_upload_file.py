@@ -24,11 +24,6 @@ from oais_platform.settings import (
 @patch("bagit_create.main.process")
 class UploadTaskTest(APITestCase):
     def setUp(self):
-        self.random_instance_patch = patch(
-            "oais_platform.oais.archivematica_instances.random.choice",
-            return_value=AM_INSTANCES[0],
-        )
-        self.random_instance_patch.start()
         self.archive = Archive.objects.create(
             recid="1",
             source="local",
@@ -42,9 +37,6 @@ class UploadTaskTest(APITestCase):
             input_data_json={"tmp_dir": self.tmp_dir, "author": self.author_name},
         )
         os.makedirs(self.tmp_dir, exist_ok=True)
-
-    def tearDown(self):
-        self.random_instance_patch.stop()
 
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     @patch("oais_platform.oais.tasks.utils.hashlib.md5")
