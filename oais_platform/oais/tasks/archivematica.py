@@ -495,8 +495,8 @@ def get_am_client(step):
                     "archivematica_instance": am_instance_config["AM_INSTANCE"],
                 },
             ),
+            None,
         )
-        None,
 
     am = ArchivematicaClient()
     try:
@@ -508,7 +508,9 @@ def get_am_client(step):
         am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
         am.processing_configneeds = "automated"
         if not am_instance_config.get("AM_TRANSFER_SOURCE"):
-            am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(am)
+            am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(
+                am_instance_config
+            )
         am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
         am.aip_upstream_basepath = am_instance_config["AIP_UPSTREAM_BASEPATH"]
         am.sip_upstream_basepath = am_instance_config["SIP_UPSTREAM_BASEPATH"]
@@ -538,33 +540,6 @@ class ArchivematicaClient(AMClient):
 
     def __init__(self):
         super().__init__()
-
-
-def get_transfer_source(am):
-    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
-    try:
-        locations = am.list_storage_locations()
-        # Archivematica returns integers for errors
-        if not locations or not isinstance(locations, dict):
-            raise Exception("Invalid storage locations response.")
-
-    except Exception as exc:
-        raise Exception(
-            f"Failed to connect to Archivematica Storage Service instance': {exc}"
-        ) from exc
-
-    objects = locations.get("objects") or []
-
-    for loc in objects:
-        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
-            "enabled"
-        ):
-            return loc.get("uuid")
-
-    raise Exception(
-        "Transfer source is not defined, and no enabled location with "
-        "description 'Default transfer source' was found"
-    )
 
 
 def get_transfer_source(am_instance_config):
