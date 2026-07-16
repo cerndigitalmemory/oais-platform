@@ -491,9 +491,6 @@ def get_am_client(step):
             set_and_return_error(
                 step,
                 f"Configuration for set Archivematica instance {am_instance} could not be found for Archive Step: {step.id} for Archive: {step.archive.id}",
-                {
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
-                },
             ),
             None,
         )
@@ -908,7 +905,7 @@ def start_am_transfers(self, chord_results=None):
             )
 
     else:
-        logger.info("No assinged waiting Archivematica steps to start")
+        logger.info("No assigned waiting Archivematica steps to start")
 
     waiting_steps = (
         Step.objects.filter(
