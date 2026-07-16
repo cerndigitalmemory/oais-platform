@@ -176,7 +176,7 @@ def copy_sip(self, archive_id, step_id):
     except Exception as e:
         # In case of exception delete the target folder
         cleanup_empty_path(target_path, SIP_STORE_BASEPATH, archive.source)
-        return {"status": 1, "errormsg": e}
+        return {"status": 1, "errormsg": str(e)}
 
 
 @shared_task(name="batch_announce_task", bind=True, ignore_result=True)
