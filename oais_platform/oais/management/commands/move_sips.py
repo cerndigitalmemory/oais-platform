@@ -5,14 +5,15 @@ import shutil
 
 from django.core.management.base import BaseCommand
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.models import Archive
 from oais_platform.oais.tasks.utils import generate_directory_structure
 from oais_platform.settings import SIP_STORE_BASEPATH
 
 
 class Command(BaseCommand):
-    help = "Moves SIPs to the path <SIP_UPSTREAM_BASEPATH>/<source>/<hash>/<sip_folder_name>"
+    help = (
+        "Moves SIPs to the path <SIP_STORE_BASEPATH>/<source>/<hash>/<sip_folder_name>"
+    )
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS("Starting script..."))
