@@ -992,6 +992,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 summary = collection.get_step_summary()
             case "failure":
                 summary = collection.get_failure_summary()
+            case "warning":
+                summary = collection.get_warning_summary()
             case "execution":
                 summary = collection.get_execution_summary()
             case _:

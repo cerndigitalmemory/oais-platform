@@ -682,14 +682,12 @@ class Collection(models.Model):
 
         return summary
 
-    def get_failure_summary(self):
+    def _get_failure_type_summary(self, status):
         from oais_platform.oais.statistics import latest_steps
 
         qs = (
             latest_steps(
-                Step.objects.filter(
-                    archive__in=self.archives.all(), status=Status.FAILED
-                )
+                Step.objects.filter(archive__in=self.archives.all(), status=status)
             )
             .values("step_type__name", "failure_type")
             .annotate(
@@ -712,6 +710,12 @@ class Collection(models.Model):
             )
 
         return summary
+
+    def get_failure_summary(self):
+        return self._get_failure_type_summary(Status.FAILED)
+
+    def get_warning_summary(self):
+        return self._get_failure_type_summary(Status.COMPLETED_WITH_WARNINGS)
 
     def get_execution_summary(self):
         from oais_platform.oais.statistics import avg_duration_per_day

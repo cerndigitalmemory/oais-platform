@@ -419,7 +419,7 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
 
 def get_am_failure_type_from_failed_job(job):
     match job:
-        case "Scan for viruses in directories":
+        case "Scan for viruses in directories", "Scan for viruses on extracted files":
             return StepFailureType.VIRUS_FLAGGED
         case "Extract contents from compressed archives":
             return StepFailureType.EXTRACTION_FAILED
