@@ -80,10 +80,9 @@ def set_and_return_error(
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
     step.set_finish_date()
-    if status is not None:
+    output_data.setdefault("status", 1)
+    if status:
         output_data["status"] = status
-    elif "status" not in output_data:
-        output_data["status"] = 1
     if errormsg:
         output_data["errormsg"] = errormsg
         logger.error(str(errormsg) + (f" {extra_log}" if extra_log else ""))
