@@ -79,8 +79,7 @@ def set_and_return_error(
     else:
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
-    if step.status in TERMINAL_STATUSES:
-        step.set_finish_date()
+    step.set_finish_date()
     if status is not None:
         output_data["status"] = status
     elif "status" not in output_data:
