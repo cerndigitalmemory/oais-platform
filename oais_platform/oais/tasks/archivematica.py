@@ -862,7 +862,7 @@ def start_am_transfers(self, chord_results=None):
 
     submitted_count_by_instance = dict(
         Step.objects.filter(
-            step_type__name=StepName.ARCHIVE,
+            step_type=step_type,
             status__in=[Status.ASSIGNED, Status.IN_PROGRESS, Status.SUBMITTED],
             input_data_json__has_key="archivematica_instance",
         )
@@ -890,7 +890,7 @@ def start_am_transfers(self, chord_results=None):
         return
 
     waiting_assigned_steps = Step.objects.filter(
-        step_type__name=StepName.ARCHIVE,
+        step_type=step_type,
         status=Status.WAITING,
         archive__last_step=models.F("id"),
         input_data_json__has_key="archivematica_instance",
@@ -910,7 +910,7 @@ def start_am_transfers(self, chord_results=None):
 
     waiting_steps = (
         Step.objects.filter(
-            step_type__name=StepName.ARCHIVE,
+            step_type=step_type,
             status=Status.WAITING,
             archive__last_step=models.F(
                 "id"
