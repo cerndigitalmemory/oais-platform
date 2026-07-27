@@ -85,7 +85,7 @@ def _setup_archiving(step):
         return error, None, None, None
 
     error, transfer_sip_path, archivematica_dst = _create_sip_directory(
-        step, step.archive, am.sip_upstream_basepath
+        step, am.sip_upstream_basepath
     )
     if error:
         return error, am, transfer_sip_path, None
@@ -94,8 +94,9 @@ def _setup_archiving(step):
     return False, am, transfer_sip_path, archivematica_dst
 
 
-def _create_sip_directory(current_step, archive, sip_base_path):
+def _create_sip_directory(current_step, sip_base_path):
     try:
+        archive = current_step.archive
         path_to_sip = Path(archive.path_to_sip)
         transfer_source_path = Path(
             generate_directory_structure(sip_base_path, archive)
