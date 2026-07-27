@@ -761,7 +761,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            return True, False
+            return True, False  # error, force cleanup
         else:
             finalize(
                 self=celery_task,
@@ -773,7 +773,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            return False, True
+            return False, True  # error, force cleanup
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
@@ -788,7 +788,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
-            return False, False
+            return False, False  # error, force cleanup
 
 
 @shared_task(name="archive_failed_count_reset")
