@@ -54,8 +54,12 @@ class Invenio(AbstractSource):
         self.headers = {
             "Content-Type": "application/json",
             "User-Agent": "cern-digital-memory-bot",
-            "Accept": "application/vnd.inveniordm.v1+json",  # Needed for Zenodo compatibility
         }
+
+        if self.source == "zenodo":
+            self.headers["Accept"] = (
+                "application/vnd.inveniordm.v1+json"  # Needed for Zenodo compatibility
+            )
 
         if token:
             self.headers["Authorization"] = f"Bearer {token}"
@@ -136,14 +140,27 @@ class Invenio(AbstractSource):
                 author_name_key_list = self.config["author_name"].split(",")
                 authors.append(get_dict_value(author, author_name_key_list))
 
+        status = self._get_config_value(record, "status")
+        if isinstance(status, list) and status:
+            status = "restricted"
+        else:
+            status = status or "open"
+
+        file_size = self._get_config_value(record, "file_size")
+        if file_size is None:
+            files = self._get_config_value(record, "files") or []
+            file_size = sum(get_dict_value(file, ["size"]) or 0 for file in files)
+
+        url = self._get_config_value(record, "url") or f"{self.baseURL}/record/{recid}"
+
         return {
-            "source_url": self._get_config_value(record, "url", mandatory=True),
+            "source_url": url,
             "recid": recid,
             "title": self._get_config_value(record, "title", mandatory=True),
             "authors": authors,
             "source": self.source,
-            "status": self._get_config_value(record, "status"),
-            "file_size": self._get_config_value(record, "file_size"),
+            "status": status,
+            "file_size": file_size,
             "updated": self._get_config_value(record, "updated"),
             "created": self._get_config_value(record, "created"),
         }
