@@ -65,6 +65,8 @@ class Invenio(AbstractSource):
             self.headers["Authorization"] = f"Bearer {token}"
 
     def get_record_url(self, recid):
+        if self.source in ["cds-videos", "sandbox-videos"]:
+            return f"{self.baseURL}/record/{recid}"
         return f"{self.baseURL}/records/{recid}"
 
     def search(self, query, page=1, size=20, sort=None):
@@ -154,7 +156,7 @@ class Invenio(AbstractSource):
             files = self._get_config_value(record, "files") or []
             file_size = sum(get_dict_value(file, ["size"]) or 0 for file in files)
 
-        url = self._get_config_value(record, "url") or f"{self.baseURL}/record/{recid}"
+        url = self._get_config_value(record, "url") or self.get_record_url(recid)
 
         return {
             "source_url": url,
