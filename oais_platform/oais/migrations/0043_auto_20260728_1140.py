@@ -5,10 +5,37 @@ from django.db import migrations
 
 def add_cds_videos(apps, schema_editor):
     Source = apps.get_model("oais", "Source")
-    Source.objects.create(name="cds-videos", longname="CDS Videos", api_url="https://videos.cern.ch/api", classname="Invenio",
-                              how_to_get_key="From your browser, login to the CDS-Videos instance, go to \"Applications\" then \"Personal access tokens\". Create new token, name can be anything. Note down the token and paste it here.")
-    Source.objects.create(name="sandbox-videos", longname="Sandbox CDS Videos", api_url="https://sandbox-videos.web.cern.ch/api", classname="Invenio",
-                                  how_to_get_key="From your browser, login to the CDS-Videos instance, go to \"Applications\" then \"Personal access tokens\". Create new token, name can be anything. Note down the token and paste it here.")
+
+    sources = [
+        {
+            "name": "cds-videos",
+            "longname": "CDS Videos",
+            "api_url": "https://videos.cern.ch/api",
+            "classname": "Invenio",
+            "how_to_get_key": (
+                'From your browser, login to the CDS-Videos instance, '
+                'go to "Applications" then "Personal access tokens". '
+                "Create a new token and paste it here."
+            ),
+        },
+        {
+            "name": "sandbox-videos",
+            "longname": "Sandbox CDS Videos",
+            "api_url": "https://sandbox-videos.web.cern.ch/api",
+            "classname": "Invenio",
+            "how_to_get_key": (
+                'From your browser, login to the CDS-Videos instance, '
+                'go to "Applications" then "Personal access tokens". '
+                "Create a new token and paste it here."
+            ),
+        },
+    ]
+
+    for source in sources:
+        Source.objects.get_or_create(
+            name=source["name"],
+            defaults={k: v for k, v in source.items() if k != "name"},
+        )
 
 def remove_cds_videos(apps, schema_editor):
     Source = apps.get_model("oais", "Source")
