@@ -141,10 +141,13 @@ class Invenio(AbstractSource):
                 authors.append(get_dict_value(author, author_name_key_list))
 
         status = self._get_config_value(record, "status")
-        if isinstance(status, list) and status:
-            status = "restricted"
-        else:
-            status = status or "open"
+        if self.source in ["cds-videos", "sandbox-videos"]:
+            if (
+                isinstance(status, list) and status
+            ):  # Status has a list of entities that can read the record
+                status = "restricted"
+            else:
+                status = status or "open"
 
         file_size = self._get_config_value(record, "file_size")
         if file_size is None:
