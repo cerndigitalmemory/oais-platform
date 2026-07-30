@@ -16,7 +16,6 @@ from oais_platform.oais.models import (
     Status,
     Step,
     StepName,
-    StepType,
 )
 from oais_platform.oais.tasks.scheduled_harvest import (
     batch_harvest,

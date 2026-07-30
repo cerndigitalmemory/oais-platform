@@ -84,6 +84,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
         batch_delay_minutes=scheduled_harvest.batch_delay_minutes,
         grace_period_days=scheduled_harvest.grace_period_days,
         filter_type=scheduled_harvest.filter_type,
+        extra_query=scheduled_harvest.extra_query,
     )
 
     records_count = 0
@@ -92,7 +93,10 @@ def scheduled_harvest(self, scheduled_harvest_id):
         for records_to_harvest, new_harvest_time in get_source(
             source.name, api_key
         ).get_records_to_harvest(
-            start=last_harvest_time, end=end, filter_type=harvest_run.filter_type
+            start=last_harvest_time,
+            end=end,
+            filter_type=harvest_run.filter_type,
+            extra_query=harvest_run.extra_query,
         ):
             logger.info(
                 f"Number of IDs to harvest for source {source.name}: {len(records_to_harvest)} until {new_harvest_time.strftime('%Y-%m-%dT%H:%M:%S')}."
@@ -105,7 +109,7 @@ def scheduled_harvest(self, scheduled_harvest_id):
                 harvest_collection = Collection.objects.create(
                     internal=True,
                     creator=user,
-                    description=f"Starting automatic harvests for {source.name} is in progress. Filter type: {harvest_run.filter_type}",
+                    description=f"Starting automatic harvests for {source.name} is in progress. Filter type: {harvest_run.filter_type}. Extra query: {harvest_run.extra_query}",
                 )
                 harvest_collection.set_title(
                     f"{source.name} - automatic harvest({harvest_collection.id})"
