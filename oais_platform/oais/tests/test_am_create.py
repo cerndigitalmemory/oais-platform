@@ -231,8 +231,25 @@ class ArchivematicaCreateTests(APITestCase):
             self.step.step_type.size_limit_bytes - self.archive.sip_size + 1,
         )
 
-    def _create_with_current_size(self, size):
+    @patch("amclient.AMClient.create_package")
+    def test_archivematica_aggregated_file_size_is_per_instance(self, create_package):
+        create_package.return_value = {"id": "test_package_id"}
+        self._create_with_current_size(
+            self.step.step_type.size_limit_bytes,
+            am_instance="AM2",
+        )
+
+        archivematica.apply(args=[self.step.id])
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.SUBMITTED)
+        self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
+
+    def _create_with_current_size(self, size, am_instance="AM1"):
         archive = Archive.objects.create(recid="2", source="test_source", sip_size=size)
         Step.objects.create(
-            archive=archive, step_name=StepName.ARCHIVE, status=Status.IN_PROGRESS
+            archive=archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.IN_PROGRESS,
+            input_data_json={"archivematica_instance": am_instance},
         )
