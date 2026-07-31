@@ -85,7 +85,7 @@ def save_user_profile(sender, instance, **kwargs):
 
 
 class ArchivematicaInstance(models.Model):
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50, primary_key=True)
     url = models.URLField(max_length=250)
     username = models.CharField(max_length=150)
     _api_key = models.TextField(db_column="api_key")
@@ -127,6 +127,10 @@ class ArchivematicaInstance(models.Model):
     @storage_service_api_key.setter
     def storage_service_api_key(self, value):
         self._storage_service_api_key = self._encrypt(value)
+
+    def set_transfer_source(self, transfer_source):
+        self.transfer_source = transfer_source
+        self.save()
 
     def as_config(self):
         """Return the legacy-shaped config consumed by Archivematica clients."""
@@ -193,7 +197,6 @@ class Archive(models.Model):
     original_file_size = models.BigIntegerField(default=0)
     archivematica_instance = models.ForeignKey(
         ArchivematicaInstance,
-        to_field="name",
         db_column="archivematica_instance",
         on_delete=models.PROTECT,
         null=True,

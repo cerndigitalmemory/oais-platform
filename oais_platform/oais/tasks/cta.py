@@ -157,10 +157,10 @@ def fts_delegate(self):
 
 
 def _get_cta_path(archive):
-    am_instance_config = ArchivematicaInstances.get_instance_config(
+    am_instance = ArchivematicaInstances.get_instance(
         archive.archivematica_instance_id
     )
-    if not am_instance_config:
+    if not am_instance:
         raise ValueError(
             f"Unable to retrieve Archivematica config for: {archive.archivematica_instance_id}"
         )
@@ -168,7 +168,7 @@ def _get_cta_path(archive):
         return os.path.join(
             "aips",
             Path(archive.path_to_aip).relative_to(
-                am_instance_config["AIP_UPSTREAM_BASEPATH"]
+                am_instance.aip_upstream_basepath
             ),
         )
     except ValueError:

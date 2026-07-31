@@ -8,7 +8,10 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
-from oais_platform.oais.tests.archivematica import AM_INSTANCES
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.oais.tasks.archivematica import (
     archive_failed_count_reset,
     check_am_status,
@@ -29,15 +32,13 @@ class ArchivematicaStatusTests(APITestCase):
             return_value="test-transfer-source",
         )
         self.transfer_source_patch.start()
-        self.instance_patch = patch(
-            "oais_platform.oais.tasks.archivematica.ArchivematicaInstances.get_instance_config",
-            return_value={
+        create_archivematica_instance(
+            {
                 **AM_INSTANCES[0],
                 "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
                 "AIP_UPSTREAM_BASEPATH": self.aip_base_path,
-            },
+            }
         )
-        self.instance_patch.start()
 
         self.archive = Archive.objects.create(
             recid="1",
@@ -60,7 +61,6 @@ class ArchivematicaStatusTests(APITestCase):
         self.step.set_start_date()
 
     def tearDown(self):
-        self.instance_patch.stop()
         self.transfer_source_patch.stop()
         self.tmpdir.cleanup()
 

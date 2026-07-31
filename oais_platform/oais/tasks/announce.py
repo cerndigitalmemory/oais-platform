@@ -7,7 +7,6 @@ from celery.utils.log import get_task_logger
 from django.contrib.auth.models import User
 from oais_utils.validate import get_manifest, validate_sip
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Collection, Status, Step, StepName
 from oais_platform.oais.sources.utils import get_source
