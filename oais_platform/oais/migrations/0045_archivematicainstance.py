@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("oais", "0043_archive_archivematica_instance_alter_step_status"),
+        ("oais", "0044_archive_archivematica_instance_alter_step_status"),
     ]
 
     operations = [
@@ -15,15 +15,9 @@ class Migration(migrations.Migration):
             name="ArchivematicaInstance",
             fields=[
                 (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
+                    "name",
+                    models.CharField(max_length=50, primary_key=True, serialize=False),
                 ),
-                ("name", models.CharField(max_length=50, unique=True)),
                 ("url", models.URLField(max_length=250)),
                 ("username", models.CharField(max_length=150)),
                 ("_api_key", models.TextField(db_column="api_key")),
@@ -56,7 +50,6 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="archives",
                 to="oais.archivematicainstance",
-                to_field="name",
             ),
         ),
     ]

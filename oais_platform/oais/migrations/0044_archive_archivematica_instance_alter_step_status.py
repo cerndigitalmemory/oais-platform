@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('oais', '0042_step_oais_step_archive_69171b_idx_and_more'),
+        ('oais', '0043_auto_20260728_1140'),
     ]
 
     operations = [

@@ -226,10 +226,10 @@ def _handle_am_retry(step, am_status):
     if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
         retry_count = step.input_data_json.get("retry_count", 0)
 
-    am_config = ArchivematicaInstances.get_instance_config(
+    am_instance = ArchivematicaInstances.get_instance(
         step.input_data_json.get("archivematica_instance")
     )
-    if retry_count + 1 > am_config["AM_RETRY_LIMIT"]:
+    if retry_count + 1 > am_instance.retry_limit:
         logger.warning("Max retries exceeded for failed Archivematica jobs.")
         am_status["retry_count"] = retry_count
         am_status["retry_limit_exceeded"] = True
@@ -485,8 +485,8 @@ def get_am_client(step):
         step.set_status(Status.WAITING)
         return step.input_data_json, None
 
-    am_instance_config = ArchivematicaInstances.get_instance_config(am_instance)
-    if not am_instance_config:
+    am_instance = ArchivematicaInstances.get_instance(am_instance)
+    if not am_instance:
         return (
             set_and_return_error(
                 step,
@@ -497,25 +497,23 @@ def get_am_client(step):
 
     am = ArchivematicaClient()
     try:
-        am.am_url = am_instance_config["AM_URL"]
-        am.am_user_name = am_instance_config["AM_USERNAME"]
-        am.am_api_key = am_instance_config["AM_API_KEY"]
-        am.ss_url = am_instance_config["AM_SS_URL"]
-        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
-        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+        am.am_url = am_instance.url
+        am.am_user_name = am_instance.username
+        am.am_api_key = am_instance.api_key
+        am.ss_url = am_instance.storage_service_url
+        am.ss_user_name = am_instance.storage_service_username
+        am.ss_api_key = am_instance.storage_service_api_key
         am.processing_config = "automated"
-        # TODO: Save transfer source into database
-        if not am_instance_config.get("AM_TRANSFER_SOURCE"):
-            am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(
-                am_instance_config
-            )
-        am.transfer_source = am_instance_config["AM_TRANSFER_SOURCE"]
-        am.aip_upstream_basepath = am_instance_config["AIP_UPSTREAM_BASEPATH"]
-        am.sip_upstream_basepath = am_instance_config["SIP_UPSTREAM_BASEPATH"]
+        if not am_instance.transfer_source:
+            transfer_source = get_transfer_source(am_instance)
+            am_instance.set_transfer_source(transfer_source)
+        am.transfer_source = am_instance.transfer_source
+        am.aip_upstream_basepath = am_instance.aip_upstream_basepath
+        am.sip_upstream_basepath = am_instance.sip_upstream_basepath
         return False, am
     except Exception as e:
         logger.error(
-            f"Error while getting AM Client for instance: {am_instance_config['AM_INSTANCE']} for Archive step: {step.id} for Archive: {step.archive.id}: {str(e)}"
+            f"Error while getting AM Client for instance: {am_instance.name} for Archive step: {step.id} for Archive: {step.archive.id}: {str(e)}"
         )
 
         return (
@@ -523,7 +521,7 @@ def get_am_client(step):
                 step,
                 str(e),
                 {
-                    "archivematica_instance": am_instance_config["AM_INSTANCE"],
+                    "archivematica_instance": am_instance.name,
                 },
             ),
             None,
@@ -540,13 +538,13 @@ class ArchivematicaClient(AMClient):
         super().__init__()
 
 
-def get_transfer_source(am_instance_config):
+def get_transfer_source(am_instance):
     DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
     try:
         am = AMClient()
-        am.ss_url = am_instance_config["AM_SS_URL"]
-        am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
-        am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
+        am.ss_url = am_instance.storage_service_url
+        am.ss_user_name = am_instance.storage_service_username
+        am.ss_api_key = am_instance.storage_service_api_key
 
         locations = am.list_storage_locations()
         # Archivematica returns integers for errors
@@ -555,7 +553,7 @@ def get_transfer_source(am_instance_config):
 
     except Exception as exc:
         raise Exception(
-            f"Failed to connect to Archivematica Storage Service instance '{am_instance_config['AM_INSTANCE']}': {exc}"
+            f"Failed to connect to Archivematica Storage Service instance '{am_instance.name}': {exc}"
         ) from exc
 
     objects = locations.get("objects") or []
@@ -569,7 +567,7 @@ def get_transfer_source(am_instance_config):
     raise Exception(
         "Transfer source is not defined, and no enabled location with "
         "description 'Default transfer source' was found for instance "
-        f"{am_instance_config['AM_INSTANCE']}."
+        f"{am_instance.name}."
     )
 
 
@@ -874,15 +872,15 @@ def start_am_transfers(self, chord_results=None):
     # Calculate & determine capacity per Archivematica instance
     am_instance_task_capacity = {}
 
-    for instance in ArchivematicaInstances.get_instance_configs():
+    for instance in ArchivematicaInstances.get_instances():
         instance_capacity = (
             step_type.concurrency_limit
-            - submitted_count_by_instance.get(instance["AM_INSTANCE"], 0)
+            - submitted_count_by_instance.get(instance.name, 0)
         )
         if instance_capacity > 0:
-            am_instance_task_capacity[instance["AM_INSTANCE"]] = instance_capacity
+            am_instance_task_capacity[instance.name] = instance_capacity
         logger.info(
-            f"Available capacity for instance {instance['AM_INSTANCE']} is {instance_capacity}."
+            f"Available capacity for instance {instance.name} is {instance_capacity}."
         )
 
     if len(am_instance_task_capacity) <= 0:

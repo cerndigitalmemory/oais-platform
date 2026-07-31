@@ -4,7 +4,6 @@ from unittest.mock import patch
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tests.archivematica import (
     AM_INSTANCES,
@@ -115,12 +114,7 @@ class ArchivematicaManagerTests(APITestCase):
         self.step.set_status(Status.IN_PROGRESS)
         self.step2.set_input_data_field("archivematica_instance", "AM2")
 
-        with patch.object(
-            ArchivematicaInstances,
-            "get_instance_configs",
-            return_value=am_instances,
-        ):
-            start_am_transfers.apply()
+        start_am_transfers.apply()
 
         mock_archivematica.assert_called_once_with(args=[self.step2.id])
 
@@ -159,12 +153,7 @@ class ArchivematicaManagerTests(APITestCase):
         )
         self.archive.set_last_step(self.step.id)
         mock_archivematica.return_value.id = "test-task-id"
-        with patch.object(
-            ArchivematicaInstances,
-            "get_instance_configs",
-            return_value=am_instances,
-        ):
-            start_am_transfers.apply()
+        start_am_transfers.apply()
 
         self.step.refresh_from_db()
         self.step2.refresh_from_db()
@@ -201,12 +190,7 @@ class ArchivematicaManagerTests(APITestCase):
             )
             archive.set_last_step(step.id)
         mock_archivematica.return_value.id = "test-task-id"
-        with patch.object(
-            ArchivematicaInstances,
-            "get_instance_configs",
-            return_value=am_instances,
-        ):
-            start_am_transfers.apply()
+        start_am_transfers.apply()
 
         assigned_steps = Step.objects.filter(
             step_type__name=StepName.ARCHIVE,
