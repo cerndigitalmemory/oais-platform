@@ -322,24 +322,6 @@ SIMPLE_JWT = {
 # SIP Staging folder
 SIP_STORE_BASEPATH = "/oais_platform/oais-data/sips/store"
 
-# ARCHIVEMATICA integration
-AM_INSTANCES = [
-    {
-        "AM_INSTANCE": "AM1",
-        "AM_URL": "http://host.docker.internal:62080",
-        "AM_USERNAME": "test",
-        "AM_API_KEY": "test",
-        "AM_SS_URL": "http://host.docker.internal:62081",
-        "AM_SS_USERNAME": "test",
-        "AM_SS_API_KEY": "test",
-        "SIP_UPSTREAM_BASEPATH": "/oais_platform/oais-data/sips/am1",
-        "AIP_UPSTREAM_BASEPATH": "/oais_platform/oais-data/aips/am1",
-        "AM_TRANSFER_SOURCE": None,
-        # Maximum number of retries for Archivematica failed jobs
-        "AM_RETRY_LIMIT": 2,
-    }
-]
-
 # INVENIORDM integration
 
 # Base URL of the InvenioRDM instance
