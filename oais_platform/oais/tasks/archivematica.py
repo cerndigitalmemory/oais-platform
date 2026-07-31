@@ -448,6 +448,7 @@ def resource_check(task, current_step, archive):
     if archive.sip_size == 0:
         archive.update_sip_size()
     archive_step_type = StepType.get_by_stepname(StepName.ARCHIVE)
+    am_instance = current_step.input_data_json.get("archivematica_instance")
     if archive.sip_size > archive_step_type.size_limit_bytes:
         return set_and_return_error(
             current_step,
@@ -458,11 +459,21 @@ def resource_check(task, current_step, archive):
         locked_archive_step_type = StepType.objects.select_for_update().get(
             pk=archive_step_type.id
         )
+        instance_current_size_bytes = (
+            Step.objects.filter(
+                step_type=locked_archive_step_type,
+                status__in=[Status.IN_PROGRESS, Status.SUBMITTED],
+                input_data_json__archivematica_instance=am_instance,
+            ).aggregate(total_size=models.Sum("archive__sip_size"))["total_size"]
+            or 0
+        )
         if (
-            locked_archive_step_type.current_size_bytes + archive.sip_size
+            instance_current_size_bytes + archive.sip_size
             > locked_archive_step_type.size_limit_bytes
         ):
-            logger.warning("Archivematica aggregated file size limit reached.")
+            logger.warning(
+                f"Archivematica aggregated file size limit reached for instance {am_instance}."
+            )
             current_step.set_status(Status.WAITING)
             current_step.set_output_data(
                 {
