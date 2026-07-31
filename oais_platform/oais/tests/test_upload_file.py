@@ -11,9 +11,9 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.tests.archivematica import AM_INSTANCES
 from oais_platform.oais.tasks.create_sip import upload
 from oais_platform.settings import (
-    AM_INSTANCES,
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,

@@ -4,17 +4,23 @@ from unittest.mock import patch
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.oais.tasks.archivematica import (
     am_manager,
     recover_stale_assigned_archivematica_steps,
     start_am_transfers,
 )
-from oais_platform.settings import AM_INSTANCES, AM_WAITING_TIME_LIMIT
+from oais_platform.settings import AM_WAITING_TIME_LIMIT
 
 
 class ArchivematicaManagerTests(APITestCase):
     def setUp(self):
+        create_archivematica_instance()
         self.archive = Archive.objects.create(
             recid="1",
             source="test",
@@ -102,13 +108,18 @@ class ArchivematicaManagerTests(APITestCase):
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
         ]
+        create_archivematica_instance(am_instances[1])
         self.step.step_type.concurrency_limit = 1
         self.step.step_type.save()
         self.step.set_input_data_field("archivematica_instance", "AM1")
         self.step.set_status(Status.IN_PROGRESS)
         self.step2.set_input_data_field("archivematica_instance", "AM2")
 
-        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+        with patch.object(
+            ArchivematicaInstances,
+            "get_instance_configs",
+            return_value=am_instances,
+        ):
             start_am_transfers.apply()
 
         mock_archivematica.assert_called_once_with(args=[self.step2.id])
@@ -121,12 +132,13 @@ class ArchivematicaManagerTests(APITestCase):
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
         ]
+        create_archivematica_instance(am_instances[1])
         archive3 = Archive.objects.create(
             recid="3",
             source="test",
             source_url="",
             path_to_sip="basepath/sips/test_path3",
-            archivematica_instance=am_instances[0]["AM_INSTANCE"],
+            archivematica_instance_id=am_instances[0]["AM_INSTANCE"],
             sip_size=1000,
         )
         step3 = Step.objects.create(
@@ -147,7 +159,11 @@ class ArchivematicaManagerTests(APITestCase):
         )
         self.archive.set_last_step(self.step.id)
         mock_archivematica.return_value.id = "test-task-id"
-        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+        with patch.object(
+            ArchivematicaInstances,
+            "get_instance_configs",
+            return_value=am_instances,
+        ):
             start_am_transfers.apply()
 
         self.step.refresh_from_db()
@@ -166,6 +182,7 @@ class ArchivematicaManagerTests(APITestCase):
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM1"},
             {**AM_INSTANCES[0], "AM_INSTANCE": "AM2"},
         ]
+        create_archivematica_instance(am_instances[1])
         self.step.step_type.concurrency_limit = 33
         self.step.step_type.save()
 
@@ -184,7 +201,11 @@ class ArchivematicaManagerTests(APITestCase):
             )
             archive.set_last_step(step.id)
         mock_archivematica.return_value.id = "test-task-id"
-        with patch("oais_platform.oais.tasks.archivematica.AM_INSTANCES", am_instances):
+        with patch.object(
+            ArchivematicaInstances,
+            "get_instance_configs",
+            return_value=am_instances,
+        ):
             start_am_transfers.apply()
 
         assigned_steps = Step.objects.filter(

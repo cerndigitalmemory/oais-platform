@@ -10,11 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='archive',
-            name='archivematica_instance',
-            field=models.CharField(max_length=50, null=True),
-        ),
         migrations.AlterField(
             model_name='step',
             name='status',

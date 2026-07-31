@@ -6,19 +6,24 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.oais.tasks.cta import cta_manager
-from oais_platform.settings import AM_INSTANCES, FTS_MAX_RETRY_COUNT
+from oais_platform.settings import FTS_MAX_RETRY_COUNT
 
 
 class CTAManagerTests(APITestCase):
     def setUp(self):
+        create_archivematica_instance()
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
         self.archive = Archive.objects.create(
             path_to_aip=f"{AM_INSTANCES[0]['AIP_UPSTREAM_BASEPATH']}/test/path/filename.zip",
-            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
+            archivematica_instance_id=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,

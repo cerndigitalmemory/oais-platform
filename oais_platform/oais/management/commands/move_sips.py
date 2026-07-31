@@ -40,7 +40,7 @@ class Command(BaseCommand):
                 continue
             # Get archivematica instance config to calculate sip path
             am_instance_config = ArchivematicaInstances.get_instance_config(
-                archive.archivematica_instance
+                archive.archivematica_instance_id
             )
             folder_name = os.path.basename(current_path)
             try:
