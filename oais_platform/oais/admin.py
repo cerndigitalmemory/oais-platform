@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
@@ -7,6 +8,7 @@ from guardian.admin import GuardedModelAdmin
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    ArchivematicaInstance,
     BatchStatus,
     Collection,
     HarvestBatch,
@@ -35,6 +37,42 @@ class NullToNotRequiredMixin:
 
 
 # Register your models here.
+
+
+class ArchivematicaInstanceAdminForm(forms.ModelForm):
+    api_key = forms.CharField(widget=forms.PasswordInput(render_value=False))
+    storage_service_api_key = forms.CharField(
+        widget=forms.PasswordInput(render_value=False)
+    )
+
+    class Meta:
+        model = ArchivematicaInstance
+        exclude = ("_api_key", "_storage_service_api_key")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["api_key"].required = False
+            self.fields["storage_service_api_key"].required = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data.get("api_key"):
+            instance.api_key = self.cleaned_data["api_key"]
+        if self.cleaned_data.get("storage_service_api_key"):
+            instance.storage_service_api_key = self.cleaned_data[
+                "storage_service_api_key"
+            ]
+        if commit:
+            instance.save()
+        return instance
+
+
+@admin.register(ArchivematicaInstance)
+class ArchivematicaInstanceAdmin(admin.ModelAdmin):
+    form = ArchivematicaInstanceAdminForm
+    list_display = ("name", "url", "storage_service_url", "enabled")
+    list_filter = ("enabled",)
 
 
 @admin.register(Archive)

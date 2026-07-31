@@ -10,7 +10,7 @@ from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica
 from oais_platform.oais.tasks.utils import generate_directory_structure
-from oais_platform.settings import AM_INSTANCES
+from oais_platform.oais.tests.archivematica import AM_INSTANCES
 
 
 class ArchivematicaCreateTests(APITestCase):

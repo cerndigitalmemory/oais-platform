@@ -1,15 +1,19 @@
-from oais_platform.settings import AM_INSTANCES
+from oais_platform.oais.models import ArchivematicaInstance
 
 
 class ArchivematicaInstances:
 
     @staticmethod
+    def get_instance_configs():
+        instances = ArchivematicaInstance.objects.filter(enabled=True)
+        return [instance.as_config() for instance in instances]
+
+    @staticmethod
     def get_instance_config(archivematica_instance):
-        return next(
-            (
-                am_instance_config
-                for am_instance_config in AM_INSTANCES
-                if am_instance_config["AM_INSTANCE"] == archivematica_instance
-            ),
-            None,
-        )
+        try:
+            instance = ArchivematicaInstance.objects.get(
+                name=archivematica_instance, enabled=True
+            )
+        except ArchivematicaInstance.DoesNotExist:
+            return None
+        return instance.as_config()

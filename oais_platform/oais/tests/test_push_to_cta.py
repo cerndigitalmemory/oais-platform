@@ -9,8 +9,12 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.settings import AM_INSTANCES, CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
+from oais_platform.settings import CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
 
 
 class MockedGError(Exception):
@@ -25,6 +29,7 @@ class PushToCTATests(APITestCase):
     MockedGError = MockedGError
 
     def setUp(self):
+        create_archivematica_instance()
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
         self.app_config.fts = self.fts
@@ -34,7 +39,7 @@ class PushToCTATests(APITestCase):
         )
         self.archive = Archive.objects.create(
             path_to_aip=path_to_aip,
-            archivematica_instance=AM_INSTANCES[0]["AM_INSTANCE"],
+            archivematica_instance_id=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,

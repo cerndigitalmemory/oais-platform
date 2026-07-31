@@ -84,6 +84,67 @@ def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 
+class ArchivematicaInstance(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    url = models.URLField(max_length=250)
+    username = models.CharField(max_length=150)
+    _api_key = models.TextField(db_column="api_key")
+    storage_service_url = models.URLField(max_length=250)
+    storage_service_username = models.CharField(max_length=150)
+    _storage_service_api_key = models.TextField(db_column="storage_service_api_key")
+    sip_upstream_basepath = models.CharField(max_length=250)
+    aip_upstream_basepath = models.CharField(max_length=250)
+    transfer_source = models.CharField(max_length=255, null=True, blank=True)
+    retry_limit = models.PositiveIntegerField(default=2)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def _encrypt(value):
+        return Fernet(ENCRYPT_KEY).encrypt(value.encode()).decode()
+
+    @staticmethod
+    def _decrypt(value):
+        return Fernet(ENCRYPT_KEY).decrypt(value.encode()).decode()
+
+    @property
+    def api_key(self):
+        return self._decrypt(self._api_key)
+
+    @api_key.setter
+    def api_key(self, value):
+        self._api_key = self._encrypt(value)
+
+    @property
+    def storage_service_api_key(self):
+        return self._decrypt(self._storage_service_api_key)
+
+    @storage_service_api_key.setter
+    def storage_service_api_key(self, value):
+        self._storage_service_api_key = self._encrypt(value)
+
+    def as_config(self):
+        """Return the legacy-shaped config consumed by Archivematica clients."""
+        return {
+            "AM_INSTANCE": self.name,
+            "AM_URL": self.url,
+            "AM_USERNAME": self.username,
+            "AM_API_KEY": self.api_key,
+            "AM_SS_URL": self.storage_service_url,
+            "AM_SS_USERNAME": self.storage_service_username,
+            "AM_SS_API_KEY": self.storage_service_api_key,
+            "SIP_UPSTREAM_BASEPATH": self.sip_upstream_basepath,
+            "AIP_UPSTREAM_BASEPATH": self.aip_upstream_basepath,
+            "AM_TRANSFER_SOURCE": self.transfer_source,
+            "AM_RETRY_LIMIT": self.retry_limit,
+        }
+
+
 class Archive(models.Model):
     """
     An archival process of a single addressable record in a upstream
@@ -130,7 +191,14 @@ class Archive(models.Model):
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
     sip_size = models.BigIntegerField(default=0)
     original_file_size = models.BigIntegerField(default=0)
-    archivematica_instance = models.CharField(max_length=50, null=True)
+    archivematica_instance = models.ForeignKey(
+        ArchivematicaInstance,
+        to_field="name",
+        db_column="archivematica_instance",
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="archives",
+    )
     # Timestamp from the upstream source
     version_timestamp = models.DateTimeField(default=None, null=True)
 
@@ -194,7 +262,7 @@ class Archive(models.Model):
         self.save()
 
     def set_archivematica_instance(self, archivematica_instance):
-        self.archivematica_instance = archivematica_instance
+        self.archivematica_instance_id = archivematica_instance
         self.save()
 
     def save(self, *args, **kwargs):

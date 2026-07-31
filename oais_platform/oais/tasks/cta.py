@@ -158,11 +158,11 @@ def fts_delegate(self):
 
 def _get_cta_path(archive):
     am_instance_config = ArchivematicaInstances.get_instance_config(
-        archive.archivematica_instance
+        archive.archivematica_instance_id
     )
     if not am_instance_config:
         raise ValueError(
-            f"Unable to retrieve Archivematica config for: {archive.archivematica_instance}"
+            f"Unable to retrieve Archivematica config for: {archive.archivematica_instance_id}"
         )
     try:
         return os.path.join(

@@ -32,7 +32,6 @@ from oais_platform.oais.tasks.utils import (
     set_and_return_error,
 )
 from oais_platform.settings import (
-    AM_INSTANCES,
     AM_PROCESSING_TIME_LIMIT,
     AM_WAITING_TIME_LIMIT,
 )
@@ -505,6 +504,7 @@ def get_am_client(step):
         am.ss_user_name = am_instance_config["AM_SS_USERNAME"]
         am.ss_api_key = am_instance_config["AM_SS_API_KEY"]
         am.processing_config = "automated"
+        # TODO: Save transfer source into database
         if not am_instance_config.get("AM_TRANSFER_SOURCE"):
             am_instance_config["AM_TRANSFER_SOURCE"] = get_transfer_source(
                 am_instance_config
@@ -874,7 +874,7 @@ def start_am_transfers(self, chord_results=None):
     # Calculate & determine capacity per Archivematica instance
     am_instance_task_capacity = {}
 
-    for instance in AM_INSTANCES:
+    for instance in ArchivematicaInstances.get_instance_configs():
         instance_capacity = (
             step_type.concurrency_limit
             - submitted_count_by_instance.get(instance["AM_INSTANCE"], 0)
