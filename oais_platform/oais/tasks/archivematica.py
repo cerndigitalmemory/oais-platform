@@ -18,6 +18,7 @@ from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
     COMPLETED_STATUSES,
+    ArchivematicaInstance,
     Status,
     Step,
     StepName,
@@ -31,10 +32,7 @@ from oais_platform.oais.tasks.utils import (
     get_failure_type_from_status_code,
     set_and_return_error,
 )
-from oais_platform.settings import (
-    AM_PROCESSING_TIME_LIMIT,
-    AM_WAITING_TIME_LIMIT,
-)
+from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
 
 logger = get_task_logger(__name__)
 
@@ -802,11 +800,15 @@ def handle_completed_am_package(celery_task, am, step, am_status):
 
 @shared_task(name="archive_failed_count_reset")
 def archive_failed_count_reset():
-    step_type = StepType.objects.get(name=StepName.ARCHIVE)
-    if step_type.enabled and step_type.failed_count > 0:
-        logger.info(f"Resetting failed count for step type {step_type.name}")
-        step_type.failed_count = 0
-        step_type.save()
+    instances = ArchivematicaInstance.objects.filter(
+        enabled=True,
+        failed_count__gt=0,
+    )
+    reset_count = instances.update(failed_count=0)
+    if reset_count:
+        logger.info(
+            f"Reset failed count for {reset_count} enabled Archivematica instance(s)."
+        )
 
 
 def outdate_aip_dependent_steps(archive):
