@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('oais', '0043_auto_20260728_1140'),
+        ('oais', '0044_scheduledharvest_record_limit'),
     ]
 
     operations = [

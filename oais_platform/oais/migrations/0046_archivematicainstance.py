@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("oais", "0044_archive_archivematica_instance_alter_step_status"),
+        ("oais", "0045_archive_archivematica_instance_alter_step_status"),
     ]
 
     operations = [
@@ -37,6 +37,7 @@ class Migration(migrations.Migration):
                     models.CharField(blank=True, max_length=255, null=True),
                 ),
                 ("retry_limit", models.PositiveIntegerField(default=2)),
+                ("failed_count", models.PositiveIntegerField(default=0)),
                 ("enabled", models.BooleanField(default=True)),
             ],
             options={"ordering": ("name",)},

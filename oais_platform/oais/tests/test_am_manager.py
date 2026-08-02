@@ -5,14 +5,14 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Status, Step, StepName
-from oais_platform.oais.tests.archivematica import (
-    AM_INSTANCES,
-    create_archivematica_instance,
-)
 from oais_platform.oais.tasks.archivematica import (
     am_manager,
     recover_stale_assigned_archivematica_steps,
     start_am_transfers,
+)
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
 )
 from oais_platform.settings import AM_WAITING_TIME_LIMIT
 

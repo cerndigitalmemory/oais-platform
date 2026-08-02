@@ -96,6 +96,7 @@ class ArchivematicaInstance(models.Model):
     aip_upstream_basepath = models.CharField(max_length=250)
     transfer_source = models.CharField(max_length=255, null=True, blank=True)
     retry_limit = models.PositiveIntegerField(default=2)
+    failed_count = models.PositiveIntegerField(default=0)
     enabled = models.BooleanField(default=True)
 
     class Meta:
@@ -131,6 +132,28 @@ class ArchivematicaInstance(models.Model):
     def set_transfer_source(self, transfer_source):
         self.transfer_source = transfer_source
         self.save()
+
+    def increment_failed_count(self, failed_blocking_limit=None):
+        """Increment this instance's failures within the caller's transaction."""
+        instance = type(self).objects.select_for_update().get(pk=self.pk)
+        instance.failed_count += 1
+        update_fields = ["failed_count"]
+        if (
+            failed_blocking_limit is not None
+            and instance.failed_count >= failed_blocking_limit
+            and instance.enabled
+        ):
+            instance.enabled = False
+            update_fields.append("enabled")
+            logging.error(
+                f"Archivematica instance {instance.name} disabled after reaching the "
+                "ARCHIVE step failure limit."
+            )
+        instance.save(update_fields=update_fields)
+
+        self.failed_count = instance.failed_count
+        self.enabled = instance.enabled
+        return not instance.enabled
 
     def as_config(self):
         """Return the legacy-shaped config consumed by Archivematica clients."""
@@ -545,7 +568,7 @@ class Step(models.Model):
             return
 
         if status == Status.FAILED:
-            self.step_type.increment_failed_count()
+            self._increment_failed_count()
             if self.failure_type is None:
                 self.failure_type = StepFailureType.OTHER
 
@@ -572,6 +595,48 @@ class Step(models.Model):
                 batch.refresh_status(status)
             except HarvestBatch.DoesNotExist:
                 pass  # batch was locked by another transaction
+
+    def _increment_failed_count(self):
+        if self.step_type.name != StepName.ARCHIVE:
+            self.step_type.increment_failed_count()
+            return
+
+        instance_name = (self.input_data_json or {}).get(
+            "archivematica_instance"
+        ) or self.archive.archivematica_instance_id
+        if not instance_name:
+            logging.warning(
+                f"Unable to increment failure count for archive step {self.id}: "
+                "no Archivematica instance is assigned.",
+            )
+            return
+
+        with transaction.atomic():
+            step_type = StepType.objects.select_for_update().get(pk=self.step_type_id)
+            try:
+                instance = ArchivematicaInstance.objects.get(pk=instance_name)
+            except ArchivematicaInstance.DoesNotExist:
+                logging.warning(
+                    f"Unable to increment failure count for archive step {self.id}: "
+                    f"Archivematica instance {instance_name} does not exist."
+                )
+                return
+
+            instance_disabled = instance.increment_failed_count(
+                step_type.failed_blocking_limit
+            )
+            if (
+                instance_disabled
+                and step_type.enabled
+                and not ArchivematicaInstance.objects.filter(enabled=True).exists()
+            ):
+                step_type.enabled = False
+                step_type.save(update_fields=["enabled"])
+                self.step_type.enabled = False
+                logging.error(
+                    f"StepType {step_type.name} disabled because all Archivematica instances "
+                    "are disabled."
+                )
 
     def set_task(self, task_id):
         self.celery_task_id = task_id

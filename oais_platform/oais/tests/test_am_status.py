@@ -7,14 +7,20 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
-from oais_platform.oais.tests.archivematica import (
-    AM_INSTANCES,
-    create_archivematica_instance,
+from oais_platform.oais.models import (
+    Archive,
+    ArchivematicaInstance,
+    Status,
+    Step,
+    StepName,
 )
 from oais_platform.oais.tasks.archivematica import (
     archive_failed_count_reset,
     check_am_status,
+)
+from oais_platform.oais.tests.archivematica import (
+    AM_INSTANCES,
+    create_archivematica_instance,
 )
 from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
 
@@ -32,7 +38,7 @@ class ArchivematicaStatusTests(APITestCase):
             return_value="test-transfer-source",
         )
         self.transfer_source_patch.start()
-        create_archivematica_instance(
+        self.am_instance = create_archivematica_instance(
             {
                 **AM_INSTANCES[0],
                 "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
@@ -703,23 +709,44 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
 
     def test_archive_failed_count_reset(self):
-        step_type = StepType.objects.get(name=StepName.ARCHIVE)
-        step_type.failed_count = 5
-        step_type.save()
+        self.am_instance.failed_count = 5
+        self.am_instance.save()
 
         archive_failed_count_reset()
 
-        step_type.refresh_from_db()
-        self.assertEqual(step_type.failed_count, 0)
+        self.am_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 0)
 
     def test_archive_failed_count_reset_disabled(self):
-        step_type = StepType.objects.get(name=StepName.ARCHIVE)
-        step_type.failed_count = 5
-        step_type.enabled = False
-        step_type.save()
+        self.am_instance.failed_count = 5
+        self.am_instance.enabled = False
+        self.am_instance.save()
 
         archive_failed_count_reset()
 
-        step_type.refresh_from_db()
-        self.assertEqual(step_type.failed_count, 5)
-        self.assertFalse(step_type.enabled)
+        self.am_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 5)
+        self.assertFalse(self.am_instance.enabled)
+
+    def test_archive_failed_count_reset_resets_each_enabled_instance(self):
+        self.am_instance.failed_count = 5
+        self.am_instance.save()
+        second_instance = ArchivematicaInstance.objects.create(
+            name="AM2",
+            url="http://am2.example.com",
+            username="test",
+            api_key="test",
+            storage_service_url="http://ss2.example.com",
+            storage_service_username="test",
+            storage_service_api_key="test",
+            sip_upstream_basepath="/sips/am2",
+            aip_upstream_basepath="/aips/am2",
+            failed_count=3,
+        )
+
+        archive_failed_count_reset()
+
+        self.am_instance.refresh_from_db()
+        second_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 0)
+        self.assertEqual(second_instance.failed_count, 0)
