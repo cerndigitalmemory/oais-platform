@@ -247,6 +247,13 @@ class Invenio(AbstractSource):
         logging.info(f"Starting fetching records from {start} to {end}.")
         yield from self.fetch_records_in_chunks(start, end, size, filter_type)
 
+    def get_records_count(self, start=None, end=None, filter_type=FilterType.UPDATED):
+        if not end:
+            end = datetime.datetime.now(datetime.timezone.utc)
+        return self.get_records_in_range(start, end, 1, 1, filter_type)[
+            "total_num_hits"
+        ]
+
     def get_records_in_range(self, start, end, page, size, filter_type):
         if start:
             query = f"{filter_type}:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"

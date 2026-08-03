@@ -860,6 +860,7 @@ class ScheduledHarvest(models.Model):
     grace_period_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
+    record_limit = models.PositiveIntegerField(default=0, null=False)
 
     def set_enabled(self, enabled):
         self.enabled = enabled
