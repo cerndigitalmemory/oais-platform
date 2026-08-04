@@ -39,6 +39,7 @@ class ScheduledHarvestTests(APITestCase):
             enabled=True,
             pipeline=self.pipeline,
             grace_period_days=10,
+            record_limit=10,
         )
         self.updated_time = datetime.now(timezone.utc).replace(microsecond=0)
 
@@ -103,6 +104,7 @@ class ScheduledHarvestTests(APITestCase):
                 "oais_platform.oais.tasks.scheduled_harvest.get_source"
             ) as mock_get_source:
                 mock_instance = MagicMock()
+                mock_instance.get_records_count.return_value = 0
                 mock_instance.get_records_to_harvest.return_value = iter([])
                 mock_get_source.return_value = mock_instance
                 scheduled_harvest.apply(args=[self.schedule.id])
@@ -140,7 +142,9 @@ class ScheduledHarvestTests(APITestCase):
         with self.assertLogs(level="INFO") as log:
             with patch(
                 "oais_platform.oais.tasks.scheduled_harvest.get_source"
-            ) as mock_get_source:
+            ) as mock_get_source, patch.object(
+                TestSource, "get_records_count", return_value=1
+            ):
                 mock_get_source.return_value = TestSource()
                 scheduled_harvest.apply(args=[self.schedule.id])
                 self.assertIn(
@@ -162,6 +166,66 @@ class ScheduledHarvestTests(APITestCase):
                 self.assertTrue(Collection.objects.exists())
                 self.assertTrue(HarvestBatch.objects.exists())
                 mock_batch.assert_called_once_with(HarvestBatch.objects.last().id)
+                self.schedule.refresh_from_db()
+                self.assertTrue(self.schedule.enabled)
+
+    @patch("oais_platform.oais.tasks.scheduled_harvest.batch_harvest.delay")
+    def test_scheduled_harvest_record_limit_exceeded(self, mock_batch):
+        with self.assertLogs(level="ERROR") as log:
+            with patch(
+                "oais_platform.oais.tasks.scheduled_harvest.get_source"
+            ) as mock_get_source:
+                mock_instance = MagicMock()
+                mock_instance.get_records_count.return_value = 11
+                mock_get_source.return_value = mock_instance
+                scheduled_harvest.apply(args=[self.schedule.id])
+                self.assertIn(
+                    f"Records to harvest for {self.source.name} (11) exceed the limit of 10",
+                    log.output[0],
+                )
+                mock_instance.get_records_to_harvest.assert_not_called()
+                self.schedule.refresh_from_db()
+                self.assertFalse(self.schedule.enabled)
+                self.assertFalse(HarvestRun.objects.exists())
+                self.assertFalse(Collection.objects.exists())
+                self.assertFalse(HarvestBatch.objects.exists())
+                mock_batch.assert_not_called()
+
+    @patch("oais_platform.oais.tasks.scheduled_harvest.batch_harvest.delay")
+    def test_scheduled_harvest_record_limit_not_supported(self, mock_batch):
+        with self.assertLogs(level="WARNING") as log:
+            with patch(
+                "oais_platform.oais.tasks.scheduled_harvest.get_source"
+            ) as mock_get_source:
+                mock_get_source.return_value = TestSource()
+                scheduled_harvest.apply(args=[self.schedule.id])
+                self.assertIn(
+                    f"Record limit cannot be enforced for {self.source.name}.",
+                    log.output[1],
+                )
+                self.schedule.refresh_from_db()
+                self.assertTrue(self.schedule.enabled)
+                self.assertTrue(HarvestBatch.objects.exists())
+                mock_batch.assert_called_once_with(HarvestBatch.objects.last().id)
+
+    @patch("oais_platform.oais.tasks.scheduled_harvest.batch_harvest.delay")
+    def test_scheduled_harvest_record_limit_count_failed(self, mock_batch):
+        with self.assertLogs(level="ERROR") as log:
+            with patch(
+                "oais_platform.oais.tasks.scheduled_harvest.get_source"
+            ) as mock_get_source:
+                mock_instance = MagicMock()
+                mock_instance.get_records_count.side_effect = Exception("test error")
+                mock_get_source.return_value = mock_instance
+                scheduled_harvest.apply(args=[self.schedule.id])
+                self.assertIn(
+                    f"Error while counting the records of {self.source.name}: test error",
+                    log.output[0],
+                )
+                self.schedule.refresh_from_db()
+                self.assertTrue(self.schedule.enabled)
+                self.assertFalse(HarvestRun.objects.exists())
+                mock_batch.assert_not_called()
 
     def test_batch_harvest_not_existing(self):
         with self.assertLogs(level="ERROR") as log:

@@ -278,6 +278,7 @@ class ScheduledHarvestAdmin(NullToNotRequiredMixin, admin.ModelAdmin):
         "scheduling_task",
         "batch_size",
         "batch_delay_minutes",
+        "record_limit",
     )
 
     def source_name(self, obj):

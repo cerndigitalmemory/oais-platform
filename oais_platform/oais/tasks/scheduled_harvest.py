@@ -71,6 +71,9 @@ def scheduled_harvest(self, scheduled_harvest_id):
     end = datetime.now(timezone.utc) - timedelta(
         days=scheduled_harvest.grace_period_days
     )
+    if not _check_record_limit(scheduled_harvest, api_key, last_harvest_time, end):
+        return
+
     harvest_run = HarvestRun.objects.create(
         source=source,
         scheduled_harvest=scheduled_harvest,
@@ -274,6 +277,34 @@ def finalize_batch(self, results, batch_id):
             logger.info(
                 f"All batches of harvest run({batch.harvest_run.id}) have been completed for {batch.harvest_run.source.name}."
             )
+
+
+def _check_record_limit(scheduled_harvest, api_key, start, end):
+    """Check that the given time range does not contain more records than the configured limit."""
+    if scheduled_harvest.record_limit == 0:
+        return True
+
+    source = scheduled_harvest.source
+    try:
+        records_total = get_source(source.name, api_key).get_records_count(
+            start=start, end=end, filter_type=scheduled_harvest.filter_type
+        )
+    except NotImplementedError:
+        logger.warning(f"Record limit cannot be enforced for {source.name}.")
+        return True
+    except Exception as e:
+        logger.error(f"Error while counting the records of {source.name}: {str(e)}")
+        return False
+
+    if records_total > scheduled_harvest.record_limit:
+        scheduled_harvest.set_enabled(False)
+        logger.error(
+            f"Records to harvest for {source.name} ({records_total}) exceed the limit of "
+            f"{scheduled_harvest.record_limit}"
+        )
+        return False
+
+    return True
 
 
 def _check_if_archive_exists(batch, record):
