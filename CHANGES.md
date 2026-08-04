@@ -1,5 +1,13 @@
 # Changes
 
+## Version 5.1.0 (released 2026-08-04)
+- Deployment: add separate prod token
+- Stats: include failures with no failure type in "other" count
+- AM: set finish date only for terminal steps, return empty list if no executed jobs
+- Collections: get summary for steps completed with warnings
+- Sources: add CDS Videos
+- Scheduled harvest: add option to limit amount of records
+
 ## Version 5.0.0 (released 2026-06-22)
 - Add filter for in pipeline steps
 - Monitoring: create endpoints for statistics for steps by status, failed steps by failure type and step duration
