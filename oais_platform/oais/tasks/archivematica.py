@@ -92,6 +92,7 @@ def _setup_archiving(step):
 
 
 def _create_sip_directory(current_step, sip_base_path):
+    transfer_sip_path = None
     try:
         archive = current_step.archive
         path_to_sip = Path(archive.path_to_sip)
