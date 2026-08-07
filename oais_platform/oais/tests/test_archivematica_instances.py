@@ -195,8 +195,8 @@ class ArchivematicaInstanceTests(TestCase):
             input_data_json={"archivematica_instance": instance.name},
         )
 
-        error, client = get_am_client(step)
-        second_error, second_client = get_am_client(step)
+        client, error = get_am_client(step)
+        second_client, second_error = get_am_client(step)
 
         instance.refresh_from_db()
         self.assertFalse(error)
