@@ -304,6 +304,7 @@ class UploadFileEndpointTest(APITestCase):
             {
                 "status": 1,
                 "errormsg": f"Error occurred while processing file: {error_message}",
+                "message": f"Error occurred while processing file: {error_message}",
                 "archive": archive.id,
             },
         )

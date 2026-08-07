@@ -86,6 +86,8 @@ def set_and_return_error(
     if errormsg:
         output_data["errormsg"] = errormsg
         logger.error(str(errormsg) + (f" {extra_log}" if extra_log else ""))
+        if not "message" in output_data.keys():
+            output_data["message"] = errormsg
 
     step.set_output_data(output_data)
     return output_data
