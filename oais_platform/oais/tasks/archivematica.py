@@ -55,7 +55,7 @@ def archivematica(self, step_id):
         return res
 
     # Create AM client & create required directories and return important paths
-    error, am, transfer_sip_path, archivematica_dst = _setup_archiving(current_step)
+    am, transfer_sip_path, archivematica_dst, error = _setup_archiving(current_step)
     if error:
         result = error
         cleanup = (
@@ -77,18 +77,18 @@ def archivematica(self, step_id):
 
 def _setup_archiving(step):
     # Get AM instance config or assign instance if get_am_clientnot done yet
-    error, am = get_am_client(step)
-    if error:
-        return error, None, None, None
+    am, error = get_am_client(step)
 
-    error, transfer_sip_path, archivematica_dst = _create_sip_directory(
-        step, am.sip_upstream_basepath
-    )
-    if error:
-        return error, am, transfer_sip_path, None
-    am.transfer_directory = archivematica_dst
-    am.transfer_name = get_transfer_name(step.archive, step)
-    return False, am, transfer_sip_path, archivematica_dst
+    if am:
+        transfer_sip_path, archivematica_dst, error = _create_sip_directory(
+            step, am.sip_upstream_basepath
+        )
+        if not error:
+            am.transfer_directory = archivematica_dst
+            am.transfer_name = get_transfer_name(step.archive, step)
+            return am, transfer_sip_path, archivematica_dst, False
+        return am, transfer_sip_path, None, error
+    return None, None, None, error
 
 
 def _create_sip_directory(current_step, sip_base_path):
@@ -107,11 +107,13 @@ def _create_sip_directory(current_step, sip_base_path):
             "/",
             transfer_sip_path.relative_to(sip_base_path),
         )
-        return False, transfer_sip_path, archivematica_dst
+        return transfer_sip_path, archivematica_dst, False
     except Exception as e:
         message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
         logger.error(message)
         return (
+            transfer_sip_path,
+            None,
             set_and_return_error(
                 current_step,
                 str(e),
@@ -120,11 +122,13 @@ def _create_sip_directory(current_step, sip_base_path):
                     "archivematica_instance": current_step.input_data_json.get(
                         "archivematica_instance"
                     ),
-                    "transfer_sip_path": str(transfer_sip_path),
+                    "transfer_sip_path": (
+                        str(transfer_sip_path)
+                        if transfer_sip_path is not None
+                        else None
+                    ),
                 },
             ),
-            transfer_sip_path,
-            None,
         )
 
 
@@ -208,7 +212,7 @@ def check_am_status(self, step_id):
     """
     step = Step.objects.get(pk=step_id)
 
-    error, am = get_am_client(step)
+    am, error = get_am_client(step)
     if error:
         return error
 
@@ -335,7 +339,7 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
     cleanup = False
     # Needs to validate both because just status=complete does not guarantee that aip is stored
     if status == "COMPLETE" and microservice == "Remove the processing directory":
-        error, cleanup = _handle_complete_status(celery_task, step, am, am_status)
+        cleanup, error = _handle_complete_status(celery_task, step, am, am_status)
     elif status in {"FAILED", "REJECTED"}:
         error = True
         _handle_failed_rejected_status(step, am, am_status, failure_type)
@@ -360,8 +364,8 @@ def _handle_am_status(celery_task, step, am, am_status, failure_type):
 
 def _handle_complete_status(celery_task, step, am, am_status):
     try:
-        error, cleanup = handle_completed_am_package(celery_task, am, step, am_status)
-        return error, cleanup
+        cleanup, error = handle_completed_am_package(celery_task, am, step, am_status)
+        return cleanup, error
     except Exception as e:
         failure_type = None
         logger.warning(
@@ -493,16 +497,16 @@ def get_am_client(step):
             f"Unable to create AM client, no Archivematica instance set for Archive Step: {step.id} for Archive: {step.archive.id}"
         )
         step.set_status(Status.WAITING)
-        return step.input_data_json, None
+        return None, step.input_data_json
 
     am_instance = ArchivematicaInstances.get_instance(am_instance)
     if not am_instance:
         return (
+            None,
             set_and_return_error(
                 step,
                 f"Configuration for set Archivematica instance {am_instance} could not be found for Archive Step: {step.id} for Archive: {step.archive.id}",
             ),
-            None,
         )
 
     am = ArchivematicaClient()
@@ -520,13 +524,14 @@ def get_am_client(step):
         am.transfer_source = am_instance.transfer_source
         am.aip_upstream_basepath = am_instance.aip_upstream_basepath
         am.sip_upstream_basepath = am_instance.sip_upstream_basepath
-        return False, am
+        return am, False
     except Exception as e:
         logger.error(
             f"Error while getting AM Client for instance: {am_instance.name} for Archive step: {step.id} for Archive: {step.archive.id}: {str(e)}"
         )
 
         return (
+            None,
             set_and_return_error(
                 step,
                 str(e),
@@ -534,7 +539,6 @@ def get_am_client(step):
                     "archivematica_instance": am_instance.name,
                 },
             ),
-            None,
         )
 
 
@@ -769,7 +773,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
-            return True, False  # error, force cleanup
+            return False, True  # force cleanup, error
         else:
             finalize(
                 self=celery_task,
@@ -781,7 +785,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
-            return False, True  # error, force cleanup
+            return True, False  # force cleanup, error
     else:
         retry_limit = 5
         retry_count = step.output_data_json.get("package_retry", 0)
@@ -796,7 +800,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
             am_status["package_retry"] = retry_count + 1
             step.set_status(Status.IN_PROGRESS)
             step.set_output_data(am_status)
-            return False, False  # error, force cleanup
+            return False, False  # force cleanup, error
 
 
 @shared_task(name="archive_failed_count_reset")
