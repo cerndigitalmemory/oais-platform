@@ -857,6 +857,7 @@ class ScheduledHarvest(models.Model):
     filter_type = models.CharField(
         choices=FilterType.choices, default=FilterType.UPDATED
     )
+    extra_query = models.CharField(max_length=200, null=True)
     grace_period_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)
@@ -900,6 +901,7 @@ class HarvestRun(models.Model):
     filter_type = models.CharField(
         choices=FilterType.choices, default=FilterType.UPDATED
     )
+    extra_query = models.CharField(max_length=200, null=True)
     grace_period_days = models.PositiveIntegerField(default=0, null=False)
     batch_size = models.PositiveIntegerField(default=100, null=False)
     batch_delay_minutes = models.PositiveIntegerField(default=15, null=False)

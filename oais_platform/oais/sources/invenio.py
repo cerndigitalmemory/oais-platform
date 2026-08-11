@@ -69,10 +69,17 @@ class Invenio(AbstractSource):
             return f"{self.baseURL}/record/{recid}"
         return f"{self.baseURL}/records/{recid}"
 
-    def search(self, query, page=1, size=20, sort=None):
-        url = f"{self.baseURL}/records?q={query}&size={str(size)}&page={str(page)}"
-        if sort:
-            url += f"&sort={sort}"
+    def search(self, query, page=1, size=20, sort=None, extra_query=None):
+        extra_params = ""
+        if extra_query:
+            if extra_query.startswith("q="):
+                query = f"{query} AND {extra_query[2:]}"
+            else:
+                extra_params = f"&{extra_query.lstrip('&')}"
+
+        sort_param = f"&sort={sort}" if sort else ""
+
+        url = f"{self.baseURL}/records?q={query}&size={size}&page={page}{sort_param}{extra_params}"
 
         try:
             session = self._get_session()
@@ -240,31 +247,47 @@ class Invenio(AbstractSource):
             )
 
     def get_records_to_harvest(
-        self, start=None, end=None, size=200, filter_type=FilterType.UPDATED
+        self,
+        start=None,
+        end=None,
+        size=200,
+        filter_type=FilterType.UPDATED,
+        extra_query=None,
     ):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
-        logging.info(f"Starting fetching records from {start} to {end}.")
-        yield from self.fetch_records_in_chunks(start, end, size, filter_type)
+        logging.info(
+            f"Starting fetching records from {start} to {end}. Extra query: {extra_query}"
+        )
+        yield from self.fetch_records_in_chunks(
+            start, end, size, filter_type, extra_query
+        )
 
-    def get_records_count(self, start=None, end=None, filter_type=FilterType.UPDATED):
+    def get_records_count(
+        self, start=None, end=None, filter_type=FilterType.UPDATED, extra_query=None
+    ):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
-        return self.get_records_in_range(start, end, 1, 1, filter_type)[
-            "total_num_hits"
-        ]
+        return self.get_records_in_range(
+            start, end, 1, 1, filter_type, extra_query=extra_query
+        )["total_num_hits"]
 
-    def get_records_in_range(self, start, end, page, size, filter_type):
+    def get_records_in_range(
+        self, start, end, page, size, filter_type, extra_query=None
+    ):
+        date_filter = filter_type
+        if self.source in ["cds-videos", "sandbox-videos"]:
+            date_filter = f"_{filter_type}"
         if start:
-            query = f"{filter_type}:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+            query = f"{date_filter}:[{start.strftime('%Y-%m-%dT%H:%M:%S')} TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         else:
-            query = f"{filter_type}:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
+            query = f"{date_filter}:[* TO {end.strftime('%Y-%m-%dT%H:%M:%S')}}}"
         query = urllib.parse.quote_plus(query)
         sort = "oldest" if filter_type == FilterType.CREATED else "updated-asc"
-        return self.search(query, page, size, sort=sort)
+        return self.search(query, page, size, sort=sort, extra_query=extra_query)
 
-    def fetch_records_in_chunks(self, start, end, size, filter_type):
-        result = self.get_records_in_range(start, end, 1, 1, filter_type)
+    def fetch_records_in_chunks(self, start, end, size, filter_type, extra_query):
+        result = self.get_records_in_range(start, end, 1, 1, filter_type, extra_query)
         total = result["total_num_hits"]
         logging.info(
             f"Total records to fetch for {start.strftime('%Y-%m-%dT%H:%M:%S') if start else '*'}–{end.strftime('%Y-%m-%dT%H:%M:%S')}: {total}."
@@ -284,7 +307,7 @@ class Invenio(AbstractSource):
                 while len(records_to_add) < initial_total:
                     page += 1
                     result = self.get_records_in_range(
-                        start, end, page, size, filter_type
+                        start, end, page, size, filter_type, extra_query
                     )
                     current_total = result["total_num_hits"]
                     if current_total != initial_total:
@@ -312,15 +335,15 @@ class Invenio(AbstractSource):
                 f"Total exceeds max results ({self.max_results}), splitting the time range."
             )
             result = self.get_records_in_range(
-                start, end, self.max_results, 1, filter_type
+                start, end, self.max_results, 1, filter_type, extra_query
             )
             last_record = result["results"][0]
             last_record_timestamp = datetime.datetime.fromisoformat(
                 last_record.get(filter_type)
             )
             yield from self.fetch_records_in_chunks(
-                start, last_record_timestamp, size, filter_type
+                start, last_record_timestamp, size, filter_type, extra_query
             )
             yield from self.fetch_records_in_chunks(
-                last_record_timestamp, end, size, filter_type
+                last_record_timestamp, end, size, filter_type, extra_query
             )

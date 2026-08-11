@@ -18,11 +18,13 @@ class AbstractSource(ABC):
         raise NotImplementedError("Step Notify Source not implemented for this Source.")
 
     def get_records_to_harvest(
-        self, start, end, size=200, filter_type=None
+        self, start, end, size=200, filter_type=None, extra_query=None
     ):  # Implementation should use yielding of records
         raise NotImplementedError(
             "Get latest records to harvest not implemented for this Source."
         )
 
-    def get_records_count(self, start=None, end=None, filter_type=None):
+    def get_records_count(
+        self, start=None, end=None, filter_type=None, extra_query=None
+    ):
         raise NotImplementedError("Get records count not implemented for this Source.")
