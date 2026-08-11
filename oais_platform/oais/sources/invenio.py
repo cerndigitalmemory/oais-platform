@@ -270,7 +270,6 @@ class Invenio(AbstractSource):
             "total_num_hits"
         ]
 
-
     def get_records_in_range(
         self, start, end, page, size, filter_type, extra_query=None
     ):
