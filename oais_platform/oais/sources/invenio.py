@@ -263,12 +263,14 @@ class Invenio(AbstractSource):
             start, end, size, filter_type, extra_query
         )
 
-    def get_records_count(self, start=None, end=None, filter_type=FilterType.UPDATED):
+    def get_records_count(
+        self, start=None, end=None, filter_type=FilterType.UPDATED, extra_query=None
+    ):
         if not end:
             end = datetime.datetime.now(datetime.timezone.utc)
-        return self.get_records_in_range(start, end, 1, 1, filter_type)[
-            "total_num_hits"
-        ]
+        return self.get_records_in_range(
+            start, end, 1, 1, filter_type, extra_query=extra_query
+        )["total_num_hits"]
 
     def get_records_in_range(
         self, start, end, page, size, filter_type, extra_query=None

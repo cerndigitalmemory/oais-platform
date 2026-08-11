@@ -24,5 +24,7 @@ class AbstractSource(ABC):
             "Get latest records to harvest not implemented for this Source."
         )
 
-    def get_records_count(self, start=None, end=None, filter_type=None):
+    def get_records_count(
+        self, start=None, end=None, filter_type=None, extra_query=None
+    ):
         raise NotImplementedError("Get records count not implemented for this Source.")

@@ -291,7 +291,10 @@ def _check_record_limit(scheduled_harvest, api_key, start, end):
     source = scheduled_harvest.source
     try:
         records_total = get_source(source.name, api_key).get_records_count(
-            start=start, end=end, filter_type=scheduled_harvest.filter_type
+            start=start,
+            end=end,
+            filter_type=scheduled_harvest.filter_type,
+            extra_query=scheduled_harvest.extra_query,
         )
     except NotImplementedError:
         logger.warning(f"Record limit cannot be enforced for {source.name}.")
