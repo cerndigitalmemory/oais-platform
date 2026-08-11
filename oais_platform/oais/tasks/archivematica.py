@@ -680,8 +680,8 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
         )
         return
 
-    transfer_sip_path = Path(transfer_sip_path).resolve()
-    base_path = Path(sip_base_path).resolve()
+    transfer_sip_path = Path(transfer_sip_path)
+    base_path = Path(sip_base_path)
 
     if not transfer_sip_path.exists():
         logger.info(
