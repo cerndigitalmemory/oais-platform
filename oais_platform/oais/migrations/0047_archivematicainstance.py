@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("oais", "0045_archive_archivematica_instance_alter_step_status"),
+        ("oais", "0046_archive_archivematica_instance_alter_step_status"),
     ]
 
     operations = [
