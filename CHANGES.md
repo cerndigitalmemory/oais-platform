@@ -1,5 +1,9 @@
 # Changes
 
+## Version 5.2.0 (released 2026-08-12)
+- Scheduled harvest: query based harvesting and changes for CDS Videos
+- Requirements: bump bagit-create
+
 ## Version 5.1.0 (released 2026-08-04)
 - Deployment: add separate prod token
 - Stats: include failures with no failure type in "other" count
