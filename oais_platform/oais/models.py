@@ -155,22 +155,6 @@ class ArchivematicaInstance(models.Model):
         self.enabled = instance.enabled
         return not instance.enabled
 
-    def as_config(self):
-        """Return the legacy-shaped config consumed by Archivematica clients."""
-        return {
-            "AM_INSTANCE": self.name,
-            "AM_URL": self.url,
-            "AM_USERNAME": self.username,
-            "AM_API_KEY": self.api_key,
-            "AM_SS_URL": self.storage_service_url,
-            "AM_SS_USERNAME": self.storage_service_username,
-            "AM_SS_API_KEY": self.storage_service_api_key,
-            "SIP_UPSTREAM_BASEPATH": self.sip_upstream_basepath,
-            "AIP_UPSTREAM_BASEPATH": self.aip_upstream_basepath,
-            "AM_TRANSFER_SOURCE": self.transfer_source,
-            "AM_RETRY_LIMIT": self.retry_limit,
-        }
-
 
 class Archive(models.Model):
     """
