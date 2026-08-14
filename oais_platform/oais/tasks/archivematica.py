@@ -102,6 +102,10 @@ def _create_sip_directory(current_step, sip_base_path):
         transfer_sip_path = transfer_source_path / path_to_sip.name
         if not transfer_sip_path.exists():
             shutil.copytree(path_to_sip, transfer_sip_path)
+        else:
+            logger.info(
+                f"Transfer path for Archive step: {current_step.id} for Archive: {archive.id} already exists"
+            )
         # Path to SIP inside Archivematica transfer source directory
         archivematica_dst = os.path.join(
             "/",
@@ -109,7 +113,7 @@ def _create_sip_directory(current_step, sip_base_path):
         )
         return transfer_sip_path, archivematica_dst, False
     except Exception as e:
-        message = f"Error while preparing Archivematica transfer for Archive step:{current_step.id} for Archive: {archive.id}: {str(e)}"
+        message = f"Error while preparing Archivematica transfer for Archive step: {current_step.id} for Archive: {archive.id}: {str(e)}"
         logger.error(message)
         return (
             transfer_sip_path,
