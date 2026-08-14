@@ -495,21 +495,21 @@ def resource_check(task, current_step, archive):
 
 def get_am_client(step):
 
-    am_instance = step.input_data_json.get("archivematica_instance")
-    if not am_instance:
+    step_am_instance = step.input_data_json.get("archivematica_instance")
+    if not step_am_instance:
         logger.info(
             f"Unable to create AM client, no Archivematica instance set for Archive Step: {step.id} for Archive: {step.archive.id}"
         )
         step.set_status(Status.WAITING)
         return None, step.input_data_json
 
-    am_instance = ArchivematicaInstances.get_instance(am_instance)
+    am_instance = ArchivematicaInstances.get_instance(step_am_instance)
     if not am_instance:
         return (
             None,
             set_and_return_error(
                 step,
-                f"Configuration for set Archivematica instance {am_instance} could not be found for Archive Step: {step.id} for Archive: {step.archive.id}",
+                f"Configuration for set Archivematica instance {step_am_instance} could not be found for Archive Step: {step.id} for Archive: {step.archive.id}",
             ),
         )
 
