@@ -13,7 +13,6 @@ from django.db.models import Count
 from django.utils import timezone
 
 from oais_platform.celery import app
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
 from oais_platform.oais.exceptions import MaxRetriesExceeded
 from oais_platform.oais.models import (
@@ -231,9 +230,9 @@ def _handle_am_retry(step, am_status):
     if step.input_step and step.input_step.step_type.name == StepName.ARCHIVE:
         retry_count = step.input_data_json.get("retry_count", 0)
 
-    am_instance = ArchivematicaInstances.get_instance(
-        step.input_data_json.get("archivematica_instance")
-    )
+    am_instance = ArchivematicaInstance.objects.filter(
+        name=step.input_data_json.get("archivematica_instance"), enabled=True
+    ).first()
     if retry_count + 1 > am_instance.retry_limit:
         logger.warning("Max retries exceeded for failed Archivematica jobs.")
         am_status["retry_count"] = retry_count
@@ -501,7 +500,9 @@ def get_am_client(step):
         step.set_status(Status.WAITING)
         return None, step.input_data_json
 
-    am_instance = ArchivematicaInstances.get_instance(step_am_instance)
+    am_instance = ArchivematicaInstance.objects.filter(
+        name=step_am_instance, enabled=True
+    ).first()
     if not am_instance:
         return (
             None,
@@ -892,7 +893,7 @@ def start_am_transfers(self, chord_results=None):
     # Calculate & determine capacity per Archivematica instance
     am_instance_task_capacity = {}
 
-    for instance in ArchivematicaInstances.get_instances():
+    for instance in ArchivematicaInstance.objects.filter(enabled=True):
         instance_capacity = (
             step_type.concurrency_limit
             - submitted_count_by_instance.get(instance.name, 0)

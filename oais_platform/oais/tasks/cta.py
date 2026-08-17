@@ -14,9 +14,15 @@ from django.utils import timezone
 from oais_utils.validate import compute_hash
 from requests.exceptions import RetryError
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    Archive,
+    ArchivematicaInstance,
+    Status,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     get_failure_type_from_status_code,
@@ -157,7 +163,9 @@ def fts_delegate(self):
 
 
 def _get_cta_path(archive):
-    am_instance = ArchivematicaInstances.get_instance(archive.archivematica_instance_id)
+    am_instance = ArchivematicaInstance.objects.filter(
+        name=archive.archivematica_instance_id, enabled=True
+    ).first()
     if not am_instance:
         raise ValueError(
             f"Unable to retrieve Archivematica config for: {archive.archivematica_instance_id}"

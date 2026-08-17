@@ -3,7 +3,6 @@ from unittest.mock import patch
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
-from oais_platform.oais.archivematica_instances import ArchivematicaInstances
 from oais_platform.oais.models import (
     Archive,
     ArchivematicaInstance,
@@ -22,10 +21,14 @@ class ArchivematicaInstanceTests(TestCase):
     def test_configuration_is_stored_in_database(self):
         instance = create_archivematica_instance()
 
-        stored_instance = ArchivematicaInstances.get_instance(instance.name)
+        stored_instance = ArchivematicaInstance.objects.get(
+            name=instance.name, enabled=True
+        )
 
         self.assertEqual(stored_instance, instance)
-        self.assertEqual(ArchivematicaInstances.get_instances(), [instance])
+        self.assertEqual(
+            list(ArchivematicaInstance.objects.filter(enabled=True)), [instance]
+        )
         instance.refresh_from_db()
         self.assertNotEqual(instance._api_key, AM_INSTANCES[0]["AM_API_KEY"])
         self.assertNotEqual(
@@ -38,8 +41,12 @@ class ArchivematicaInstanceTests(TestCase):
         instance.enabled = False
         instance.save()
 
-        self.assertIsNone(ArchivematicaInstances.get_instance(instance.name))
-        self.assertEqual(ArchivematicaInstances.get_instances(), [])
+        self.assertFalse(
+            ArchivematicaInstance.objects.filter(
+                name=instance.name, enabled=True
+            ).exists()
+        )
+        self.assertFalse(ArchivematicaInstance.objects.filter(enabled=True).exists())
 
     def test_instance_names_are_unique(self):
         field = ArchivematicaInstance._meta.get_field("name")
