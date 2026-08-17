@@ -114,15 +114,13 @@ def _create_sip_directory(current_step, sip_base_path):
         return transfer_sip_path, archivematica_dst, False
     except Exception as e:
         message = f"Error while preparing Archivematica transfer for Archive step: {current_step.id} for Archive: {archive.id}: {str(e)}"
-        logger.error(message)
         return (
             transfer_sip_path,
             None,
             set_and_return_error(
                 current_step,
-                str(e),
+                message,
                 {
-                    "message": message,
                     "archivematica_instance": current_step.input_data_json.get(
                         "archivematica_instance"
                     ),
@@ -180,9 +178,9 @@ def _start_archiving(
 
     except requests.HTTPError as e:
         errormsg = (
-            f"Error while archiving {step.id}: status code " f"{e.request.status_code}."
+            f"Error while archiving {step.id}: status code {e.request.status_code}."
         )
-        extra_log = (f"HTTPError: {e}",)
+        extra_log = f"HTTPError: {e}"
         failure_type = get_failure_type_from_status_code(e.request.status_code)
     except Exception as e:
         errormsg = f"Error while archiving {step.id}: {str(e)}"
