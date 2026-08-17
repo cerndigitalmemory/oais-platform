@@ -676,7 +676,7 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
     )
     if not transfer_sip_path:
         logger.info(
-            f"Archivematica transfer path unkown for step {step.id}: "
+            f"Archivematica transfer path unknown for step {step.id}: "
             f"{transfer_sip_path}"
         )
         return
