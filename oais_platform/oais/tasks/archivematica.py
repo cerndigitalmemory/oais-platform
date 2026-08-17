@@ -75,7 +75,7 @@ def archivematica(self, step_id):
 
 
 def _setup_archiving(step):
-    # Get AM instance config or assign instance if get_am_clientnot done yet
+    # Get AM instance config or assign instance if get_am_client not done yet
     am, error = get_am_client(step)
 
     if am:
