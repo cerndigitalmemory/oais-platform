@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import harvest
-from oais_platform.oais.tests.archivematica import AM_INSTANCES
+from oais_platform.oais.tests.am_utils import AM_INSTANCES
 from oais_platform.settings import SIP_STORE_BASEPATH
 
 

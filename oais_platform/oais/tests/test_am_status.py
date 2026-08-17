@@ -18,7 +18,7 @@ from oais_platform.oais.tasks.archivematica import (
     archive_failed_count_reset,
     check_am_status,
 )
-from oais_platform.oais.tests.archivematica import (
+from oais_platform.oais.tests.am_utils import (
     AM_INSTANCES,
     create_archivematica_instance,
 )

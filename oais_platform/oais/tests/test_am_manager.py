@@ -10,7 +10,7 @@ from oais_platform.oais.tasks.archivematica import (
     recover_stale_assigned_archivematica_steps,
     start_am_transfers,
 )
-from oais_platform.oais.tests.archivematica import (
+from oais_platform.oais.tests.am_utils import (
     AM_INSTANCES,
     create_archivematica_instance,
 )

@@ -10,7 +10,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
-from oais_platform.oais.tests.archivematica import (
+from oais_platform.oais.tests.am_utils import (
     AM_INSTANCES,
     create_archivematica_instance,
 )

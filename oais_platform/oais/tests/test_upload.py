@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import Status
 from oais_platform.oais.models import Archive, Step, StepName, StepType
-from oais_platform.oais.tests.archivematica import AM_INSTANCES
+from oais_platform.oais.tests.am_utils import AM_INSTANCES
 from oais_platform.settings import BIC_WORKDIR, SIP_STORE_BASEPATH
 
 

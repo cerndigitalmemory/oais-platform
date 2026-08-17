@@ -11,7 +11,7 @@ from oais_platform.oais.models import (
     StepName,
 )
 from oais_platform.oais.tasks.archivematica import get_am_client
-from oais_platform.oais.tests.archivematica import (
+from oais_platform.oais.tests.am_utils import (
     AM_INSTANCES,
     create_archivematica_instance,
 )
