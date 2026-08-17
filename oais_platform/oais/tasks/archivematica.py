@@ -133,9 +133,7 @@ def _create_sip_directory(current_step, sip_base_path):
         )
 
 
-def _start_archiving(
-    celery_task, step, am: AMClient, transfer_sip_path, archivematica_dst
-):
+def _start_archiving(celery_task, step, am, transfer_sip_path, archivematica_dst):
     logger.info(f"Starting archiving {step.archive.path_to_sip}")
 
     # Create archivematica package
