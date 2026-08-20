@@ -91,6 +91,34 @@ FILTER_TEST_CASES = [
                 "step_filters": {
                     "or": [
                         {
+                            "name": StepName.VALIDATION,
+                            "status": Status.FAILED,
+                            "latest": True,
+                        }
+                    ]
+                }
+            },
+        },
+        {"status": status.HTTP_200_OK, "size": 1},
+    ),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "step_filters": {
+                    "or": [{"name": StepName.VALIDATION, "status": Status.FAILED}]
+                }
+            },
+        },
+        {"status": status.HTTP_200_OK, "size": 2},
+    ),
+    (
+        {
+            "access": "all",
+            "filters": {
+                "step_filters": {
+                    "or": [
+                        {
                             "and": [
                                 {"name": StepName.HARVEST},
                                 {"name": StepName.VALIDATION},
@@ -183,14 +211,18 @@ class ArchiveTests(APITestCase):
         )
         self.private_archive.set_last_step(last_step.id)
 
-        for p in self.public_archives:
+        for index, archive in enumerate(self.public_archives):
             Step.objects.create(
-                archive=p, step_name=StepName.HARVEST, status=Status.COMPLETED
+                archive=archive, step_name=StepName.HARVEST, status=Status.COMPLETED
             )
+            if index == 0:
+                Step.objects.create(
+                    archive=archive, step_name=StepName.VALIDATION, status=Status.FAILED
+                )
             last_step = Step.objects.create(
-                archive=p, step_name=StepName.VALIDATION, status=Status.COMPLETED
+                archive=archive, step_name=StepName.VALIDATION, status=Status.COMPLETED
             )
-            p.set_last_step(last_step.id)
+            archive.set_last_step(last_step.id)
 
     def test_archive_list_public(self):
         url = reverse("archives-list")

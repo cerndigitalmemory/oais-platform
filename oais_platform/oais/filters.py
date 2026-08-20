@@ -2,6 +2,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from oais_platform.oais.exceptions import BadRequest
 from oais_platform.oais.models import Step, StepType
+from oais_platform.oais.statistics import latest_steps
 from oais_platform.settings import STEP_FILTER_CONDITION_LIMIT
 
 
@@ -40,6 +41,7 @@ def build_step_condition(condition):
     exclude = condition.pop("exclude", False)
     is_last_step = condition.pop("last_step", False)
     in_pipeline = condition.pop("in_pipeline", False)
+    latest_only = condition.pop("latest", False)
 
     if in_pipeline:
         q = Q()
@@ -68,6 +70,9 @@ def build_step_condition(condition):
         return ~q if exclude else q
 
     subquery = Step.objects.filter(archive=OuterRef("pk"))
+
+    if latest_only:
+        subquery = latest_steps(subquery)
 
     for key, value in condition.items():
         if key not in filters_map:
