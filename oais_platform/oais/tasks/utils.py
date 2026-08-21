@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.enums import TERMINAL_STATUSES, StepFailureType
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import ApiKey, Profile, Status, Step
 from oais_platform.settings import FILES_URL
 
