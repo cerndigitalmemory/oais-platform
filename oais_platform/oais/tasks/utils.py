@@ -60,31 +60,44 @@ def create_path_artifact(name, path, localpath):
     }
 
 
-def set_and_return_error(step, errormsg, extra_log=None, failure_type=None):
+def set_and_return_error(
+    step,
+    errormsg=None,
+    output_data=None,
+    status=None,
+    extra_log=None,
+    failure_type=None,
+):
     """
     Set the step as failed and return the error message
     """
+    if output_data is None:
+        output_data = {}
+
     if failure_type and not step.failure_type:
         step.set_failure_type(failure_type)
     else:
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
     step.set_finish_date()
-    if type(errormsg) is dict:
-        step.set_output_data(errormsg)
-        return_value = errormsg
-    else:
-        return_value = {"status": 1, "errormsg": errormsg}
-        step.set_output_data(return_value)
-        logger.error(errormsg + (f" {extra_log}" if extra_log else ""))
-    return return_value
+    output_data.setdefault("status", 1)
+    if status:
+        output_data["status"] = status
+    if errormsg:
+        output_data["errormsg"] = errormsg
+        logger.error(str(errormsg) + (f" {extra_log}" if extra_log else ""))
+        if not "message" in output_data.keys():
+            output_data["message"] = errormsg
+
+    step.set_output_data(output_data)
+    return output_data
 
 
 def remove_periodic_task_on_failure(task_name, step, output_data, failure_type=None):
     """
     Set step as failed/timed out and remove the scheduled task
     """
-    set_and_return_error(step, output_data, failure_type=failure_type)
+    set_and_return_error(step, output_data=output_data, failure_type=failure_type)
     logger.warning(f"Step {step.id} failed. Removing periodic task {task_name}.")
 
     try:

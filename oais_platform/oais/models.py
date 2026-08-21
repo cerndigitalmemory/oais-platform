@@ -84,6 +84,78 @@ def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 
+class ArchivematicaInstance(models.Model):
+    name = models.CharField(max_length=50, primary_key=True)
+    url = models.URLField(max_length=250)
+    username = models.CharField(max_length=150)
+    _api_key = models.TextField(db_column="api_key")
+    storage_service_url = models.URLField(max_length=250)
+    storage_service_username = models.CharField(max_length=150)
+    _storage_service_api_key = models.TextField(db_column="storage_service_api_key")
+    sip_upstream_basepath = models.CharField(max_length=250)
+    aip_upstream_basepath = models.CharField(max_length=250)
+    transfer_source = models.CharField(max_length=255, null=True, blank=True)
+    retry_limit = models.PositiveIntegerField(default=2)
+    failed_count = models.PositiveIntegerField(default=0)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def _encrypt(value):
+        return Fernet(ENCRYPT_KEY).encrypt(value.encode()).decode()
+
+    @staticmethod
+    def _decrypt(value):
+        return Fernet(ENCRYPT_KEY).decrypt(value.encode()).decode()
+
+    @property
+    def api_key(self):
+        return self._decrypt(self._api_key)
+
+    @api_key.setter
+    def api_key(self, value):
+        self._api_key = self._encrypt(value)
+
+    @property
+    def storage_service_api_key(self):
+        return self._decrypt(self._storage_service_api_key)
+
+    @storage_service_api_key.setter
+    def storage_service_api_key(self, value):
+        self._storage_service_api_key = self._encrypt(value)
+
+    def set_transfer_source(self, transfer_source):
+        self.transfer_source = transfer_source
+        self.save()
+
+    def increment_failed_count(self, failed_blocking_limit=None):
+        """Increment this instance's failures within the caller's transaction."""
+        instance = type(self).objects.select_for_update().get(pk=self.pk)
+        instance.failed_count += 1
+        update_fields = ["failed_count"]
+        if (
+            failed_blocking_limit is not None
+            and instance.failed_count >= failed_blocking_limit
+            and instance.enabled
+        ):
+            instance.enabled = False
+            update_fields.append("enabled")
+            logging.error(
+                f"Archivematica instance {instance.name} disabled after reaching the "
+                "ARCHIVE step failure limit."
+            )
+        instance.save(update_fields=update_fields)
+
+        self.failed_count = instance.failed_count
+        self.enabled = instance.enabled
+        return not instance.enabled
+
+
 class Archive(models.Model):
     """
     An archival process of a single addressable record in a upstream
@@ -130,6 +202,13 @@ class Archive(models.Model):
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
     sip_size = models.BigIntegerField(default=0)
     original_file_size = models.BigIntegerField(default=0)
+    archivematica_instance = models.ForeignKey(
+        ArchivematicaInstance,
+        db_column="archivematica_instance",
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="archives",
+    )
     # Timestamp from the upstream source
     version_timestamp = models.DateTimeField(default=None, null=True)
 
@@ -190,6 +269,10 @@ class Archive(models.Model):
 
     def set_original_file_size(self, size):
         self.original_file_size = size
+        self.save()
+
+    def set_archivematica_instance(self, archivematica_instance):
+        self.archivematica_instance_id = archivematica_instance
         self.save()
 
     def save(self, *args, **kwargs):
@@ -469,7 +552,7 @@ class Step(models.Model):
             return
 
         if status == Status.FAILED:
-            self.step_type.increment_failed_count()
+            self._increment_failed_count()
             if self.failure_type is None:
                 self.failure_type = StepFailureType.OTHER
 
@@ -497,6 +580,48 @@ class Step(models.Model):
             except HarvestBatch.DoesNotExist:
                 pass  # batch was locked by another transaction
 
+    def _increment_failed_count(self):
+        if self.step_type.name != StepName.ARCHIVE:
+            self.step_type.increment_failed_count()
+            return
+
+        instance_name = (self.input_data_json or {}).get(
+            "archivematica_instance"
+        ) or self.archive.archivematica_instance_id
+        if not instance_name:
+            logging.warning(
+                f"Unable to increment failure count for archive step {self.id}: "
+                "no Archivematica instance is assigned.",
+            )
+            return
+
+        with transaction.atomic():
+            step_type = StepType.objects.select_for_update().get(pk=self.step_type_id)
+            try:
+                instance = ArchivematicaInstance.objects.get(pk=instance_name)
+            except ArchivematicaInstance.DoesNotExist:
+                logging.warning(
+                    f"Unable to increment failure count for archive step {self.id}: "
+                    f"Archivematica instance {instance_name} does not exist."
+                )
+                return
+
+            instance_disabled = instance.increment_failed_count(
+                step_type.failed_blocking_limit
+            )
+            if (
+                instance_disabled
+                and step_type.enabled
+                and not ArchivematicaInstance.objects.filter(enabled=True).exists()
+            ):
+                step_type.enabled = False
+                step_type.save(update_fields=["enabled"])
+                self.step_type.enabled = False
+                logging.error(
+                    f"StepType {step_type.name} disabled because all Archivematica instances "
+                    "are disabled."
+                )
+
     def set_task(self, task_id):
         self.celery_task_id = task_id
         self.save(update_fields=["celery_task_id"])
@@ -512,6 +637,12 @@ class Step(models.Model):
     def set_input_data_field(self, key, value):
         data = self.input_data_json or {}
         data[key] = value
+        self.input_data_json = data
+        self.save(update_fields=["input_data_json"])
+
+    def remove_input_data_field(self, key):
+        data = self.input_data_json or {}
+        data.pop(key, None)
         self.input_data_json = data
         self.save(update_fields=["input_data_json"])
 

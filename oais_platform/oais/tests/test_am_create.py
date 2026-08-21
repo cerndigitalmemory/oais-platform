@@ -1,3 +1,6 @@
+import os
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import requests
@@ -6,33 +9,47 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.archivematica import archivematica
+from oais_platform.oais.tasks.utils import generate_directory_structure
+from oais_platform.oais.tests.am_utils import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 
 
 class ArchivematicaCreateTests(APITestCase):
     def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.sip_base_path = os.path.join(self.tmpdir.name, "sips")
+        self.path_to_sip = os.path.join(self.sip_base_path, "test_path")
+        os.makedirs(self.path_to_sip)
+
         self.archive = Archive.objects.create(
             recid="1",
             source="test",
             source_url="",
-            path_to_sip="basepath/sips/test_path",
+            title="Test archive",
+            path_to_sip=self.path_to_sip,
             sip_size=1000,
         )
 
         self.step = Step.objects.create(
-            archive=self.archive, step_name=StepName.ARCHIVE
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
         self.step.step_type.size_limit_bytes = 2000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
-
-        self.path_patch = patch(
-            "oais_platform.oais.tasks.archivematica.SIP_UPSTREAM_BASEPATH",
-            "basepath/sips",
+        create_archivematica_instance(
+            {
+                **AM_INSTANCES[0],
+                "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
+                "AM_TRANSFER_SOURCE": "test-transfer-source",
+            }
         )
-        self.path_patch.start()
 
     def tearDown(self):
-        self.path_patch.stop()
+        self.tmpdir.cleanup()
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_success(self, create_package):
@@ -47,6 +64,60 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(self.step.step_type.current_size_bytes, self.archive.sip_size)
+        self.assertTrue(Path(self.step.output_data_json["transfer_sip_path"]).exists())
+
+    def test_archivematica_uses_path_relative_to_transfer_source_root(self):
+        class FakeAMClient:
+
+            am_url = ""
+            aip_upstream_basepath = ""
+
+            def create_package(self):
+                return {"id": "test_package_id"}
+
+        fake_am = FakeAMClient()
+        fake_am.sip_upstream_basepath = self.sip_base_path
+
+        with patch(
+            "oais_platform.oais.tasks.archivematica.get_am_client",
+            return_value=(fake_am, False),
+        ):
+            result = archivematica.apply(args=[self.step.id])
+
+        result.get()
+        transfer_source_path = generate_directory_structure(
+            self.sip_base_path, self.archive
+        )
+        expected_transfer_directory = os.path.join(
+            "/",
+            os.path.relpath(
+                os.path.join(transfer_source_path, os.path.basename(self.path_to_sip)),
+                self.sip_base_path,
+            ),
+        )
+
+        self.assertEqual(fake_am.transfer_directory, expected_transfer_directory)
+
+    @patch("amclient.AMClient.create_package")
+    def test_archivematica_cleans_up_when_setup_fails(self, create_package):
+        def fail_after_creating_destination(source, destination):
+            Path(destination).mkdir(parents=True)
+            raise OSError("Unable to copy SIP")
+
+        with patch(
+            "oais_platform.oais.tasks.archivematica.shutil.copytree",
+            side_effect=fail_after_creating_destination,
+        ) as copytree:
+            result = archivematica.apply(args=[self.step.id]).get()
+
+        self.step.refresh_from_db()
+        transfer_sip_path = Path(self.step.output_data_json["transfer_sip_path"])
+
+        self.assertEqual(result["status"], 1)
+        self.assertEqual(self.step.status, Status.FAILED)
+        self.assertFalse(transfer_sip_path.exists())
+        copytree.assert_called_once()
+        create_package.assert_not_called()
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_create_package(self, create_package):
@@ -55,15 +126,19 @@ class ArchivematicaCreateTests(APITestCase):
 
         result = result.get()
         self.step.refresh_from_db()
-        errormsg = f"AM create returned error {create_package.return_value}"
+        message = f"AM create returned error {create_package.return_value}"
+        errormsg = "Unknown return from amclient, check logs"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.output_data_json["status"], 1)
         self.assertIn(errormsg, self.step.output_data_json["errormsg"])
         self.assertEqual(result["status"], 1)
         self.assertIn(errormsg, result["errormsg"])
+        self.assertIn(message, self.step.output_data_json["message"])
+        self.assertIn(message, result["message"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_authentication(self, create_package):
@@ -86,6 +161,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_403)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_httperror(self, create_package):
@@ -106,6 +182,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
         self.assertEqual(self.step.failure_type, StepFailureType.HTTP_400)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_exception(self, create_package):
@@ -123,6 +200,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertIn(exception_msg, result["errormsg"])
         self.assertEqual(self.step.step_type.current_count, 0)
         self.assertEqual(self.step.step_type.current_size_bytes, 0)
+        self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     def test_archivematica_file_size_exceeded(self):
         self.archive.sip_size = self.step.step_type.size_limit_bytes + 1
@@ -153,8 +231,25 @@ class ArchivematicaCreateTests(APITestCase):
             self.step.step_type.size_limit_bytes - self.archive.sip_size + 1,
         )
 
-    def _create_with_current_size(self, size):
+    @patch("amclient.AMClient.create_package")
+    def test_archivematica_aggregated_file_size_is_per_instance(self, create_package):
+        create_package.return_value = {"id": "test_package_id"}
+        self._create_with_current_size(
+            self.step.step_type.size_limit_bytes,
+            am_instance="AM2",
+        )
+
+        archivematica.apply(args=[self.step.id])
+
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, Status.SUBMITTED)
+        self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
+
+    def _create_with_current_size(self, size, am_instance="AM1"):
         archive = Archive.objects.create(recid="2", source="test_source", sip_size=size)
         Step.objects.create(
-            archive=archive, step_name=StepName.ARCHIVE, status=Status.IN_PROGRESS
+            archive=archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.IN_PROGRESS,
+            input_data_json={"archivematica_instance": am_instance},
         )

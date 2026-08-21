@@ -1,3 +1,5 @@
+import os
+import tempfile
 from unittest.mock import Mock, patch
 
 import requests
@@ -5,33 +7,68 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    Archive,
+    ArchivematicaInstance,
+    Status,
+    Step,
+    StepName,
+)
 from oais_platform.oais.tasks.archivematica import (
     archive_failed_count_reset,
     check_am_status,
 )
-from oais_platform.settings import (
-    AM_PROCESSING_TIME_LIMIT,
-    AM_RETRY_LIMIT,
-    AM_URL,
-    AM_WAITING_TIME_LIMIT,
+from oais_platform.oais.tests.am_utils import (
+    AM_INSTANCES,
+    create_archivematica_instance,
 )
+from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
 
 
 class ArchivematicaStatusTests(APITestCase):
     def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.sip_base_path = os.path.join(self.tmpdir.name, "sips")
+        self.aip_base_path = os.path.join(self.tmpdir.name, "aips")
+        self.transfer_sip_path = os.path.join(self.sip_base_path, "test", "test_path")
+        os.makedirs(self.transfer_sip_path)
+
+        self.transfer_source_patch = patch(
+            "oais_platform.oais.tasks.archivematica.get_transfer_source",
+            return_value="test-transfer-source",
+        )
+        self.transfer_source_patch.start()
+        self.am_instance = create_archivematica_instance(
+            {
+                **AM_INSTANCES[0],
+                "SIP_UPSTREAM_BASEPATH": self.sip_base_path,
+                "AIP_UPSTREAM_BASEPATH": self.aip_base_path,
+            }
+        )
+
         self.archive = Archive.objects.create(
-            recid="1", source="test", source_url="", path_to_sip="test_path"
+            recid="1",
+            source="test",
+            source_url="",
+            path_to_sip="test_path",
         )
 
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
-            output_data_json={"package_uuid": "5678"},
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
+            output_data_json={
+                "package_uuid": "5678",
+                "transfer_sip_path": self.transfer_sip_path,
+            },
         )
 
         # simulate archivematica step started
         self.step.set_start_date()
+
+    def tearDown(self):
+        self.transfer_source_patch.stop()
+        self.tmpdir.cleanup()
 
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_package_details")
@@ -97,6 +134,7 @@ class ArchivematicaStatusTests(APITestCase):
 
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_completed_not_fully(self, get_unit_status):
+
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Completed first half, still processing",
@@ -115,6 +153,7 @@ class ArchivematicaStatusTests(APITestCase):
             get_unit_status.return_value["microservice"],
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.finish_date)
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
@@ -155,7 +194,13 @@ class ArchivematicaStatusTests(APITestCase):
     def test_am_status_completed_uuid_not_found_retry_limit(
         self, get_unit_status, get_package_details
     ):
-        self.step.set_output_data({"package_retry": 5, "package_uuid": 5678})
+        self.step.set_output_data(
+            {
+                "package_retry": 5,
+                "package_uuid": 5678,
+                "transfer_sip_path": self.transfer_sip_path,
+            }
+        )
         get_unit_status.return_value = {
             "status": "COMPLETE",
             "microservice": "Remove the processing directory",
@@ -196,6 +241,7 @@ class ArchivematicaStatusTests(APITestCase):
             get_unit_status.return_value["microservice"],
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.finish_date)
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
         self.assertIsNone(self.step.output_data_json.get("retry", None))
         self.assertIsNone(self.step.output_data_json.get("errormsg", None))
@@ -238,6 +284,7 @@ class ArchivematicaStatusTests(APITestCase):
             "Waiting for archivematica to respond",
         )
         self.assertRaises(KeyError, lambda: self.step.output_data_json["artifact"])
+        self.assertIsNone(self.step.finish_date)
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_jobs")
@@ -360,6 +407,7 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("amclient.AMClient.get_jobs")
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_failed(self, get_unit_status, get_jobs, create_retry_step):
+        am_instance_url = AM_INSTANCES[0]["AM_URL"]
         get_jobs.side_effect = [
             [
                 {
@@ -423,7 +471,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Normalize for preservation",
                 "microservice": "Normalize",
-                "link": f"{AM_URL}/tasks/5678",
+                "link": f"{am_instance_url}/tasks/5678",
             },
         )
         self.assertEqual(
@@ -431,7 +479,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Extract technical metadata",
                 "microservice": "Unzipping file",
-                "link": f"{AM_URL}/tasks/6789",
+                "link": f"{am_instance_url}/tasks/6789",
             },
         )
         self.assertEqual(
@@ -439,7 +487,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "SIP Creation",
                 "microservice": "Exception occured",
-                "link": f"{AM_URL}/tasks/9876",
+                "link": f"{am_instance_url}/tasks/9876",
             },
         )
         create_retry_step.assert_called_once()
@@ -504,11 +552,18 @@ class ArchivematicaStatusTests(APITestCase):
         get_task,
         mock_create_retry_step,
     ):
-        self.step.set_input_data({"retry_count": 1})
+        am_instance_url = AM_INSTANCES[0]["AM_URL"]
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "retry_count": 1,
+            }
+        )
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
             status=Status.COMPLETED,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
         self.step.save()
 
@@ -563,7 +618,7 @@ class ArchivematicaStatusTests(APITestCase):
             {
                 "task": "Normalize for preservation",
                 "filename": "failed.txt",
-                "link": f"{AM_URL}/task/5678",
+                "link": f"{am_instance_url}/task/5678",
             },
         )
         mock_create_retry_step.assert_called_once()
@@ -597,7 +652,13 @@ class ArchivematicaStatusTests(APITestCase):
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
     @patch("amclient.AMClient.get_unit_status")
     def test_am_status_retry_exceeded(self, get_unit_status, create_retry_step):
-        self.step.set_input_data({"retry_count": AM_RETRY_LIMIT})
+        am_instance_retry_limit = AM_INSTANCES[0]["AM_RETRY_LIMIT"]
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "retry_count": am_instance_retry_limit,
+            }
+        )
         self.step.input_step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.ARCHIVE,
@@ -628,7 +689,12 @@ class ArchivematicaStatusTests(APITestCase):
         create_retry_step.assert_not_called()
 
     def test_am_status_no_package_uuid(self):
-        self.step.set_output_data({"package_uuid": None})
+        self.step.set_output_data(
+            {
+                "package_uuid": None,
+                "transfer_sip_path": self.transfer_sip_path,
+            }
+        )
         check_am_status.apply(args=[self.step.id])
 
         self.step.refresh_from_db()
@@ -643,23 +709,44 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNone(self.step.output_data_json.get("retry_count", None))
 
     def test_archive_failed_count_reset(self):
-        step_type = StepType.objects.get(name=StepName.ARCHIVE)
-        step_type.failed_count = 5
-        step_type.save()
+        self.am_instance.failed_count = 5
+        self.am_instance.save()
 
         archive_failed_count_reset()
 
-        step_type.refresh_from_db()
-        self.assertEqual(step_type.failed_count, 0)
+        self.am_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 0)
 
     def test_archive_failed_count_reset_disabled(self):
-        step_type = StepType.objects.get(name=StepName.ARCHIVE)
-        step_type.failed_count = 5
-        step_type.enabled = False
-        step_type.save()
+        self.am_instance.failed_count = 5
+        self.am_instance.enabled = False
+        self.am_instance.save()
 
         archive_failed_count_reset()
 
-        step_type.refresh_from_db()
-        self.assertEqual(step_type.failed_count, 5)
-        self.assertFalse(step_type.enabled)
+        self.am_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 5)
+        self.assertFalse(self.am_instance.enabled)
+
+    def test_archive_failed_count_reset_resets_each_enabled_instance(self):
+        self.am_instance.failed_count = 5
+        self.am_instance.save()
+        second_instance = ArchivematicaInstance.objects.create(
+            name="AM2",
+            url="http://am2.example.com",
+            username="test",
+            api_key="test",
+            storage_service_url="http://ss2.example.com",
+            storage_service_username="test",
+            storage_service_api_key="test",
+            sip_upstream_basepath="/sips/am2",
+            aip_upstream_basepath="/aips/am2",
+            failed_count=3,
+        )
+
+        archive_failed_count_reset()
+
+        self.am_instance.refresh_from_db()
+        second_instance.refresh_from_db()
+        self.assertEqual(self.am_instance.failed_count, 0)
+        self.assertEqual(second_instance.failed_count, 0)

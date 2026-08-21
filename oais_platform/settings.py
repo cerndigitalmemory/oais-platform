@@ -28,45 +28,10 @@ from os import environ
 from pathlib import Path
 
 import sentry_sdk
-from amclient import AMClient
 from celery.schedules import crontab
-from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 
 from oais_platform import __version__
-
-
-def get_default_transfer_source():
-    DEFAULT_TRANSFER_DESCRIPTION = "Default transfer source"
-    try:
-        am = AMClient()
-        am.ss_url = AM_SS_URL
-        am.ss_user_name = AM_SS_USERNAME
-        am.ss_api_key = AM_SS_API_KEY
-
-        locations = am.list_storage_locations()
-        # Archivematica returns integers for errors
-        if not locations or not isinstance(locations, dict):
-            raise Exception("Invalid storage locations response.")
-
-    except Exception as exc:
-        raise ImproperlyConfigured(
-            f"Failed to connect to Archivematica Storage Service: {exc}"
-        ) from exc
-
-    objects = locations.get("objects") or []
-
-    for loc in objects:
-        if loc.get("description") == DEFAULT_TRANSFER_DESCRIPTION and loc.get(
-            "enabled"
-        ):
-            return loc.get("uuid")
-
-    raise ImproperlyConfigured(
-        "AM_SS_TRANSFER_SOURCE is not defined, and no enabled location with "
-        "description 'Default transfer source' was found."
-    )
-
 
 ## General Django settings
 
@@ -354,24 +319,8 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
 }
 
-# ARCHIVEMATICA integration
-
-# add the URL where archivematica is exposed, username and password
-AM_URL = "http://host.docker.internal:62080"
-AM_USERNAME = "test"
-AM_API_KEY = "test"
-# Archivematica Storage Server
-AM_SS_URL = "http://host.docker.internal:62081"
-AM_SS_USERNAME = "test"
-AM_SS_API_KEY = "test"
-
-# add the UUID of the transfer source
-AM_TRANSFER_SOURCE = (
-    environ.get("AM_TRANSFER_SOURCE_UUID") or get_default_transfer_source()
-)
-
-# Maximum number of retries for Archivematica failed jobs
-AM_RETRY_LIMIT = 2
+# SIP Staging folder
+SIP_STORE_BASEPATH = "/oais_platform/oais-data/sips/store"
 
 # INVENIORDM integration
 
@@ -391,10 +340,6 @@ UPLOAD_DELETION_CUTOFF_DAYS = 14
 
 # Base URL that serves the packages
 FILES_URL = "https://oais.web.cern.ch/"
-# Path where the AIPs will be served from
-AIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/aips/"
-# Path where the SIPs will be served from
-SIP_UPSTREAM_BASEPATH = "/oais_platform/oais-data/sips/"
 
 # FTS Settings
 FTS_INSTANCE = environ.get("FTS_INSTANCE", "https://fts3-public.cern.ch:8446")

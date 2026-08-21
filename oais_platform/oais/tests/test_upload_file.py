@@ -12,11 +12,12 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
 from oais_platform.oais.tasks.create_sip import upload
+from oais_platform.oais.tests.am_utils import AM_INSTANCES
 from oais_platform.settings import (
     FILE_UPLOAD_MAX_SIZE_BYTE,
     FILE_UPLOAD_MAX_SIZE_GB,
     LOCAL_UPLOAD_PATH,
-    SIP_UPSTREAM_BASEPATH,
+    SIP_STORE_BASEPATH,
 )
 
 
@@ -58,7 +59,7 @@ class UploadTaskTest(APITestCase):
         self.assertEqual(
             result["artifact"]["artifact_localpath"],
             os.path.join(
-                SIP_UPSTREAM_BASEPATH,
+                SIP_STORE_BASEPATH,
                 "local",
                 "d05f/759a/df39/458d/ab33/ab21/b6cd/117e",
                 sip_folder,
@@ -68,7 +69,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.COMPLETED)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(SIP_STORE_BASEPATH)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -109,7 +110,7 @@ class UploadTaskTest(APITestCase):
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, Status.FAILED)
         expected_path = (
-            Path(SIP_UPSTREAM_BASEPATH)
+            Path(SIP_STORE_BASEPATH)
             / "local"
             / "d05f/759a/df39/458d/ab33/ab21/b6cd/117e"
         )
@@ -303,6 +304,7 @@ class UploadFileEndpointTest(APITestCase):
             {
                 "status": 1,
                 "errormsg": f"Error occurred while processing file: {error_message}",
+                "message": f"Error occurred while processing file: {error_message}",
                 "archive": archive.id,
             },
         )

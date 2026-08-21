@@ -22,7 +22,7 @@ from oais_platform.oais.tasks.utils import (
 from oais_platform.settings import (
     BIC_WORKDIR,
     LOCAL_UPLOAD_PATH,
-    SIP_UPSTREAM_BASEPATH,
+    SIP_STORE_BASEPATH,
     UPLOAD_DELETION_CUTOFF_DAYS,
 )
 
@@ -108,7 +108,10 @@ def harvest(self, archive_id, step_id):
             f"The given source({archive.source}) might requires an API key which was not provided."
         )
 
-    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
+    try:
+        sip_path = generate_directory_structure(SIP_STORE_BASEPATH, archive)
+    except Exception as e:
+        return {"status": 1, "errormsg": str(e)}
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -119,7 +122,7 @@ def harvest(self, archive_id, step_id):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
+        cleanup_empty_path(sip_path, SIP_STORE_BASEPATH, archive.source)
         return {"status": 1, "errormsg": str(e)}
 
     logger.info(bagit_result)
@@ -149,7 +152,15 @@ def upload(self, archive_id, step_id):
         step.set_failure_type(StepFailureType.MISSING_INPUT_DATA)
         return {"status": 1, "errormsg": "Missing input data for step"}
 
-    sip_path = generate_directory_structure(SIP_UPSTREAM_BASEPATH, archive)
+    try:
+        sip_path = generate_directory_structure(SIP_STORE_BASEPATH, archive)
+    except Exception as e:
+        return {
+            "status": 1,
+            "errormsg": str(e),
+            "tmp_dir": step.input_data_json.get("tmp_dir"),
+            "author": step.input_data_json.get("author"),
+        }
     try:
         bagit_result = bagit_create.main.process(
             recid=archive.recid,
@@ -161,7 +172,7 @@ def upload(self, archive_id, step_id):
             workdir=BIC_WORKDIR,
         )
     except Exception as e:
-        cleanup_empty_path(sip_path, SIP_UPSTREAM_BASEPATH, archive.source)
+        cleanup_empty_path(sip_path, SIP_STORE_BASEPATH, archive.source)
         return {
             "status": 1,
             "errormsg": str(e),
@@ -283,7 +294,9 @@ def _handle_successful_bagit(archive, bagit_result, sip_path=None):
 
     # Create a SIP path artifact
     output_artifact = create_path_artifact(
-        "SIP", os.path.join(SIP_UPSTREAM_BASEPATH, sip_folder_name), sip_folder_name
+        "SIP",
+        os.path.join(SIP_STORE_BASEPATH, sip_folder_name),
+        sip_folder_name,
     )
 
     bagit_result["artifact"] = output_artifact

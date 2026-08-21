@@ -7,25 +7,31 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import cta_manager
+from oais_platform.oais.tests.am_utils import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.settings import FTS_MAX_RETRY_COUNT
 
 
 class CTAManagerTests(APITestCase):
     def setUp(self):
+        create_archivematica_instance()
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
         self.archive = Archive.objects.create(
-            path_to_aip="basepath/aips/test/path/filename.zip"
+            path_to_aip=f"{AM_INSTANCES[0]['AIP_UPSTREAM_BASEPATH']}/test/path/filename.zip",
+            archivematica_instance_id=AM_INSTANCES[0]["AM_INSTANCE"],
         )
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             status=Status.WAITING,
             start_date=timezone.now(),
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
-        self.step.set_input_data({"test": "test"})
         self.archive.set_last_step(self.step.id)
         self.step.step_type.concurrency_limit = 2
         self.step.step_type.save()
@@ -70,13 +76,16 @@ class CTAManagerTests(APITestCase):
     def test_cta_manager_concurrency_limit(self, mock_push_to_cta):
         for i in range(3):
             archive = Archive.objects.create(
-                path_to_aip=f"basepath/aips/test/path/file_{i}.zip"
+                path_to_aip=f"{AM_INSTANCES[0]['AIP_UPSTREAM_BASEPATH']}/test/path/file_{i}.zip",
             )
             step = Step.objects.create(
                 archive=archive,
                 step_name=StepName.PUSH_TO_CTA,
                 status=Status.WAITING,
                 start_date=timezone.now(),
+                input_data_json={
+                    "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]
+                },
             )
             archive.last_step_id = step.id
             archive.save()
@@ -91,7 +100,12 @@ class CTAManagerTests(APITestCase):
             step_name=StepName.PUSH_TO_CTA,
         )
         self.step.input_step = input_step
-        self.step.set_input_data({"retry_count": FTS_MAX_RETRY_COUNT - 1})
+        self.step.set_input_data(
+            {
+                "archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"],
+                "retry_count": FTS_MAX_RETRY_COUNT - 1,
+            }
+        )
         self.step.status = Status.IN_PROGRESS
         self.step.set_output_data({"fts_job_id": "job_id"})
         self.step.save()
@@ -140,13 +154,14 @@ class CTAManagerTests(APITestCase):
         self.step.save()
 
         waiting_archive = Archive.objects.create(
-            path_to_aip="basepath/aips/test/path/waiting.zip"
+            path_to_aip=f"{AM_INSTANCES[0]['AIP_UPSTREAM_BASEPATH']}/test/path/waiting.zip",
         )
         waiting_step = Step.objects.create(
             archive=waiting_archive,
             step_name=StepName.PUSH_TO_CTA,
             status=Status.WAITING,
             start_date=timezone.now(),
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
         waiting_archive.set_last_step(waiting_step.id)
         return waiting_archive, waiting_step

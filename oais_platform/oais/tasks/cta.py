@@ -15,14 +15,20 @@ from oais_utils.validate import compute_hash
 from requests.exceptions import RetryError
 
 from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import Archive, Status, Step, StepName, StepType
+from oais_platform.oais.models import (
+    Archive,
+    ArchivematicaInstance,
+    Status,
+    Step,
+    StepName,
+    StepType,
+)
 from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
 from oais_platform.oais.tasks.utils import (
     get_failure_type_from_status_code,
     set_and_return_error,
 )
 from oais_platform.settings import (
-    AIP_UPSTREAM_BASEPATH,
     CTA_BASE_PATH,
     FTS_MAX_RETRY_COUNT,
     FTS_SOURCE_BASE_PATH,
@@ -83,12 +89,19 @@ def push_to_cta(self, archive_id, step_id):
     if not archive.path_to_aip:
         set_and_return_error(
             step,
-            {"status": 1, "errormsg": "AIP path not found for the given archive."},
+            "AIP path not found for the given archive.",
             failure_type=StepFailureType.PATH_NOT_FOUND,
         )
         return
 
-    cta_file_path = _get_cta_path(archive)
+    try:
+        cta_file_path = _get_cta_path(step.archive)
+    except ValueError as e:
+        return set_and_return_error(
+            step,
+            str(e),
+            failure_type=StepFailureType.MISSING_INPUT_DATA,
+        )
 
     try:
         if _verify_file(archive.path_to_aip, cta_file_path):
@@ -126,15 +139,17 @@ def push_to_cta(self, archive_id, step_id):
             )
 
     except Exception as e:
-        error = {"errormsg": str(e)}
-        error["retry_count"] = _get_retry_count(step)
+        output_data = {}
+        output_data["retry_count"] = _get_retry_count(step)
         failure_type = None
         if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
             failure_type = get_failure_type_from_status_code(e.response.status_code)
         elif isinstance(e, (ConnectionResetError, ConnectionError, RetryError)):
             failure_type = StepFailureType.CONNECTION_ERROR
-        error["retrying"] = _retry_push_to_cta(step.archive.id, error["retry_count"])
-        set_and_return_error(step, error, failure_type=failure_type)
+        output_data["retrying"] = _retry_push_to_cta(
+            step.archive.id, output_data["retry_count"]
+        )
+        set_and_return_error(step, str(e), output_data, failure_type=failure_type)
 
 
 @shared_task(name="fts_delegate", bind=True, ignore_result=True)
@@ -148,9 +163,17 @@ def fts_delegate(self):
 
 
 def _get_cta_path(archive):
+    am_instance = ArchivematicaInstance.objects.filter(
+        name=archive.archivematica_instance_id, enabled=True
+    ).first()
+    if not am_instance:
+        raise ValueError(
+            f"Unable to retrieve Archivematica config for: {archive.archivematica_instance_id}"
+        )
     try:
         return os.path.join(
-            "aips", Path(archive.path_to_aip).relative_to(AIP_UPSTREAM_BASEPATH)
+            "aips",
+            Path(archive.path_to_aip).relative_to(am_instance.aip_upstream_basepath),
         )
     except ValueError:
         logger.warning(f"Unusual AIP path {archive.path_to_aip}")
@@ -190,7 +213,21 @@ def _check_in_progress_jobs(self):
         step = steps_by_job_id.get(job["job_id"])
 
         if job["job_state"] == "FINISHED":
-            cta_file_path = _get_cta_path(step.archive)
+            try:
+                cta_file_path = _get_cta_path(step.archive)
+            except ValueError as e:
+                output_data = {}
+                if step.output_data_json.get("artifact"):
+                    output_data["artifact"] = step.output_data_json["artifact"]
+                set_and_return_error(
+                    step,
+                    str(e),
+                    output_data=output_data,
+                    failure_type=StepFailureType.PATH_NOT_FOUND,
+                )
+                failed_job_count += 1
+                continue
+
             _handle_successful_fts_job(
                 self, step.id, step.archive.id, job["job_id"], cta_file_path
             )
@@ -253,15 +290,17 @@ def _handle_successful_fts_job(
 
 
 def _handle_failed_fts_job(step, status):
-    result = {"FTS status": status}
+    output_data = {"FTS status": status}
 
     if step.output_data_json.get("artifact"):
-        result["artifact"] = step.output_data_json["artifact"]
+        output_data["artifact"] = step.output_data_json["artifact"]
 
-    result["retry_count"] = _get_retry_count(step)
-    result["retrying"] = _retry_push_to_cta(step.archive.id, result["retry_count"])
+    output_data["retry_count"] = _get_retry_count(step)
+    output_data["retrying"] = _retry_push_to_cta(
+        step.archive.id, output_data["retry_count"]
+    )
 
-    set_and_return_error(step, result)
+    set_and_return_error(step, output_data=output_data)
 
 
 def _get_retry_count(step):

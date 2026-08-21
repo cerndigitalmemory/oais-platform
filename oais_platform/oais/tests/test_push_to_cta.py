@@ -1,4 +1,5 @@
 import errno
+import os
 from unittest.mock import MagicMock, Mock, patch
 
 import requests
@@ -9,6 +10,10 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.cta import push_to_cta
+from oais_platform.oais.tests.am_utils import (
+    AM_INSTANCES,
+    create_archivematica_instance,
+)
 from oais_platform.settings import CTA_BASE_PATH, FTS_SOURCE_BASE_PATH
 
 
@@ -24,30 +29,28 @@ class PushToCTATests(APITestCase):
     MockedGError = MockedGError
 
     def setUp(self):
+        create_archivematica_instance()
         self.app_config = apps.get_app_config("oais")
         self.fts = MagicMock()
         self.app_config.fts = self.fts
 
-        path_to_aip = "basepath/aips/test/path/filename.zip"
-        self.archive = Archive.objects.create(path_to_aip=path_to_aip)
+        path_to_aip = os.path.join(
+            AM_INSTANCES[0]["AIP_UPSTREAM_BASEPATH"], "test/path/filename.zip"
+        )
+        self.archive = Archive.objects.create(
+            path_to_aip=path_to_aip,
+            archivematica_instance_id=AM_INSTANCES[0]["AM_INSTANCE"],
+        )
         self.step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.PUSH_TO_CTA,
             start_date=timezone.now(),
             status=Status.WAITING,
+            input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
-        self.step.set_input_data({"test": "test"})
 
         self.expected_source = f"{FTS_SOURCE_BASE_PATH}/{path_to_aip}"
         self.expected_destination = f"{CTA_BASE_PATH}aips/test/path/filename.zip"
-
-        self.path_patch = patch(
-            "oais_platform.oais.tasks.cta.AIP_UPSTREAM_BASEPATH", "basepath/aips"
-        )
-        self.path_patch.start()
-
-    def tearDown(self):
-        self.path_patch.stop()
 
     def _setup_gfal2_mocks(self, mock_gfal2, error=True):
         mock_ctx = Mock()
@@ -150,9 +153,12 @@ class PushToCTATests(APITestCase):
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.failure_type, StepFailureType.PATH_NOT_FOUND)
 
+    @patch("oais_platform.oais.tasks.cta.create_retry_step.apply_async")
     @patch("oais_platform.oais.tasks.cta.Path.stat")
     @patch("oais_platform.oais.tasks.cta.compute_hash")
-    def test_push_to_cta_http_error(self, mock_checksum, mock_stat, mock_gfal2):
+    def test_push_to_cta_http_error(
+        self, mock_checksum, mock_stat, mock_retry_step, mock_gfal2
+    ):
         self._setup_gfal2_mocks(mock_gfal2)
         mock_stat.return_value.st_size = 123456
         mock_checksum.return_value = "test-checksum"
