@@ -1,5 +1,10 @@
 # Changes
 
+## Version 5.3.0 (released 2026-08-21)
+- Archivematica: add support for multiple instances
+- Archive filters: add option to filter on the most recent step
+- Requirements: bump bagit-create
+
 ## Version 5.2.0 (released 2026-08-12)
 - Scheduled harvest: query based harvesting and changes for CDS Videos
 - Requirements: bump bagit-create
