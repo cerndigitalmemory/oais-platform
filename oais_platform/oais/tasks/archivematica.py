@@ -175,10 +175,10 @@ def _start_archiving(celery_task, step, am, transfer_sip_path, archivematica_dst
 
     except requests.HTTPError as e:
         errormsg = (
-            f"Error while archiving {step.id}: status code {e.request.status_code}."
+            f"Error while archiving {step.id}: status code {e.response.status_code}."
         )
         extra_log = f"HTTPError: {e}"
-        failure_type = get_failure_type_from_status_code(e.request.status_code)
+        failure_type = get_failure_type_from_status_code(e.response.status_code)
     except Exception as e:
         errormsg = f"Error while archiving {step.id}: {str(e)}"
 
@@ -592,7 +592,7 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
     logger.debug(f"Executed jobs for given id({unit_uuid}): {executed_jobs}")
     errors = []
     failure_type = None
-    if executed_jobs != 1 and len(executed_jobs) > 0:
+    if isinstance(executed_jobs, list) and len(executed_jobs) > 0:
         if not check_for_failed:
             return len(executed_jobs)
         seen = set()
@@ -659,7 +659,7 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
 
 def get_am_failure_type_from_failed_job(job):
     match job:
-        case "Scan for viruses in directories", "Scan for viruses on extracted files":
+        case "Scan for viruses in directories" | "Scan for viruses on extracted files":
             return StepFailureType.VIRUS_FLAGGED
         case "Extract contents from compressed archives":
             return StepFailureType.EXTRACTION_FAILED
@@ -819,20 +819,22 @@ def archive_failed_count_reset():
 
 def outdate_aip_dependent_steps(archive):
     """Outdate all steps that depend on the AIP."""
-    steps = archive.steps.filter(
-        step_type__name__in=[
-            StepName.PUSH_TO_CTA,
-            StepName.INVENIO_RDM_PUSH,
-            StepName.NOTIFY_SOURCE,
-        ],
-        status__in=COMPLETED_STATUSES,
+    steps = list(
+        archive.steps.filter(
+            step_type__name__in=[
+                StepName.PUSH_TO_CTA,
+                StepName.INVENIO_RDM_PUSH,
+                StepName.NOTIFY_SOURCE,
+            ],
+            status__in=COMPLETED_STATUSES,
+        )
     )
     for step in steps:
         step.set_status(Status.OUTDATED)
         step.set_output_data_field("outdated_at", timezone.now().isoformat())
-    if steps.count() > 0:
+    if len(steps) > 0:
         logger.info(
-            f"Outdated {steps.count()} steps that depend on AIP for Archive {archive.id}"
+            f"Outdated {len(steps)} steps that depend on AIP for Archive {archive.id}"
         )
 
 

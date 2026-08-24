@@ -142,16 +142,16 @@ class ArchivematicaCreateTests(APITestCase):
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_authentication(self, create_package):
-        unauthorized_request = requests.Request()
-        unauthorized_request.status_code = 403
+        unauthorized_response = requests.Response()
+        unauthorized_response.status_code = 403
         create_package.side_effect = requests.exceptions.HTTPError(
-            request=unauthorized_request
+            response=unauthorized_response
         )
         result = archivematica.apply(args=[self.step.id])
 
         result = result.get()
         self.step.refresh_from_db()
-        errormsg = f"status code {unauthorized_request.status_code}"
+        errormsg = f"status code {unauthorized_response.status_code}"
 
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertEqual(self.step.output_data_json["status"], 1)
@@ -165,9 +165,9 @@ class ArchivematicaCreateTests(APITestCase):
 
     @patch("amclient.AMClient.create_package")
     def test_archivematica_failed_other_httperror(self, create_package):
-        bad_request = requests.Request()
+        bad_request = requests.Response()
         bad_request.status_code = 400
-        create_package.side_effect = requests.exceptions.HTTPError(request=bad_request)
+        create_package.side_effect = requests.exceptions.HTTPError(response=bad_request)
         result = archivematica.apply(args=[self.step.id])
 
         result = result.get()

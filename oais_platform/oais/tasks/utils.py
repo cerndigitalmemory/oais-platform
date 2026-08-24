@@ -76,7 +76,7 @@ def set_and_return_error(
 
     if failure_type and not step.failure_type:
         step.set_failure_type(failure_type)
-    else:
+    elif not step.failure_type:
         step.set_failure_type(StepFailureType.OTHER)
     step.set_status(Status.FAILED)
     step.set_finish_date()
@@ -86,7 +86,7 @@ def set_and_return_error(
     if errormsg:
         output_data["errormsg"] = errormsg
         logger.error(str(errormsg) + (f" {extra_log}" if extra_log else ""))
-        if not "message" in output_data.keys():
+        if "message" not in output_data.keys():
             output_data["message"] = errormsg
 
     step.set_output_data(output_data)
