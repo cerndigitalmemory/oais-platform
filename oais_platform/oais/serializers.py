@@ -398,7 +398,7 @@ class ConfigurationSerializer(serializers.Serializer):
         help_text="Maximum allowed file size for uploads (in bytes)"
     )
     max_step_filter_conditions = serializers.IntegerField(
-        help_text="Maximum allowed boolean combine groups in step filters"
+        help_text="Maximum allowed number of step conditions in step filters"
     )
 
 
