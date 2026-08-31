@@ -9,14 +9,13 @@ from datetime import datetime
 from pathlib import PurePosixPath
 from shutil import make_archive
 from urllib.parse import unquote, urlparse
-from wsgiref.util import FileWrapper
 
 from django.conf import settings
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 from drf_spectacular.utils import (
@@ -769,26 +768,22 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     files_path = step.output_data_json["artifact"]["artifact_localpath"]
                     file_name = f"{pk}-sip.zip"
                     path_to_zip = make_archive(files_path, "zip", files_path)
-                    response = HttpResponse(
-                        FileWrapper(open(path_to_zip, "rb")),
+                    return FileResponse(
+                        open(path_to_zip, "rb"),
+                        as_attachment=True,
+                        filename=file_name,
                         content_type="application/zip",
                     )
-                    response["Content-Disposition"] = (
-                        'attachment; filename="{filename}"'.format(filename=file_name)
-                    )
-                    return response
                 elif step.output_data_json["artifact"]["artifact_name"] == "AIP":
                     # FIXME: Workaround, until the artifact creation/schema is decided
                     files_path = step.output_data_json["artifact"]["artifact_path"]
                     file_name = f"{pk}-aip.7z"
-                    response = HttpResponse(
-                        FileWrapper(open(files_path, "rb")),
+                    return FileResponse(
+                        open(files_path, "rb"),
+                        as_attachment=True,
+                        filename=file_name,
                         content_type="application/x-7z-compressed",
                     )
-                    response["Content-Disposition"] = (
-                        'attachment; filename="{filename}"'.format(filename=file_name)
-                    )
-                    return response
         return HttpResponse(status=404)
 
     @action(
