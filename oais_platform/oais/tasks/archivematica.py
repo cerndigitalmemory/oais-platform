@@ -100,7 +100,7 @@ def _create_sip_directory(current_step, sip_base_path):
         )
         transfer_sip_path = transfer_source_path / path_to_sip.name
         if not transfer_sip_path.exists():
-            shutil.copytree(path_to_sip, transfer_sip_path)
+            shutil.copy2(path_to_sip, transfer_sip_path)
         else:
             logger.info(
                 f"Transfer path for Archive step: {current_step.id} for Archive: {archive.id} already exists"
@@ -525,6 +525,7 @@ def get_am_client(step):
         am.transfer_source = am_instance.transfer_source
         am.aip_upstream_basepath = am_instance.aip_upstream_basepath
         am.sip_upstream_basepath = am_instance.sip_upstream_basepath
+        am.transfer_type = "zipfile"
         return am, False
     except Exception as e:
         logger.error(
@@ -698,7 +699,10 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
             raise ValueError(
                 f"Refusing to clean path outside {base_path}: {transfer_sip_path}"
             )
-        shutil.rmtree(transfer_sip_path)
+        if transfer_sip_path.is_file():
+            transfer_sip_path.unlink()
+        else:
+            shutil.rmtree(transfer_sip_path)
         cleanup_empty_path(
             transfer_sip_path.parent,
             sip_base_path,

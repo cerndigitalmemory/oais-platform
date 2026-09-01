@@ -149,8 +149,10 @@ def copy_sip(self, archive_id, step_id):
         logger.info("Copy completed!")
 
         # Save the final target path
+        # Left unzipped: the validate step will zip it
         archive = Archive.objects.get(pk=archive_id)
         archive.set_path(target_path)
+        archive.update_sip_size()
 
         # Create a SIP path artifact
         output_artifact = create_path_artifact(

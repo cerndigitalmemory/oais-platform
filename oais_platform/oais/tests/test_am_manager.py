@@ -24,7 +24,7 @@ class ArchivematicaManagerTests(APITestCase):
             recid="1",
             source="test",
             source_url="",
-            path_to_sip="basepath/sips/test_path",
+            path_to_sip="basepath/sips/test_path.zip",
             sip_size=1000,
         )
 
@@ -32,7 +32,7 @@ class ArchivematicaManagerTests(APITestCase):
             recid="2",
             source="test",
             source_url="",
-            path_to_sip="basepath/sips/test_path2",
+            path_to_sip="basepath/sips/test_path2.zip",
             sip_size=1000,
         )
 
@@ -131,7 +131,7 @@ class ArchivematicaManagerTests(APITestCase):
             recid="3",
             source="test",
             source_url="",
-            path_to_sip="basepath/sips/test_path3",
+            path_to_sip="basepath/sips/test_path3.zip",
             archivematica_instance_id=am_instances[0]["AM_INSTANCE"],
             sip_size=1000,
         )
@@ -180,7 +180,7 @@ class ArchivematicaManagerTests(APITestCase):
                 recid=str(index),
                 source="test",
                 source_url="",
-                path_to_sip=f"basepath/sips/test_path{index}",
+                path_to_sip=f"basepath/sips/test_path{index}.zip",
                 sip_size=1000,
             )
             step = Step.objects.create(
