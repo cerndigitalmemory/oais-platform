@@ -43,7 +43,7 @@ class NotifySourceTests(APITestCase):
             requester=self.testuser,
             title="",
             state=ArchiveState.SIP,
-            path_to_sip="sip/test/path",
+            path_to_sip="sip/test/path.zip",
         )
 
         Step.objects.create(archive=self.archive, step_name=StepName.HARVEST)

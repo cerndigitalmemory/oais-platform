@@ -1,14 +1,18 @@
 import hashlib
 import os
+import shutil
+import tempfile
+import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin
 
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.enums import StepFailureType
+from oais_platform.oais.enums import COMPLETED_STATUSES, StepFailureType
 from oais_platform.oais.models import ApiKey, Profile, Status, Step
-from oais_platform.settings import FILES_URL
+from oais_platform.settings import FILES_URL, SIP_STORE_BASEPATH
 
 logger = get_task_logger(__name__)
 
@@ -135,6 +139,76 @@ def generate_directory_structure(base_path, archive):
     full_path = os.path.join(base_path, archive.source, *segments)
     os.makedirs(full_path, exist_ok=True)
     return full_path
+
+
+def zip_sip_folder(folder_path, remove_original=True):
+    """
+    Zip the SIP folder at folder_path into folder_path + ".zip",
+    remove the original folder and return the resulting zip file path.
+    """
+    zip_path = shutil.make_archive(
+        folder_path,
+        "zip",
+        root_dir=os.path.dirname(folder_path),
+        base_dir=os.path.basename(folder_path),
+    )
+    if remove_original:
+        shutil.rmtree(folder_path)
+    return zip_path
+
+
+def update_sip_artifact_path(step, old_sip_path, new_sip_path):
+    """
+    Update the SIP artifact path stored in input step's output_data_json for this archive,
+    after its SIP has been zipped, so that downloading the artifact from those steps doesn't
+    point at the removed directory.
+    """
+    input_step = step.input_step
+    if not input_step.step_type.has_sip or input_step.status not in COMPLETED_STATUSES:
+        return
+    artifact = (step.output_data_json or {}).get("artifact")
+    if not artifact or artifact.get("artifact_name") != "SIP":
+        return
+    if artifact.get("artifact_localpath") != old_sip_path:
+        return
+    artifact = create_path_artifact(
+        "SIP",
+        os.path.join(SIP_STORE_BASEPATH, new_sip_path),
+        new_sip_path,
+    )
+    step.set_output_data_field("artifact", artifact)
+
+
+@contextmanager
+def extract_sip_zip(sip_zip_path):
+    """
+    Extract a zipped SIP to a temporary directory and yield the path
+    to the extracted SIP folder. The temporary directory is removed
+    when the context exits.
+    """
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        with zipfile.ZipFile(sip_zip_path) as sip_zip:
+            sip_zip.extractall(tmp_dir)
+        sip_folder_name = os.path.splitext(os.path.basename(sip_zip_path))[0]
+        yield os.path.join(tmp_dir, sip_folder_name)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@contextmanager
+def sip_as_directory(path_to_sip):
+    """
+    Yield the SIP as a directory, extracting it first if it is a zip file.
+    Nothing is extracted (or cleaned up) if the SIP is already an unzipped
+    directory, e.g. when re-running validation before the SIP has been
+    zipped for the first time.
+    """
+    if os.path.isdir(path_to_sip):
+        yield path_to_sip
+    else:
+        with extract_sip_zip(path_to_sip) as sip_folder_name:
+            yield sip_folder_name
 
 
 def cleanup_empty_path(path_to_clean, base_path, source):
