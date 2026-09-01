@@ -1,5 +1,6 @@
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,8 +21,10 @@ class ArchivematicaCreateTests(APITestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.sip_base_path = os.path.join(self.tmpdir.name, "sips")
-        self.path_to_sip = os.path.join(self.sip_base_path, "test_path")
-        os.makedirs(self.path_to_sip)
+        os.makedirs(self.sip_base_path)
+        self.path_to_sip = os.path.join(self.sip_base_path, "test_path.zip")
+        with zipfile.ZipFile(self.path_to_sip, "w") as sip_zip:
+            sip_zip.writestr("dummy.txt", "test")
 
         self.archive = Archive.objects.create(
             recid="1",
@@ -101,13 +104,14 @@ class ArchivematicaCreateTests(APITestCase):
     @patch("amclient.AMClient.create_package")
     def test_archivematica_cleans_up_when_setup_fails(self, create_package):
         def fail_after_creating_destination(source, destination):
-            Path(destination).mkdir(parents=True)
+            Path(destination).parent.mkdir(parents=True, exist_ok=True)
+            Path(destination).touch()
             raise OSError("Unable to copy SIP")
 
         with patch(
-            "oais_platform.oais.tasks.archivematica.shutil.copytree",
+            "oais_platform.oais.tasks.archivematica.shutil.copy2",
             side_effect=fail_after_creating_destination,
-        ) as copytree:
+        ) as copy2:
             result = archivematica.apply(args=[self.step.id]).get()
 
         self.step.refresh_from_db()
@@ -116,7 +120,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(result["status"], 1)
         self.assertEqual(self.step.status, Status.FAILED)
         self.assertFalse(transfer_sip_path.exists())
-        copytree.assert_called_once()
+        copy2.assert_called_once()
         create_package.assert_not_called()
 
     @patch("amclient.AMClient.create_package")

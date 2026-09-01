@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from oais_platform.oais.models import Archive, Step, StepName
 from oais_platform.oais.tasks.extract_title import extract_title
+from oais_platform.oais.tasks.utils import zip_sip_folder
 from oais_platform.settings import BIC_WORKDIR
 
 
@@ -33,7 +34,8 @@ class ExtractTitleTests(APITestCase):
 
             foldername = res["foldername"]
             path_to_sip = os.path.join(tmpdir, foldername)
-            self.archive.set_path(path_to_sip)
+            sip_path = zip_sip_folder(path_to_sip)
+            self.archive.set_path(sip_path)
 
             result = extract_title(self.archive.id, self.step.id)
 
@@ -52,12 +54,14 @@ class ExtractTitleTests(APITestCase):
 
             foldername = res["foldername"]
             path_to_sip = os.path.join(tmpdir, foldername)
-            self.archive.set_path(path_to_sip)
 
             # Add dc.xml
             current_dir = os.path.dirname(os.path.abspath(__file__))
             dc_path = os.path.join(current_dir, "data/dc.xml")
             shutil.copyfile(dc_path, os.path.join(path_to_sip, "data/meta/dc.xml"))
+
+            sip_path = zip_sip_folder(path_to_sip)
+            self.archive.set_path(sip_path)
 
             result = extract_title(self.archive.id, self.step.id)
             self.archive.refresh_from_db()
