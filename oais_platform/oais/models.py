@@ -1,6 +1,8 @@
 import hashlib
 import logging
+import os
 import secrets
+import shutil
 from pathlib import Path
 
 from celery import current_app
@@ -36,7 +38,7 @@ from oais_platform.oais.enums import (
     StepName,
 )
 from oais_platform.oais.sources.abstract_source import AbstractSource
-from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
+from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL, SIP_STORE_BASEPATH
 
 # re-export for backwards compatibility
 __all__ = [
@@ -367,6 +369,40 @@ class Archive(models.Model):
         return self.steps.filter(
             step_type__name=step_name, status=Status.COMPLETED
         ).exists()
+
+    def _delete_artifact_from_disk(self, artifact_path):
+        try:
+            if not artifact_path or not os.path.exists(artifact_path):
+                return
+            path = Path(artifact_path)
+            if path.is_dir():
+                base_paths = [
+                    base_path
+                    for pair in ArchivematicaInstance.objects.values_list(
+                        "sip_upstream_basepath",
+                        "aip_upstream_basepath",
+                    )
+                    for base_path in pair
+                ] + [SIP_STORE_BASEPATH]
+                if not any(
+                    path != Path(base_path) and path.is_relative_to(base_path)
+                    for base_path in base_paths
+                ):
+                    raise ValueError(
+                        f"Artifact path {path} is not under any known base path"
+                    )
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        except Exception as e:
+            logging.error(f"Failed to delete artifact {artifact_path}: {e}")
+
+    def delete(self, *args, **kwargs):
+        for step in self.steps.all():
+            artifact = (step.output_data_json or {}).get("artifact")
+            if artifact:
+                self._delete_artifact_from_disk(artifact.get("artifact_path"))
+        return super(Archive, self).delete(*args, **kwargs)
 
 
 @receiver(post_save, sender=Archive)
