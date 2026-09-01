@@ -133,7 +133,7 @@ from oais_platform.oais.tasks.pipeline_actions import (
     run_bulk_pipeline,
     run_step,
 )
-from oais_platform.oais.tasks.utils import set_and_return_error
+from oais_platform.oais.tasks.utils import set_and_return_error, zip_sip_folder
 from oais_platform.settings import (
     ALLOW_LOCAL_LOGIN,
     FILE_UPLOAD_MAX_SIZE_BYTE,
@@ -924,28 +924,27 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         # If this step has an "Artifact" in the output
         if "artifact" in step.output_data_json:
             # If this artifact has a path
-            # FIXME: It shouldn't be needed to have different behaviours based on the type of the artifact
-            if "artifact_localpath" in step.output_data_json["artifact"]:
-                if step.output_data_json["artifact"]["artifact_name"] == "SIP":
-                    # FIXME: Workaround, until the artifact creation/schema is decided
+            if "artifact_path" in step.output_data_json["artifact"]:
+                # FIXME: Workaround, until the artifact creation/schema is decided
+                artifact_name = step.output_data_json["artifact"]["artifact_name"]
+                artifact_types = {
+                    "SIP": ("sip.zip", "application/zip"),
+                    "AIP": ("aip.7z", "application/x-7z-compressed"),
+                }
+                if artifact_name in artifact_types:
+                    suffix, content_type = artifact_types[artifact_name]
+                    file_name = f"{pk}-{suffix}"
                     files_path = step.output_data_json["artifact"]["artifact_localpath"]
-                    file_name = f"{pk}-sip.zip"
-                    path_to_zip = make_archive(files_path, "zip", files_path)
-                    return FileResponse(
-                        open(path_to_zip, "rb"),
-                        as_attachment=True,
-                        filename=file_name,
-                        content_type="application/zip",
-                    )
-                elif step.output_data_json["artifact"]["artifact_name"] == "AIP":
-                    # FIXME: Workaround, until the artifact creation/schema is decided
-                    files_path = step.output_data_json["artifact"]["artifact_path"]
-                    file_name = f"{pk}-aip.7z"
+                    # The SIP is zipped once validation succeeds; if it hasn't
+                    # been yet, zip it on the fly for the download.
+                    if artifact_name == "SIP" and os.path.isdir(files_path):
+                        files_path = zip_sip_folder(files_path, remove_original=False)
+
                     return FileResponse(
                         open(files_path, "rb"),
                         as_attachment=True,
                         filename=file_name,
-                        content_type="application/x-7z-compressed",
+                        content_type=content_type,
                     )
         return HttpResponse(status=404)
 

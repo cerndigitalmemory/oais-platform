@@ -289,6 +289,7 @@ def _handle_successful_bagit(archive, bagit_result, sip_path=None):
     if sip_path:
         sip_folder_name = os.path.join(sip_path, sip_folder_name)
 
+    # Left unzipped: the validate step will zip it
     archive.set_path(sip_folder_name)
     archive.update_sip_size()
 

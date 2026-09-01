@@ -50,7 +50,7 @@ class ArchivematicaStatusTests(APITestCase):
             recid="1",
             source="test",
             source_url="",
-            path_to_sip="test_path",
+            path_to_sip="test_path.zip",
         )
 
         self.step = Step.objects.create(
