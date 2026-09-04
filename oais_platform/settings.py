@@ -320,7 +320,7 @@ SIMPLE_JWT = {
 }
 
 # SIP Staging folder
-SIP_STORE_BASEPATH = "/oais_platform/oais-data/sips/store"
+SIP_STORE_BASEPATH = "/oais_platform/oais-data/sips"
 
 # INVENIORDM integration
 
