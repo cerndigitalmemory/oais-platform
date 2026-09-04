@@ -111,6 +111,7 @@ from oais_platform.oais.serializers import (
     StepFailureStatisticsSerializer,
     StepSerializer,
     StepStatisticsSerializer,
+    ScheduledHarvestStatisticsSerializer,
     StepStatusStatisticsSerializer,
     StepTypeMinimalSerializer,
     TagCreateSerializer,
@@ -125,6 +126,7 @@ from oais_platform.oais.statistics import (
     count_failures_by_type,
     count_steps_by_status,
     step_statistics_counts,
+    scheduled_harvest_overview
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (
@@ -1281,6 +1283,14 @@ def step_failure_statistics(request):
 @api_view(["GET"])
 def step_duration_statistics(request):
     return Response(avg_in_progress_duration_by_step())
+
+@extend_schema(
+    request=None,  # cet endpoint ne prend pas de body en entrée (c'est un GET simple)
+    responses={200: ScheduledHarvestStatisticsSerializer(many=True)},  # voici la forme EXACTE du retour
+)
+@api_view(["GET"])
+def scheduled_harvest_statistics(request):
+    return Response(scheduled_harvest_overview())
 
 
 @extend_schema(

@@ -113,6 +113,11 @@ urlpatterns = [
                     views.step_duration_statistics,
                     name="step_duration_statistics",
                 ),
+                path(
+                    "stats/scheduled-harvests",
+                    views.scheduled_harvest_statistics,
+                    name="scheduled_harvest_statistics"
+                ),
                 path("sources/", views.sources, name="sources"),
                 path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
                 path(

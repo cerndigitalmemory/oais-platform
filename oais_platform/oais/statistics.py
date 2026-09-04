@@ -21,7 +21,7 @@ from oais_platform.oais.enums import (
     StepFailureType,
     StepName,
 )
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import Archive, Status, Step, ScheduledHarvest, HarvestRun
 
 
 def _completed_step_exists(step_name):
@@ -231,3 +231,39 @@ def avg_duration_per_day(
         )
         .order_by("-day")
     )
+
+def scheduled_harvest_overview():
+    """
+    Returns, for each enabled ScheduledHarvest, the source name,
+    the count of distinct preserved records, and the parameters
+    of its most recent HarvestRun.
+    """
+    result = []
+    for scheduled_harvest_object in ScheduledHarvest.objects.filter(enabled=True).select_related("source"):
+
+        last_run = (
+            HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest_object)
+            .order_by("-created_at")
+            .first()
+        )
+
+        preserved_count = (
+            Archive.objects.filter(
+                harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest_object, 
+                state=ArchiveState.AIP
+            )
+            .values("recid", "source")
+            .distinct()
+            .count()
+        )
+
+        result.append({
+            "name": scheduled_harvest_object.source.longname,
+            "preserved_unique_archives": preserved_count,
+            "last_harvest_time": last_run.created_at if last_run else None,
+            "grace_period_days": last_run.grace_period_days if last_run else None,
+            "scope": "Full" if scheduled_harvest_object.extra_query is None else "Partial",
+        })
+
+        return result
+    
