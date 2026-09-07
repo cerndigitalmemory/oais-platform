@@ -108,6 +108,7 @@ class StepViewTests(APITestCase):
                 output_data_json={
                     "artifact": {
                         "artifact_name": "SIP",
+                        "artifact_path": sip_dir,
                         "artifact_localpath": sip_dir,
                     }
                 },

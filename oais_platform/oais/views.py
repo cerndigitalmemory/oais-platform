@@ -934,12 +934,11 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                 if artifact_name in artifact_types:
                     suffix, content_type = artifact_types[artifact_name]
                     file_name = f"{pk}-{suffix}"
-                    files_path = step.output_data_json["artifact"]["artifact_localpath"]
+                    files_path = step.output_data_json["artifact"]["artifact_path"]
                     # The SIP is zipped once validation succeeds; if it hasn't
                     # been yet, zip it on the fly for the download.
                     if artifact_name == "SIP" and os.path.isdir(files_path):
                         files_path = zip_sip_folder(files_path, remove_original=False)
-
                     return FileResponse(
                         open(files_path, "rb"),
                         as_attachment=True,
