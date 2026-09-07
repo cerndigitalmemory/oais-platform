@@ -21,7 +21,14 @@ from oais_platform.oais.enums import (
     StepFailureType,
     StepName,
 )
-from oais_platform.oais.models import Archive, Status, Step, ScheduledHarvest, HarvestRun, Source
+from oais_platform.oais.models import (
+    Archive,
+    Status,
+    Step,
+    ScheduledHarvest,
+    HarvestRun,
+    Source,
+)
 
 
 def _completed_step_exists(step_name):
@@ -232,6 +239,7 @@ def avg_duration_per_day(
         .order_by("-day")
     )
 
+
 def _pick_scheduled_harvest_for_source(source):
     full = (
         ScheduledHarvest.objects.filter(
@@ -251,6 +259,7 @@ def _pick_scheduled_harvest_for_source(source):
         .order_by("-harvest_runs__created_at")
         .first()
     )
+
 
 def scheduled_harvest_overview():
     """
@@ -283,13 +292,14 @@ def scheduled_harvest_overview():
             .count()
         )
 
-        result.append({
-            "name": scheduled_harvest.source.longname,
-            "preserved_unique_archives": preserved_count,
-            "last_harvest_time": last_run.created_at if last_run else None,
-            "grace_period_days": last_run.grace_period_days if last_run else None,
-            "scope": "Full" if scheduled_harvest.extra_query is None else "Partial",
-        })
+        result.append(
+            {
+                "name": scheduled_harvest.source.longname,
+                "preserved_unique_archives": preserved_count,
+                "last_harvest_time": last_run.created_at if last_run else None,
+                "grace_period_days": last_run.grace_period_days if last_run else None,
+                "scope": "Full" if scheduled_harvest.extra_query is None else "Partial",
+            }
+        )
 
     return result
-    

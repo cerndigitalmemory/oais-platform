@@ -126,7 +126,7 @@ from oais_platform.oais.statistics import (
     count_failures_by_type,
     count_steps_by_status,
     step_statistics_counts,
-    scheduled_harvest_overview
+    scheduled_harvest_overview,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (
@@ -1283,6 +1283,7 @@ def step_failure_statistics(request):
 @api_view(["GET"])
 def step_duration_statistics(request):
     return Response(avg_in_progress_duration_by_step())
+
 
 @extend_schema(
     request=None,

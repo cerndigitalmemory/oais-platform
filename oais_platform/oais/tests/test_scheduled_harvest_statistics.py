@@ -25,15 +25,20 @@ class ScheduledHarvestStatisticsTests(APITestCase):
             classname="Invenio",
         )
 
-    def create_scheduled_harvest(self, source, enabled=True, extra_query=None, name=None):
+    def create_scheduled_harvest(
+        self, source, enabled=True, extra_query=None, name=None
+    ):
         return ScheduledHarvest.objects.create(
-            name=name or f"Harvest for {source.name} {ScheduledHarvest.objects.count()}",
+            name=name
+            or f"Harvest for {source.name} {ScheduledHarvest.objects.count()}",
             source=source,
             enabled=enabled,
             extra_query=extra_query,
-    )
+        )
 
-    def create_harvest_run(self, scheduled_harvest, grace_period_days=0, extra_query=None):
+    def create_harvest_run(
+        self, scheduled_harvest, grace_period_days=0, extra_query=None
+    ):
         return HarvestRun.objects.create(
             source=scheduled_harvest.source,
             scheduled_harvest=scheduled_harvest,
@@ -156,9 +161,7 @@ class ScheduledHarvestStatisticsTests(APITestCase):
             source, extra_query='q=title:"Digital Memory"'
         )
         self.create_harvest_run(partial_sh)
-        full_sh = self.create_scheduled_harvest(
-            source, extra_query=None
-        )
+        full_sh = self.create_scheduled_harvest(source, extra_query=None)
         self.create_harvest_run(full_sh, grace_period_days=99)
 
         response = self.client.get(self.url, format="json")
@@ -171,9 +174,7 @@ class ScheduledHarvestStatisticsTests(APITestCase):
         source = self.create_source()
         old_full = self.create_scheduled_harvest(source, extra_query=None)
         self.create_harvest_run(old_full, grace_period_days=10)
-        new_full = self.create_scheduled_harvest(
-            source, extra_query=None
-        )
+        new_full = self.create_scheduled_harvest(source, extra_query=None)
         new_full.name = "Newer harvest"
         new_full.save()
         self.create_harvest_run(new_full, grace_period_days=50)
