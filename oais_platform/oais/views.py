@@ -102,6 +102,7 @@ from oais_platform.oais.serializers import (
     ParseUrlSerializer,
     PipelineRunSerializer,
     RecordWithDuplicatesSerializer,
+    ScheduledHarvestStatisticsSerializer,
     SearchByIdResultSerializer,
     SearchResultSerializer,
     SourceRecordsSerializer,
@@ -111,7 +112,6 @@ from oais_platform.oais.serializers import (
     StepFailureStatisticsSerializer,
     StepSerializer,
     StepStatisticsSerializer,
-    ScheduledHarvestStatisticsSerializer,
     StepStatusStatisticsSerializer,
     StepTypeMinimalSerializer,
     TagCreateSerializer,
@@ -125,8 +125,8 @@ from oais_platform.oais.statistics import (
     avg_in_progress_duration_by_step,
     count_failures_by_type,
     count_steps_by_status,
-    step_statistics_counts,
     scheduled_harvest_overview,
+    step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
 from oais_platform.oais.tasks.pipeline_actions import (

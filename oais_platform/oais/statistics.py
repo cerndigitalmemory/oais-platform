@@ -23,11 +23,11 @@ from oais_platform.oais.enums import (
 )
 from oais_platform.oais.models import (
     Archive,
+    HarvestRun,
+    ScheduledHarvest,
+    Source,
     Status,
     Step,
-    ScheduledHarvest,
-    HarvestRun,
-    Source,
 )
 
 
