@@ -21,7 +21,7 @@ from oais_platform.oais.enums import (
     StepFailureType,
     StepName,
 )
-from oais_platform.oais.models import Archive, Status, Step, ScheduledHarvest, HarvestRun
+from oais_platform.oais.models import Archive, Status, Step, ScheduledHarvest, HarvestRun, Source
 
 
 def _completed_step_exists(step_name):
@@ -232,25 +232,51 @@ def avg_duration_per_day(
         .order_by("-day")
     )
 
+def _pick_scheduled_harvest_for_source(source):
+    full = (
+        ScheduledHarvest.objects.filter(
+            source=source, enabled=True, extra_query__isnull=True
+        )
+        .order_by("-harvest_runs__created_at")
+        .first()
+    )
+
+    if full:
+        return full
+
+    return (
+        ScheduledHarvest.objects.filter(
+            source=source, enabled=True, extra_query__isnull=False
+        )
+        .order_by("-harvest_runs__created_at")
+        .first()
+    )
+
 def scheduled_harvest_overview():
     """
-    Returns, for each enabled ScheduledHarvest, the source name,
-    the count of distinct preserved records, and the parameters
-    of its most recent HarvestRun.
+    Returns, for each Source with at least one enabled ScheduledHarvest,
+    a single row: the most recent "Full" one if any exists, otherwise
+    the most recent "Partial" one.
     """
     result = []
-    for scheduled_harvest_object in ScheduledHarvest.objects.filter(enabled=True).select_related("source"):
+    sources = Source.objects.filter(scheduled_harvests__enabled=True).distinct()
+
+    for source in sources:
+        scheduled_harvest = _pick_scheduled_harvest_for_source(source)
+
+        if scheduled_harvest is None:
+            continue
 
         last_run = (
-            HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest_object)
+            HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest)
             .order_by("-created_at")
             .first()
         )
 
         preserved_count = (
             Archive.objects.filter(
-                harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest_object, 
-                state=ArchiveState.AIP
+                harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest,
+                state=ArchiveState.AIP,
             )
             .values("recid", "source")
             .distinct()
@@ -258,12 +284,12 @@ def scheduled_harvest_overview():
         )
 
         result.append({
-            "name": scheduled_harvest_object.source.longname,
+            "name": scheduled_harvest.source.longname,
             "preserved_unique_archives": preserved_count,
             "last_harvest_time": last_run.created_at if last_run else None,
             "grace_period_days": last_run.grace_period_days if last_run else None,
-            "scope": "Full" if scheduled_harvest_object.extra_query is None else "Partial",
+            "scope": "Full" if scheduled_harvest.extra_query is None else "Partial",
         })
 
-        return result
+    return result
     

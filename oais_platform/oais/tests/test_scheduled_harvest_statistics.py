@@ -25,13 +25,13 @@ class ScheduledHarvestStatisticsTests(APITestCase):
             classname="Invenio",
         )
 
-    def create_scheduled_harvest(self, source, enabled=True, extra_query=None):
+    def create_scheduled_harvest(self, source, enabled=True, extra_query=None, name=None):
         return ScheduledHarvest.objects.create(
-            name=f"Harvest for {source.name}",
+            name=name or f"Harvest for {source.name} {ScheduledHarvest.objects.count()}",
             source=source,
             enabled=enabled,
             extra_query=extra_query,
-        )
+    )
 
     def create_harvest_run(self, scheduled_harvest, grace_period_days=0, extra_query=None):
         return HarvestRun.objects.create(
@@ -149,3 +149,36 @@ class ScheduledHarvestStatisticsTests(APITestCase):
         response = self.client.get(self.url, format="json")
         row = self.get_row(response.data, source.longname)
         self.assertEqual(row["preserved_unique_archives"], 1)
+
+    def test_full_takes_priority_over_partial_same_source(self):
+        source = self.create_source()
+        partial_sh = self.create_scheduled_harvest(
+            source, extra_query='q=title:"Digital Memory"'
+        )
+        self.create_harvest_run(partial_sh)
+        full_sh = self.create_scheduled_harvest(
+            source, extra_query=None
+        )
+        self.create_harvest_run(full_sh, grace_period_days=99)
+
+        response = self.client.get(self.url, format="json")
+        matching_rows = [row for row in response.data if row["name"] == source.longname]
+        self.assertEqual(len(matching_rows), 1)
+        self.assertEqual(matching_rows[0]["scope"], "Full")
+        self.assertEqual(matching_rows[0]["grace_period_days"], 99)
+
+    def test_most_recent_full_is_used_when_multiple_exist(self):
+        source = self.create_source()
+        old_full = self.create_scheduled_harvest(source, extra_query=None)
+        self.create_harvest_run(old_full, grace_period_days=10)
+        new_full = self.create_scheduled_harvest(
+            source, extra_query=None
+        )
+        new_full.name = "Newer harvest"
+        new_full.save()
+        self.create_harvest_run(new_full, grace_period_days=50)
+
+        response = self.client.get(self.url, format="json")
+        matching_rows = [row for row in response.data if row["name"] == source.longname]
+        self.assertEqual(len(matching_rows), 1)
+        self.assertEqual(matching_rows[0]["grace_period_days"], 50)

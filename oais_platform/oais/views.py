@@ -1285,8 +1285,8 @@ def step_duration_statistics(request):
     return Response(avg_in_progress_duration_by_step())
 
 @extend_schema(
-    request=None,  # cet endpoint ne prend pas de body en entrée (c'est un GET simple)
-    responses={200: ScheduledHarvestStatisticsSerializer(many=True)},  # voici la forme EXACTE du retour
+    request=None,
+    responses={200: ScheduledHarvestStatisticsSerializer(many=True)},
 )
 @api_view(["GET"])
 def scheduled_harvest_statistics(request):
