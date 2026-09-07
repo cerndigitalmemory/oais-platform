@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
 from rest_framework import status
@@ -78,3 +81,81 @@ class StepViewTests(APITestCase):
                 StepFailureType.TIMEOUT,
             ],
         )
+
+    def test_download_artifact_no_artifact(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        response = self.client.get(
+            reverse("steps-download-artifact", args=[self.harvest_step.id])
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_download_artifact_unauthenticated(self):
+        response = self.client.get(
+            reverse("steps-download-artifact", args=[self.harvest_step.id])
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_download_artifact_sip(self):
+        with tempfile.TemporaryDirectory() as sip_dir:
+            with open(os.path.join(sip_dir, "data.txt"), "wb") as f:
+                f.write(b"sip contents")
+
+            step = Step.objects.create(
+                archive=self.archive,
+                step_name=StepName.HARVEST,
+                status=Status.COMPLETED,
+                output_data_json={
+                    "artifact": {
+                        "artifact_name": "SIP",
+                        "artifact_localpath": sip_dir,
+                    }
+                },
+            )
+
+            self.client.force_authenticate(user=self.superuser)
+            response = self.client.get(
+                reverse("steps-download-artifact", args=[step.id])
+            )
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response["Content-Type"], "application/zip")
+            self.assertEqual(
+                response["Content-Disposition"],
+                f'attachment; filename="{step.id}-sip.zip"',
+            )
+            self.assertTrue(b"".join(response.streaming_content))
+
+            os.remove(sip_dir + ".zip")
+
+    def test_download_artifact_aip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            aip_path = os.path.join(tmpdir, "aip.7z")
+            with open(aip_path, "wb") as f:
+                f.write(b"aip contents")
+
+            step = Step.objects.create(
+                archive=self.archive,
+                step_name=StepName.ARCHIVE,
+                status=Status.COMPLETED,
+                output_data_json={
+                    "artifact": {
+                        "artifact_name": "AIP",
+                        "artifact_localpath": tmpdir,
+                        "artifact_path": aip_path,
+                    }
+                },
+            )
+
+            self.client.force_authenticate(user=self.superuser)
+            response = self.client.get(
+                reverse("steps-download-artifact", args=[step.id])
+            )
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response["Content-Type"], "application/x-7z-compressed")
+            self.assertEqual(
+                response["Content-Disposition"],
+                f'attachment; filename="{step.id}-aip.7z"',
+            )
+            self.assertEqual(b"".join(response.streaming_content), b"aip contents")
