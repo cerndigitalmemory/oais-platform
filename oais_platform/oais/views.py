@@ -20,6 +20,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from drf_spectacular.utils import (
     OpenApiParameter,
+    OpenApiResponse,
     OpenApiTypes,
     extend_schema,
     extend_schema_view,
@@ -52,6 +53,14 @@ from oais_platform.oais.models import (
     StepName,
     StepType,
 )
+from oais_platform.oais.openapi import (
+    ARCHIVE_ACCESS_PARAMETER,
+    ARCHIVE_LIST_PARAMETERS,
+    PAGE_SIZE_PARAMETER,
+    SOURCE_STATUS_RESPONSE,
+    STRING_LIST_RESPONSE,
+    TAG_LIST_PARAMETERS,
+)
 from oais_platform.oais.pagination import StepTypePagination
 from oais_platform.oais.permissions import (
     ArchivePermission,
@@ -65,22 +74,38 @@ from oais_platform.oais.permissions import (
 )
 from oais_platform.oais.serializers import (
     AnnounceSerializer,
+    ArchiveActionsSerializer,
+    ArchiveFilterRequestSerializer,
+    ArchiveIdListSerializer,
+    ArchiveIdsSerializer,
     ArchiveSerializer,
+    ArchiveUnstageSerializer,
     ArchiveWithDuplicatesSerializer,
     BatchAnnounceSerializer,
+    BulkPipelineRunSerializer,
     CallbackSerializer,
     CollectionMinimalSerializer,
+    CollectionNameListSerializer,
     CollectionNameSerializer,
     CollectionSerializer,
+    CollectionSummarySerializer,
     ConfigurationSerializer,
+    DuplicateCheckSerializer,
     FileUploadResultSerializer,
     FileUploadSerializer,
+    HarvestRecidsResultSerializer,
     LoginSerializer,
     LogoutSerializer,
+    MessageSerializer,
+    OperationResultSerializer,
     ParseUrlResultSerializer,
     ParseUrlSerializer,
+    PipelineRunSerializer,
+    RecordWithDuplicatesSerializer,
     SearchByIdResultSerializer,
     SearchResultSerializer,
+    SourceRecordsSerializer,
+    StageRecordsSerializer,
     StatisticsSerializer,
     StepDurationStatisticsSerializer,
     StepFailureStatisticsSerializer,
@@ -88,7 +113,11 @@ from oais_platform.oais.serializers import (
     StepStatisticsSerializer,
     StepStatusStatisticsSerializer,
     StepTypeMinimalSerializer,
+    TagCreateSerializer,
+    TagEditSerializer,
+    UserApiKeyUpdateSerializer,
     UserSerializer,
+    UserWithApiKeysSerializer,
 )
 from oais_platform.oais.sources.utils import InvalidSource, get_source
 from oais_platform.oais.statistics import (
@@ -127,6 +156,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     default_page_size = 20
     permission_classes = [UserPermission]
 
+    @extend_schema(responses={200: ArchiveSerializer(many=True)})
     @action(detail=True, url_path="archives", url_name="archives")
     def archives(self, request, pk=None):
         """
@@ -141,6 +171,14 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return self.make_paginated_response(archives, ArchiveSerializer)
 
+    @extend_schema(
+        methods=["GET"], request=None, responses={200: UserWithApiKeysSerializer}
+    )
+    @extend_schema(
+        methods=["POST"],
+        request=UserApiKeyUpdateSerializer,
+        responses={200: UserSerializer},
+    )
     @action(detail=False, methods=["GET", "POST"], url_path="me", url_name="me")
     def get_set_me(self, request):
         """
@@ -193,6 +231,21 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
             return Response(user_data)
 
+    @extend_schema(
+        parameters=[
+            PAGE_SIZE_PARAMETER,
+            OpenApiParameter(
+                name="paginated",
+                description='Set to "false" to return every Archive unpaginated',
+                required=False,
+                type=str,
+                enum=["true", "false"],
+                default="true",
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+        responses={200: ArchiveWithDuplicatesSerializer(many=True)},
+    )
     @action(
         detail=False,
         methods=["GET"],
@@ -226,6 +279,9 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
                 extra_context={"duplicates": duplicates},
             )
 
+    @extend_schema(
+        request=StageRecordsSerializer, responses={200: OperationResultSerializer}
+    )
     @action(detail=False, methods=["POST"], url_path="me/stage", url_name="me-stage")
     def add_to_staging_area(self, request):
         """
@@ -249,7 +305,13 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             return Response({"status": 1, "errormsg": str(e)})
 
-    @action(detail=False, url_path="me/stats", url_name="me-stats")
+    @extend_schema(responses={200: StepSerializer(many=True)})
+    @action(
+        detail=False,
+        url_path="me/stats",
+        url_name="me-stats",
+        pagination_class=None,
+    )
     def get_steps_status(self, request):
         """
         Returns all Steps for the given name and status of the User
@@ -272,6 +334,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = StepSerializer(filtered_steps, many=True)
         return Response(serializer.data)
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=SOURCE_STATUS_RESPONSE,
+                description="Configuration status of every enabled Source, "
+                "keyed by source name",
+            )
+        }
+    )
     @action(detail=False, url_path="me/sources", url_name="me-sources")
     def get_source_status(self, request):
         """
@@ -313,6 +384,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         return Response(data)
 
 
+@extend_schema_view(list=extend_schema(parameters=ARCHIVE_LIST_PARAMETERS))
 class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows Archives to be viewed or edited
@@ -349,13 +421,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         else:
             raise BadRequest("Invalid access parameter.")
 
-        if page == "all":
-            if not self.request.GET._mutable:
-                self.request.GET._mutable = True
-            self.request.GET["page"] = 1
-            self.pagination_class.page_size = len(result)
-        else:
-            self.pagination_class.page_size = size
+        if self.pagination_class is not None:
+            if page == "all":
+                if not self.request.GET._mutable:
+                    self.request.GET._mutable = True
+                self.request.GET["page"] = 1
+                self.pagination_class.page_size = len(result)
+            else:
+                self.pagination_class.page_size = size
 
         return result
 
@@ -394,6 +467,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception:
             raise BadRequest("Invalid request")
 
+    @extend_schema(
+        parameters=ARCHIVE_LIST_PARAMETERS,
+        request=ArchiveFilterRequestSerializer,
+        responses={200: ArchiveSerializer(many=True)},
+    )
     @action(detail=False, methods=["POST"], url_path="filter", url_name="filter")
     def archives_filtered(self, request):
         """
@@ -404,6 +482,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         result = self.get_filtered_queryset(request.data["filters"])
         return self.make_paginated_response(result, ArchiveSerializer)
 
+    @extend_schema(
+        parameters=[ARCHIVE_ACCESS_PARAMETER],
+        request=ArchiveFilterRequestSerializer,
+        responses={200: ArchiveIdListSerializer},
+    )
     @action(
         detail=False, methods=["POST"], url_path="filter-ids", url_name="filter-ids"
     )
@@ -417,8 +500,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         ids = list(result.values_list("id", flat=True))
         return Response({"ids": ids})
 
+    @extend_schema(
+        request=DuplicateCheckSerializer,
+        responses={200: RecordWithDuplicatesSerializer(many=True)},
+    )
     @action(
-        detail=False, methods=["POST"], url_path="duplicates", url_name="duplicates"
+        detail=False,
+        methods=["POST"],
+        url_path="duplicates",
+        url_name="duplicates",
+        pagination_class=None,
     )
     def check_archived_records(self, request):
         """
@@ -456,6 +547,14 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(records)
 
+    @extend_schema(
+        parameters=[ARCHIVE_ACCESS_PARAMETER],
+        responses={
+            200: OpenApiResponse(
+                response=STRING_LIST_RESPONSE, description="Distinct source names"
+            )
+        },
+    )
     @action(detail=False, methods=["GET"], url_path="sources", url_name="sources")
     def archives_sources(self, request):
         """
@@ -470,7 +569,13 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
 
         return Response(sources)
 
-    @action(detail=True, url_path="steps", url_name="steps")
+    @extend_schema(responses={200: StepSerializer(many=True)})
+    @action(
+        detail=True,
+        url_path="steps",
+        url_name="steps",
+        pagination_class=None,
+    )
     def archive_steps(self, request, pk=None):
         """
         Returns all Steps of an identified Archive
@@ -481,6 +586,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return Response(serializer.data)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="step_index",
+                description="Position of the Step in the pipeline",
+                required=True,
+                type=int,
+                location=OpenApiParameter.PATH,
+            )
+        ],
+        request=None,
+        responses={204: None},
+    )
     @action(
         detail=True,
         methods=["DELETE"],
@@ -501,6 +619,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.save()
         return Response(status=204)
 
+    @extend_schema(responses={200: CollectionMinimalSerializer(many=True)})
     @action(detail=True, url_path="tags", url_name="tags")
     def archive_tags(self, request, pk=None):
         """
@@ -510,6 +629,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         collections = filter_collections(archive.get_collections(), request.user)
         return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
+    @extend_schema(
+        request=ArchiveIdsSerializer,
+        responses={200: CollectionMinimalSerializer(many=True)},
+    )
     @action(
         detail=False, methods=["POST"], url_path="collections", url_name="collections"
     )
@@ -537,7 +660,11 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         collections = filter_collections(collections, request.user)
         return self.make_paginated_response(collections, CollectionMinimalSerializer)
 
-    @extend_schema(operation_id="mlt-unstage")
+    @extend_schema(
+        operation_id="mlt-unstage",
+        request=ArchiveUnstageSerializer,
+        responses={200: CollectionMinimalSerializer},
+    )
     @action(detail=False, methods=["POST"], url_path="unstage", url_name="mlt-unstage")
     def archives_unstage(self, request):
         """
@@ -575,6 +702,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return Response(serializer.data)
 
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="Archive deleted")},
+    )
     @action(
         detail=True,
         methods=["POST"],
@@ -591,6 +722,7 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         archive.delete()
         return Response()
 
+    @extend_schema(request=PipelineRunSerializer, responses={200: MessageSerializer})
     @action(detail=True, methods=["POST"], url_path="pipeline", url_name="pipeline")
     def archive_run_pipeline(self, request, pk=None):
         """
@@ -611,6 +743,9 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         except Exception as e:
             raise BadRequest(str(e))
 
+    @extend_schema(
+        request=BulkPipelineRunSerializer, responses={200: MessageSerializer}
+    )
     @action(
         detail=False,
         methods=["POST"],
@@ -646,6 +781,16 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             },
         )
 
+    @extend_schema(
+        request=ArchiveIdsSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=ArchiveActionsSerializer,
+                description="Common actions. An empty object is returned when no "
+                "Archive is passed or none of them exists",
+            )
+        },
+    )
     @action(detail=False, methods=["POST"], url_path="actions", url_name="actions")
     def archive_action_intersection(self, request, pk=None):
         """
@@ -686,6 +831,10 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             }
         )
 
+    @extend_schema(
+        request=SourceRecordsSerializer,
+        responses={200: HarvestRecidsResultSerializer},
+    )
     @action(
         detail=False,
         methods=["POST"],
@@ -754,8 +903,22 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         user_archives = filter_archives(Archive.objects.all(), self.request.user, "all")
         return Step.objects.filter(archive__in=user_archives).distinct()
 
+    @extend_schema(
+        summary="Download the artifact produced by a Step",
+        responses={
+            (200, "application/zip"): OpenApiTypes.BINARY,
+            (200, "application/x-7z-compressed"): OpenApiTypes.BINARY,
+            404: OpenApiResponse(
+                description="The Step produced no downloadable artifact"
+            ),
+        },
+    )
     @action(detail=True, url_path="download-artifact", url_name="download-artifact")
     def download_artifact(self, request, pk=None):
+        """
+        Returns the SIP (as a zip archive) or the AIP (as a 7z archive)
+        produced by the identified Step
+        """
         step = self.get_object()
 
         # If this step has an "Artifact" in the output
@@ -786,6 +949,14 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
                     )
         return HttpResponse(status=404)
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=STRING_LIST_RESPONSE,
+                description="Failure types found on the existing Steps",
+            )
+        }
+    )
     @action(
         detail=False,
         methods=["GET"],
@@ -805,6 +976,10 @@ class StepViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(list(failures))
 
 
+@extend_schema_view(
+    list=extend_schema(parameters=TAG_LIST_PARAMETERS),
+    retrieve=extend_schema(responses={200: CollectionSerializer}),
+)
 class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
     """
     API endpoint that allows Tags to be viewed or edited
@@ -843,6 +1018,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionSerializer(instance)
         return Response(serializer.data)
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=STRING_LIST_RESPONSE,
+                description="Usernames of the creators of the visible Tags",
+            )
+        }
+    )
     @action(detail=False, methods=["GET"], url_path="usernames", url_name="usernames")
     def get_usernames(self, request):
         """
@@ -857,6 +1040,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         )
         return Response(list(usernames))
 
+    @extend_schema(
+        request=TagCreateSerializer, responses={200: CollectionMinimalSerializer}
+    )
     @action(detail=False, methods=["POST"], url_path="create", url_name="create")
     def create_tag(self, request):
         """
@@ -883,6 +1069,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
+    @extend_schema(
+        request=TagEditSerializer, responses={200: CollectionMinimalSerializer}
+    )
     @action(detail=True, methods=["POST"], url_path="edit", url_name="edit")
     def edit_tag(self, request, pk=None):
         """
@@ -905,6 +1094,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             serializer = self.get_serializer(tag, many=False)
             return Response(serializer.data)
 
+    @extend_schema(
+        request=None, responses={200: OpenApiResponse(description="Tag deleted")}
+    )
     @action(detail=True, methods=["POST"], url_path="delete", url_name="delete")
     def delete_tag(self, request, pk=None):
         """
@@ -915,6 +1107,10 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             tag.delete()
         return Response()
 
+    @extend_schema(
+        parameters=[PAGE_SIZE_PARAMETER],
+        responses={200: ArchiveSerializer(many=True)},
+    )
     @action(detail=True, url_path="archives", url_name="archives")
     def get_tagged_archives(self, request, pk=None):
         """
@@ -955,6 +1151,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = self.get_serializer(tag)
         return Response(serializer.data)
 
+    @extend_schema(
+        request=ArchiveIdsSerializer, responses={200: CollectionMinimalSerializer}
+    )
     @action(detail=True, methods=["POST"], url_path="add")
     def add_arch(self, request, pk=None):
         """
@@ -962,6 +1161,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         return self.add_or_remove_arch(request, add=True)
 
+    @extend_schema(
+        request=ArchiveIdsSerializer, responses={200: CollectionMinimalSerializer}
+    )
     @action(detail=True, methods=["POST"], url_path="remove")
     def remove_arch(self, request, pk=None):
         """
@@ -969,6 +1171,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         """
         return self.add_or_remove_arch(request, add=False)
 
+    @extend_schema(responses={200: CollectionNameListSerializer})
     @action(detail=False, methods=["GET"], url_path="names")
     def get_name_list(self, request, pk=None):
         """
@@ -978,8 +1181,25 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         serializer = CollectionNameSerializer(tags.order_by("-timestamp"), many=True)
         return Response({"result": serializer.data})
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="type",
+                description="Which summary to compute",
+                required=False,
+                type=str,
+                enum=["step", "failure", "warning", "execution"],
+                default="step",
+                location=OpenApiParameter.QUERY,
+            )
+        ],
+        responses={200: CollectionSummarySerializer},
+    )
     @action(detail=True, methods=["GET"], url_path="summary", url_name="summary")
     def get_summary(self, request, pk=None):
+        """
+        Returns aggregated Step counters for the Archives of the identified Tag
+        """
         collection = self.get_object()
         summary_type = request.GET.get("type", "step")
         match summary_type:
@@ -1141,14 +1361,10 @@ def upload_file(request):
     return Response({"status": 0, "archive": archive.id})
 
 
-@extend_schema_view(
-    post=extend_schema(
-        description="""Creates an Archive given an UploadedFile
-        representing a zipped SIP"""
-    )
-)
 @extend_schema(
-    request=FileUploadSerializer, responses={200: FileUploadResultSerializer}
+    description="Creates an Archive given an UploadedFile representing a zipped SIP",
+    request=FileUploadSerializer,
+    responses={200: FileUploadResultSerializer},
 )
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
@@ -1298,10 +1514,18 @@ def search(request, source):
     operation_id="search-record-by-id",
     parameters=[
         OpenApiParameter(
-            name="source", description="Source name", required=True, type=str
+            name="source",
+            description="Source name",
+            required=True,
+            type=str,
+            location=OpenApiParameter.PATH,
         ),
         OpenApiParameter(
-            name="recid", description="Record ID", required=True, type=str
+            name="recid",
+            description="Record ID",
+            required=True,
+            type=str,
+            location=OpenApiParameter.PATH,
         ),
     ],
     responses={200: SearchByIdResultSerializer},
@@ -1357,11 +1581,18 @@ def parse_url(request):
     return Response({"source": source, "recid": recid})
 
 
-@extend_schema(request=LoginSerializer, responses=UserSerializer)
+@extend_schema(
+    request=LoginSerializer,
+    responses={
+        302: OpenApiResponse(
+            description="Redirect to `/api/users/me/`, which returns the logged in User"
+        )
+    },
+)
 @api_view(["POST"])
 def login(request):
     """
-    Local accounts login route. If successful, returns the logged in User and Profile.
+    Local accounts login route. If successful, redirects to the logged in User.
     """
 
     if not ALLOW_LOCAL_LOGIN:
@@ -1413,7 +1644,11 @@ def logout(request):
 
 @extend_schema(
     request=AnnounceSerializer,
-    responses={200: OpenApiTypes.STR},
+    responses={
+        302: OpenApiResponse(
+            description="Redirect to the detail of the newly created Archive"
+        )
+    },
 )
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
@@ -1455,7 +1690,12 @@ def announce(request):
 
 @extend_schema(
     request=BatchAnnounceSerializer,
-    responses={200: OpenApiTypes.STR},
+    responses={
+        302: OpenApiResponse(
+            description="Redirect to the detail of the Tag grouping the "
+            "Archives being created"
+        )
+    },
 )
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
@@ -1519,11 +1759,18 @@ def batch_announce(request):
 
 @extend_schema(
     request=None,
-    responses={200: OpenApiTypes.STR},
+    responses={
+        200: OpenApiResponse(
+            response=STRING_LIST_RESPONSE, description="Names of the enabled Sources"
+        )
+    },
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def sources(request):
+    """
+    Returns the names of the upstream sources enabled on the platform
+    """
     sources = Source.objects.filter(enabled=True).values_list("name", flat=True)
     return Response(sources)
 
@@ -1535,6 +1782,9 @@ def sources(request):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def get_app_config(request):
+    """
+    Returns the platform limits the clients have to comply with
+    """
     return Response(
         {
             "max_file_size": FILE_UPLOAD_MAX_SIZE_BYTE,
@@ -1550,6 +1800,10 @@ def get_app_config(request):
 @api_view(["POST"])
 @permission_classes([SuperUserPermission])
 def am_callback(request):
+    """
+    Endpoint Archivematica calls back when a transfer is processed.
+    Callback processing is currently disabled: the call is only logged.
+    """
     serializer = CallbackSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     package_uuid = serializer.validated_data["package_uuid"]

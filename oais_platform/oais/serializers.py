@@ -397,8 +397,8 @@ class ConfigurationSerializer(serializers.Serializer):
     max_file_size = serializers.IntegerField(
         help_text="Maximum allowed file size for uploads (in bytes)"
     )
-    max_step_filter_combinations = serializers.IntegerField(
-        help_text="Maximum allowed boolean combine groups in step filters"
+    max_step_filter_conditions = serializers.IntegerField(
+        help_text="Maximum allowed number of step conditions in step filters"
     )
 
 
@@ -410,3 +410,232 @@ class LogoutSerializer(serializers.Serializer):
         help_text="URL to redirect to for logout (if applicable)",
     )
     requires_redirect = serializers.BooleanField()
+
+
+class MessageSerializer(serializers.Serializer):
+    msg = serializers.CharField(help_text="Human readable result of the operation")
+
+
+class OperationResultSerializer(serializers.Serializer):
+    status = serializers.IntegerField(help_text="0 on success, 1 on failure")
+    errormsg = serializers.CharField(
+        allow_null=True, help_text="Error description, null on success"
+    )
+
+
+class HarvestRecidsResultSerializer(OperationResultSerializer):
+    collection_id = serializers.IntegerField(
+        help_text="ID of the Collection grouping the created Archives"
+    )
+
+
+class UserApiKeySerializer(serializers.Serializer):
+    source_id = serializers.IntegerField(help_text="ID of the Source")
+    source = serializers.CharField(help_text="Long name of the Source")
+    how_to = serializers.CharField(
+        allow_null=True, help_text="Instructions to obtain an API key for this Source"
+    )
+    key = serializers.CharField(
+        allow_null=True, help_text="API key set by the User, null if not set"
+    )
+
+
+class UserWithApiKeysSerializer(UserSerializer):
+    api_key = UserApiKeySerializer(
+        many=True,
+        read_only=True,
+        help_text="API key configuration for every Source requiring one",
+    )
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ["api_key"]
+
+
+class UserApiKeyUpdateSerializer(serializers.Serializer):
+    source = serializers.IntegerField(help_text="ID of the Source")
+    key = serializers.CharField(
+        allow_blank=True,
+        allow_null=True,
+        help_text="API key to store. An empty value deletes the stored key",
+    )
+
+
+class StagedRecordSerializer(serializers.Serializer):
+    recid = serializers.CharField(help_text="Record ID on the upstream source")
+    source = serializers.CharField(help_text="Name of the upstream source")
+    source_url = serializers.CharField(help_text="URL of the record on the source")
+    title = serializers.CharField(help_text="Title of the record")
+    file_size = serializers.IntegerField(
+        required=False, help_text="Size of the record files, in bytes"
+    )
+    updated = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        help_text="Last modification timestamp on the source",
+    )
+
+
+class StageRecordsSerializer(serializers.Serializer):
+    records = StagedRecordSerializer(many=True)
+
+
+class SourceRecordsSerializer(serializers.Serializer):
+    records = SourceRecordSerializer(many=True)
+
+
+class ArchiveDuplicateSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="ID of the duplicate Archive")
+    timestamp = serializers.DateTimeField(
+        help_text="Creation timestamp of the duplicate Archive"
+    )
+    timestamp_match = serializers.BooleanField(
+        help_text="Whether the duplicate was harvested from the same source version"
+    )
+
+
+class RecordWithDuplicatesSerializer(serializers.Serializer):
+    recid = serializers.CharField(help_text="Record ID on the upstream source")
+    source = serializers.CharField(help_text="Name of the upstream source")
+    updated = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        help_text="Last modification timestamp on the source",
+    )
+    duplicates = ArchiveDuplicateSerializer(
+        many=True, read_only=True, help_text="Archives already created for this record"
+    )
+
+
+class DuplicateCheckSerializer(serializers.Serializer):
+    records = RecordWithDuplicatesSerializer(
+        many=True, help_text="Records to look for in the already created Archives"
+    )
+
+
+class ArchiveIdsSerializer(serializers.Serializer):
+    archives = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text="IDs of the Archives",
+    )
+
+
+class ArchiveIdListSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.IntegerField(), help_text="IDs of the matching Archives"
+    )
+
+
+class ArchiveReferenceSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="ID of the Archive")
+
+
+class ArchiveUnstageSerializer(serializers.Serializer):
+    archives = ArchiveReferenceSerializer(
+        many=True, help_text="Archives to move out of the staging area"
+    )
+    job_title = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Title of the Tag grouping the unstaged Archives. "
+        "Defaults to 'Job <current date and time>'",
+    )
+
+
+class ArchiveActionsSerializer(serializers.Serializer):
+    all_last_step_failed = serializers.BooleanField(
+        help_text="Whether the last Step of every passed Archive has failed"
+    )
+    can_continue = serializers.BooleanField(
+        help_text="Whether the pipeline of every passed Archive can be continued"
+    )
+
+
+STEP_FILTERS_HELP_TEXT = (
+    "Step conditions, optionally nested in boolean groups, e.g. "
+    '{"and": [{...}, {"or": [{...}, {...}]}]}. A single condition matches on '
+    "the keys `name` (StepType name), `status` (Step status) and "
+    "`failure_type`, and can be tuned with the boolean modifiers `exclude`, "
+    "`last_step`, `in_pipeline` and `latest`."
+)
+
+
+class ArchiveFiltersSerializer(serializers.Serializer):
+    state = serializers.ChoiceField(
+        choices=ArchiveState.choices, required=False, help_text="State of the Archive"
+    )
+    source = serializers.CharField(required=False, help_text="Name of the source")
+    tag = serializers.IntegerField(
+        required=False, help_text="ID of a Tag the Archive must belong to"
+    )
+    exclude_tag = serializers.IntegerField(
+        required=False, help_text="ID of a Tag the Archive must not belong to"
+    )
+    query = serializers.CharField(
+        required=False, help_text="Free text matched against title and record ID"
+    )
+    step_filters = serializers.DictField(
+        required=False, help_text=STEP_FILTERS_HELP_TEXT
+    )
+
+
+class ArchiveFilterRequestSerializer(serializers.Serializer):
+    filters = ArchiveFiltersSerializer()
+
+
+class PipelineRunSerializer(serializers.Serializer):
+    run_type = serializers.ChoiceField(
+        choices=["run", "retry", "continue"],
+        required=False,
+        default="run",
+        help_text="`run` creates a new pipeline, `retry` re-runs the last Step, "
+        "`continue` resumes the existing pipeline",
+    )
+    pipeline_steps = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="StepType names to run, in order. Required for `run`",
+    )
+
+
+class BulkPipelineRunSerializer(PipelineRunSerializer):
+    archive_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text="IDs of the Archives to run the pipeline for",
+    )
+
+
+class TagCreateSerializer(serializers.Serializer):
+    title = serializers.CharField(help_text="Title of the Tag")
+    description = serializers.CharField(
+        allow_blank=True, allow_null=True, help_text="Description of the Tag"
+    )
+    archives = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_null=True,
+        help_text="IDs of the Archives to tag",
+    )
+
+
+class TagEditSerializer(serializers.Serializer):
+    title = serializers.CharField(help_text="New title of the Tag")
+    description = serializers.CharField(
+        allow_blank=True, allow_null=True, help_text="New description of the Tag"
+    )
+
+
+class CollectionNameListSerializer(serializers.Serializer):
+    result = CollectionNameSerializer(many=True, read_only=True)
+
+
+class CollectionSummarySerializer(serializers.Serializer):
+    summary = serializers.DictField(
+        help_text=(
+            "Aggregated counters, keyed by StepType name. The shape depends on "
+            "the requested summary `type`: `step` maps each step status to a "
+            "count and an average duration, `failure` and `warning` list the "
+            "failure types with their count, `execution` returns the average "
+            "duration per day."
+        )
+    )
