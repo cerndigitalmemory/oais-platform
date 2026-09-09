@@ -132,3 +132,10 @@ class HarvestedSourcesStatisticsTest(APITestCase):
         sh_row = row["scheduled_harvests"][0]
         self.assertEqual(sh_row["grace_period_days"], 30)
         self.assertEqual(sh_row["last_run_date"], latest_run.created_at)
+
+    def test_source_with_no_matching_source_object_falls_back_to_name(self):
+        self.create_harvested_archive("orphan-source", "REC-1")
+
+        response = self.client.get(self.url, format="json")
+        row = self.get_source_row(response.data, "orphan-source")
+        self.assertEqual(row["total_harvested"], 1)

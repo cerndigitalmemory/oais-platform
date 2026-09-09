@@ -250,7 +250,8 @@ def _scheduled_harvest_to_dict(scheduled_harvest):
 
     archive_count = (
         Archive.objects.filter(
-            harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest
+            harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest,
+            state__in=[ArchiveState.SIP, ArchiveState.AIP],
         )
         .distinct()
         .count()
@@ -271,12 +272,9 @@ def harvested_sources_overview():
     total number harvested, the latest harvest time, and the list of
     its ScheduledHarvest (empty if none exist).
     """
-    harvested_step_exists = Q(
-        steps__step_type__has_sip=True, steps__status=Status.COMPLETED
-    )
 
     source_stats = (
-        Archive.objects.filter(harvested_step_exists)
+        Archive.objects.filter(state__in=[ArchiveState.SIP, ArchiveState.AIP],)
         .values("source")
         .annotate(
             total_harvested=Count("recid", distinct=True),
