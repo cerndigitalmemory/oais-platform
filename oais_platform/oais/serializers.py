@@ -385,20 +385,35 @@ class StepDurationStatisticsSerializer(serializers.Serializer):
     )
 
 
-class ScheduledHarvestStatisticsSerializer(serializers.Serializer):
-    name = serializers.CharField(help_text="Display name of the source")
-    preserved_unique_archives = serializers.IntegerField(
-        help_text="Count of unique preserved records (recid) for this scheduled harvest"
-    )
-    last_harvest_time = serializers.DateTimeField(
-        allow_null=True, help_text="Creation time of the most recent HarvestRun"
-    )
+class ScheduledHarvestDetailSerializer(serializers.Serializer):
+    name = serializers.CharField(help_text="Name of the ScheduledHarvest")
     grace_period_days = serializers.IntegerField(
         allow_null=True,
         help_text="Grace period in days used by the most recent HarvestRun",
     )
+    last_run_date = serializers.DateTimeField(
+        allow_null=True, help_text="Creation time of the most recent HarvestRun"
+    )
     scope = serializers.CharField(
         help_text="'Full' or 'Partial' depending on extra_query"
+    )
+    archive_count = serializers.IntegerField(
+        help_text="Number of Archives linked to this ScheduledHarvest"
+    )
+
+
+class HarvestedSourcesStatisticsSerializer(serializers.Serializer):
+    source = serializers.CharField(help_text="Display name of the source")
+    total_harvested = serializers.IntegerField(
+        help_text="Count of unique preserved records (recid) harvested for this source"
+    )
+    latest_harvested = serializers.DateTimeField(
+        allow_null=True,
+        help_text="Most recent time a HARVEST step completed for this source",
+    )
+    scheduled_harvests = ScheduledHarvestDetailSerializer(
+        many=True,
+        help_text="List of ScheduledHarvest configured for this source, if any",
     )
 
 

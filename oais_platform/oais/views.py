@@ -93,6 +93,7 @@ from oais_platform.oais.serializers import (
     DuplicateCheckSerializer,
     FileUploadResultSerializer,
     FileUploadSerializer,
+    HarvestedSourcesStatisticsSerializer,
     HarvestRecidsResultSerializer,
     LoginSerializer,
     LogoutSerializer,
@@ -102,7 +103,6 @@ from oais_platform.oais.serializers import (
     ParseUrlSerializer,
     PipelineRunSerializer,
     RecordWithDuplicatesSerializer,
-    ScheduledHarvestStatisticsSerializer,
     SearchByIdResultSerializer,
     SearchResultSerializer,
     SourceRecordsSerializer,
@@ -125,7 +125,7 @@ from oais_platform.oais.statistics import (
     avg_in_progress_duration_by_step,
     count_failures_by_type,
     count_steps_by_status,
-    scheduled_harvest_overview,
+    harvested_sources_overview,
     step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
@@ -1287,11 +1287,11 @@ def step_duration_statistics(request):
 
 @extend_schema(
     request=None,
-    responses={200: ScheduledHarvestStatisticsSerializer(many=True)},
+    responses={200: HarvestedSourcesStatisticsSerializer(many=True)},
 )
 @api_view(["GET"])
-def scheduled_harvest_statistics(request):
-    return Response(scheduled_harvest_overview())
+def harvested_sources_statistics(request):
+    return Response(harvested_sources_overview())
 
 
 @extend_schema(

@@ -18,6 +18,7 @@ from django.utils import timezone
 from oais_platform.oais.enums import (
     COMPLETED_STATUSES,
     ArchiveState,
+    Status,
     StepFailureType,
     StepName,
 )
@@ -240,65 +241,71 @@ def avg_duration_per_day(
     )
 
 
-def _pick_scheduled_harvest_for_source(source):
-    full = (
-        ScheduledHarvest.objects.filter(
-            source=source, enabled=True, extra_query__isnull=True
-        )
-        .order_by("-harvest_runs__created_at")
+def _scheduled_harvest_to_dict(scheduled_harvest):
+    last_run = (
+        HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest)
+        .order_by("-created_at")
         .first()
     )
 
-    if full:
-        return full
-
-    return (
-        ScheduledHarvest.objects.filter(
-            source=source, enabled=True, extra_query__isnull=False
+    archive_count = (
+        Archive.objects.filter(
+            harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest
         )
-        .order_by("-harvest_runs__created_at")
-        .first()
+        .distinct()
+        .count()
     )
 
+    return {
+        "name": scheduled_harvest.name,
+        "grace_period_days": last_run.grace_period_days if last_run else None,
+        "last_run_date": last_run.created_at if last_run else None,
+        "scope": "Partial" if scheduled_harvest.extra_query else "Full",
+        "archive_count": archive_count,
+    }
 
-def scheduled_harvest_overview():
+
+def harvested_sources_overview():
     """
-    Returns, for each Source with at least one enabled ScheduledHarvest,
-    a single row: the most recent "Full" one if any exists, otherwise
-    the most recent "Partial" one.
+    Returns, for each Source with at least one harvested Archive, the
+    total number harvested, the latest harvest time, and the list of
+    its ScheduledHarvest (empty if none exist).
     """
+    harvested_step_exists = Q(
+        steps__step_type__has_sip=True, steps__status=Status.COMPLETED
+    )
+
+    source_stats = (
+        Archive.objects.filter(harvested_step_exists)
+        .values("source")
+        .annotate(
+            total_harvested=Count("recid", distinct=True),
+            latest_harvested=Max("steps__finish_date"),
+        )
+    )
+
     result = []
-    sources = Source.objects.filter(scheduled_harvests__enabled=True).distinct()
 
-    for source in sources:
-        scheduled_harvest = _pick_scheduled_harvest_for_source(source)
+    for row in source_stats:
+        source_name = row["source"]
 
-        if scheduled_harvest is None:
-            continue
+        try:
+            source_longname = Source.objects.get(name=source_name).longname
+        except Source.DoesNotExist:
+            # In case if Source has been deleted/renamed
+            source_longname = source_name
 
-        last_run = (
-            HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest)
-            .order_by("-created_at")
-            .first()
-        )
-
-        preserved_count = (
-            Archive.objects.filter(
-                harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest,
-                state=ArchiveState.AIP,
-            )
-            .values("recid", "source")
-            .distinct()
-            .count()
-        )
+        scheduled_harvests = ScheduledHarvest.objects.filter(source__name=source_name)
 
         result.append(
             {
-                "name": scheduled_harvest.source.longname,
-                "preserved_unique_archives": preserved_count,
-                "last_harvest_time": last_run.created_at if last_run else None,
-                "grace_period_days": last_run.grace_period_days if last_run else None,
-                "scope": "Full" if scheduled_harvest.extra_query is None else "Partial",
+                "source": source_longname,
+                "total_harvested": row["total_harvested"],
+                "latest_harvested": row["latest_harvested"],
+                "scheduled_harvests": [
+                    _scheduled_harvest_to_dict(scheduled_harvest)
+                    for scheduled_harvest in scheduled_harvests
+                ],
             }
         )
 
