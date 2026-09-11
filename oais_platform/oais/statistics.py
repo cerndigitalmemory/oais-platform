@@ -274,7 +274,9 @@ def harvested_sources_overview():
     """
 
     source_stats = (
-        Archive.objects.filter(state__in=[ArchiveState.SIP, ArchiveState.AIP],)
+        Archive.objects.filter(
+            state__in=[ArchiveState.SIP, ArchiveState.AIP],
+        )
         .values("source")
         .annotate(
             total_harvested=Count("recid", distinct=True),
