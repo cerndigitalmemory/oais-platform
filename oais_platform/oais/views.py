@@ -45,6 +45,7 @@ from oais_platform.oais.models import (
     RETRY_CONTINUE_STATUSES,
     ApiKey,
     Archive,
+    ArchivematicaInstance,
     ArchiveState,
     Collection,
     Source,
@@ -78,6 +79,7 @@ from oais_platform.oais.serializers import (
     ArchiveFilterRequestSerializer,
     ArchiveIdListSerializer,
     ArchiveIdsSerializer,
+    ArchivematicaSerializer,
     ArchiveSerializer,
     ArchiveUnstageSerializer,
     ArchiveWithDuplicatesSerializer,
@@ -888,6 +890,19 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
             execute_pipeline(archive.id)
 
         return Response({"status": 0, "errormsg": None, "collection_id": collection.id})
+
+
+class ArchivematicaInstanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint that allows ArchivematicaInstances to be viewed.
+    Restricted to superusers: exposes operational status per instance,
+    not intended for regular users.
+    """
+
+    queryset = ArchivematicaInstance.objects.all().order_by("name")
+    serializer_class = ArchivematicaSerializer
+    permission_classes = [SuperUserPermission]
+    pagination_class = None
 
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):

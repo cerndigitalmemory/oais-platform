@@ -96,6 +96,10 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/5"),
         "options": {"expires": 300},
     },
+    "refresh-am-instance-versions": {
+        "task": "refresh_am_instance_versions",
+        "schedule": crontab(minute="*/1"),
+    },
 }
 
 ## Authentication

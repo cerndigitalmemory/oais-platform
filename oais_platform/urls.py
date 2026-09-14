@@ -26,6 +26,11 @@ router.register(r"archives", views.ArchiveViewSet, basename="archives")
 router.register(r"steps", views.StepViewSet, basename="steps")
 router.register(r"tags", views.TagViewSet, basename="tags")
 router.register(r"step-type", views.StepTypeViewSet, basename="step-type")
+router.register(
+    r"archivematica-instances",
+    views.ArchivematicaInstanceViewSet,
+    basename="archivematica-instances",
+)
 
 handler404 = "oais_platform.oais.views.custom_404"
 
