@@ -1,3 +1,6 @@
+import os
+import shutil
+import tempfile
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Permission, User
@@ -11,6 +14,7 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.exceptions import InvalidSource
 from oais_platform.oais.models import (
     Archive,
+    ArchivematicaInstance,
     ArchiveState,
     Collection,
     Resource,
@@ -914,3 +918,200 @@ class ArchiveTests(APITestCase):
         payload = {"records": [{"recid": "1", "source": "test"}]}
         response = self.client.post(url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ArchiveDeleteModelTests(APITestCase):
+    """Tests for Archive.delete() cleaning up Steps and their artifacts on disk."""
+
+    def setUp(self):
+        self.requester = User.objects.create_user("requester", password="pw")
+        self.archive = Archive.objects.create(
+            recid="1",
+            source="test",
+            source_url="",
+            requester=self.requester,
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def make_artifact_file(self, name="artifact.zip"):
+        artifact_path = os.path.join(self.temp_dir, name)
+        with open(artifact_path, "w") as f:
+            f.write("dummy content")
+        return artifact_path
+
+    def test_delete_removes_artifact_file_from_disk(self):
+        artifact_path = self.make_artifact_file()
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "artifact.zip",
+                    "artifact_path": artifact_path,
+                }
+            },
+        )
+
+        self.assertTrue(os.path.exists(artifact_path))
+        self.archive.delete()
+        self.assertFalse(os.path.exists(artifact_path))
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+        self.assertFalse(Archive.objects.filter(pk=self.archive.pk).exists())
+
+    def test_delete_removes_steps(self):
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.HARVEST,
+            status=Status.COMPLETED,
+        )
+        step2 = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.VALIDATION,
+            status=Status.COMPLETED,
+        )
+        self.archive.delete()
+
+        self.assertFalse(Archive.objects.filter(pk=self.archive.pk).exists())
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+        self.assertFalse(Step.objects.filter(pk=step2.pk).exists())
+
+    def test_delete_missing_artifact_file_does_not_raise(self):
+        missing_path = os.path.join(self.temp_dir, "does-not-exist.zip")
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "does-not-exist.zip",
+                    "artifact_path": missing_path,
+                }
+            },
+        )
+        self.archive.delete()
+
+        self.assertFalse(Archive.objects.filter(pk=self.archive.pk).exists())
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+
+    def test_delete_step_without_artifact_does_not_raise(self):
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.HARVEST,
+            status=Status.COMPLETED,
+        )
+        self.archive.delete()
+
+        self.assertFalse(Archive.objects.filter(pk=self.archive.pk).exists())
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+
+    def make_archivematica_instance(self, sip_basepath, aip_basepath):
+        return ArchivematicaInstance.objects.create(
+            name="test-instance",
+            url="https://archivematica.example",
+            username="user",
+            _api_key="key",
+            storage_service_url="https://storage.example",
+            storage_service_username="user",
+            _storage_service_api_key="key",
+            sip_upstream_basepath=sip_basepath,
+            aip_upstream_basepath=aip_basepath,
+        )
+
+    def make_artifact_dir(self, base_path, name="artifact_dir"):
+        artifact_path = os.path.join(base_path, name)
+        os.makedirs(artifact_path)
+        with open(os.path.join(artifact_path, "file.txt"), "w") as f:
+            f.write("dummy content")
+        return artifact_path
+
+    def test_delete_removes_artifact_dir_under_sip_upstream_basepath(self):
+        self.make_archivematica_instance(
+            sip_basepath=self.temp_dir, aip_basepath="/nonexistent-aip"
+        )
+        artifact_path = self.make_artifact_dir(self.temp_dir)
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "artifact_dir",
+                    "artifact_path": artifact_path,
+                }
+            },
+        )
+
+        self.assertTrue(os.path.isdir(artifact_path))
+        self.archive.delete()
+        self.assertFalse(os.path.exists(artifact_path))
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+
+    def test_delete_removes_artifact_dir_under_sip_store_basepath(self):
+        artifact_path = self.make_artifact_dir(self.temp_dir)
+        Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "artifact_dir",
+                    "artifact_path": artifact_path,
+                }
+            },
+        )
+
+        with patch("oais_platform.oais.models.SIP_STORE_BASEPATH", self.temp_dir):
+            self.archive.delete()
+
+        self.assertFalse(os.path.exists(artifact_path))
+
+    def test_delete_does_not_remove_artifact_dir_outside_known_basepaths(self):
+        self.make_archivematica_instance(
+            sip_basepath="/nonexistent-sip", aip_basepath="/nonexistent-aip"
+        )
+        artifact_path = self.make_artifact_dir(self.temp_dir)
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "artifact_dir",
+                    "artifact_path": artifact_path,
+                }
+            },
+        )
+
+        with patch(
+            "oais_platform.oais.models.SIP_STORE_BASEPATH", "/nonexistent-store"
+        ):
+            self.archive.delete()
+
+        self.assertTrue(os.path.isdir(artifact_path))
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
+        self.assertFalse(Archive.objects.filter(pk=self.archive.pk).exists())
+
+    def test_delete_does_not_remove_artifact_dir_equal_to_basepath(self):
+        self.make_archivematica_instance(
+            sip_basepath=self.temp_dir, aip_basepath="/nonexistent-aip"
+        )
+        step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED,
+            output_data_json={
+                "artifact": {
+                    "artifact_name": "artifact_dir",
+                    "artifact_path": self.temp_dir,
+                }
+            },
+        )
+
+        self.archive.delete()
+
+        self.assertTrue(os.path.isdir(self.temp_dir))
+        self.assertFalse(Step.objects.filter(pk=step.pk).exists())
