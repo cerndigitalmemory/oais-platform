@@ -2,10 +2,8 @@ from django.contrib.auth.models import User
 from drf_spectacular.utils import extend_schema_field
 from opensearch_dsl import utils
 from rest_framework import serializers
-from oais_platform.oais.enums import (
-    StepName
-)
 
+from oais_platform.oais.enums import StepName
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
