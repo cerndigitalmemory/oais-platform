@@ -586,9 +586,11 @@ def get_transfer_source(am_instance):
     )
 
 
-@shared_task(name="refresh_am_instance_versions")
-def refresh_am_instance_versions():
+@shared_task(name="get_am_instances_versions")
+def get_am_instances_versions():
     for instance in ArchivematicaInstance.objects.filter(enabled=True):
+        logger.info("Starting Archivematica instance version refresh")
+
         am = ArchivematicaClient()
         am.am_url = instance.url
         am.am_user_name = instance.username
@@ -604,6 +606,9 @@ def refresh_am_instance_versions():
                 instance.version = version
                 instance.version_checked_at = timezone.now()
                 instance.save(update_fields=["version", "version_checked_at"])
+                logger.info(
+                    f"Refreshed version for instance {instance.name}: {version}"
+                )
         except requests.RequestException as e:
             logger.warning(
                 f"Could not refresh version for instance {instance.name}: {e}"

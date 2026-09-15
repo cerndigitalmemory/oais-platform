@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 from requests.exceptions import RequestException
 
-from oais_platform.oais.tasks.archivematica import refresh_am_instance_versions
+from oais_platform.oais.tasks.archivematica import get_am_instances_versions
 from oais_platform.oais.tests.am_utils import (
     AM_INSTANCES,
     create_archivematica_instance,
@@ -18,7 +18,7 @@ class RefreshAmInstanceVersionsTests(TestCase):
         mock_get.return_value = Mock(headers={"X-Archivematica-Version": "1.18.0"})
 
         before = timezone.now()
-        refresh_am_instance_versions()
+        get_am_instances_versions()
 
         instance.refresh_from_db()
         self.assertEqual(instance.version, "1.18.0")
@@ -30,7 +30,7 @@ class RefreshAmInstanceVersionsTests(TestCase):
         instance.enabled = False
         instance.save()
 
-        refresh_am_instance_versions()
+        get_am_instances_versions()
 
         mock_get.assert_not_called()
         instance.refresh_from_db()
@@ -41,7 +41,7 @@ class RefreshAmInstanceVersionsTests(TestCase):
         instance = create_archivematica_instance()
         mock_get.side_effect = RequestException("Connection refused")
 
-        refresh_am_instance_versions()  # should not raise
+        get_am_instances_versions()  # should not raise
 
         instance.refresh_from_db()
         self.assertIsNone(instance.version)
@@ -52,7 +52,7 @@ class RefreshAmInstanceVersionsTests(TestCase):
         instance = create_archivematica_instance()
         mock_get.return_value = Mock(headers={})
 
-        refresh_am_instance_versions()
+        get_am_instances_versions()
 
         instance.refresh_from_db()
         self.assertIsNone(instance.version)
@@ -65,7 +65,7 @@ class RefreshAmInstanceVersionsTests(TestCase):
         )
         mock_get.return_value = Mock(headers={"X-Archivematica-Version": "1.19.0"})
 
-        refresh_am_instance_versions()
+        get_am_instances_versions()
 
         first_instance.refresh_from_db()
         second_instance.refresh_from_db()
