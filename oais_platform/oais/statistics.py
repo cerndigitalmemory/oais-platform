@@ -280,7 +280,10 @@ def harvested_sources_overview():
         .values("source")
         .annotate(
             total_harvested=Count("recid", distinct=True),
-            latest_harvested=Max("steps__finish_date"),
+            latest_harvested=Max(
+                "steps__finish_date",
+                filter=Q(steps__step_type__name=StepName.HARVEST)
+            ),
         )
     )
 
@@ -295,7 +298,7 @@ def harvested_sources_overview():
             # In case if Source has been deleted/renamed
             source_longname = source_name
 
-        scheduled_harvests = ScheduledHarvest.objects.filter(source__name=source_name)
+        scheduled_harvests = ScheduledHarvest.objects.filter(source__name=source_name, enabled=True)
 
         result.append(
             {
