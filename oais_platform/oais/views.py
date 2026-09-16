@@ -124,6 +124,7 @@ from oais_platform.oais.statistics import (
     avg_in_progress_duration_by_step,
     count_failures_by_type,
     count_steps_by_status,
+    count_warnings_by_type,
     step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
@@ -1272,6 +1273,14 @@ def step_status_statistics(request):
 @api_view(["GET"])
 def step_failure_statistics(request):
     return Response(count_failures_by_type())
+
+
+@extend_schema(
+    request=None, responses={200: StepFailureStatisticsSerializer(many=True)}
+)
+@api_view(["GET"])
+def step_warning_statistics(request):
+    return Response(count_warnings_by_type())
 
 
 @extend_schema(

@@ -128,14 +128,14 @@ def count_steps_by_status():
     ]
 
 
-def failures_by_type(steps=None):
+def failures_by_type(steps=None, status=Status.FAILED):
     """
-    Returns the latest failed Steps grouped by step name and failure type, with counts.
+    Returns the latest Steps with the given status grouped by step name and failure type, with counts.
     Pass a pre-filtered queryset to scope the result.
     """
     return (
         latest_steps(steps)
-        .filter(status=Status.FAILED)
+        .filter(status=status)
         .annotate(
             grouped_failure_type=Coalesce("failure_type", Value(StepFailureType.OTHER))
         )
@@ -144,18 +144,29 @@ def failures_by_type(steps=None):
     )
 
 
-def count_failures_by_type():
-    """
-    Returns the count of current failed Steps grouped by step name and failure type.
-    """
+def _count_by_failure_type(status):
     return [
         {
             "step": row["step_type__name"],
             "failure_type": row["grouped_failure_type"],
             "count": row["count"],
         }
-        for row in failures_by_type()
+        for row in failures_by_type(status=status)
     ]
+
+
+def count_failures_by_type():
+    """
+    Returns the count of current failed Steps grouped by step name and failure type.
+    """
+    return _count_by_failure_type(Status.FAILED)
+
+
+def count_warnings_by_type():
+    """
+    Returns the count of current Steps completed with warnings grouped by step name and failure type.
+    """
+    return _count_by_failure_type(Status.COMPLETED_WITH_WARNINGS)
 
 
 def _current_duration():

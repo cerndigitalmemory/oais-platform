@@ -109,6 +109,11 @@ urlpatterns = [
                     name="step_failure_statistics",
                 ),
                 path(
+                    "stats/steps/warning-types",
+                    views.step_warning_statistics,
+                    name="step_warning_statistics",
+                ),
+                path(
                     "stats/steps/duration",
                     views.step_duration_statistics,
                     name="step_duration_statistics",
