@@ -5,7 +5,11 @@ from rest_framework.test import APITestCase
 from oais_platform.oais.models import Archive, Status, Step, StepFailureType, StepName
 
 
-class StepFailureStatisticsEndpointTest(APITestCase):
+class StepTypeStatisticsTestMixin:
+    url_name = None
+    counted_status = None
+    excluded_status = None
+
     def create_archive_with_steps(self, steps):
         archive = Archive.objects.create()
         for step in steps:
@@ -21,7 +25,7 @@ class StepFailureStatisticsEndpointTest(APITestCase):
         return archive
 
     def setUp(self):
-        self.url = reverse("step_failure_statistics")
+        self.url = reverse(self.url_name)
 
     def get_count(self, data, step, failure_type):
         return next(
@@ -37,17 +41,17 @@ class StepFailureStatisticsEndpointTest(APITestCase):
         self.create_archive_with_steps(
             [
                 (StepName.HARVEST, Status.COMPLETED),
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.TIMEOUT),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.TIMEOUT),
             ]
         )
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.TIMEOUT),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.TIMEOUT),
             ]
         )
         self.create_archive_with_steps(
             [
-                (StepName.HARVEST, Status.FAILED, StepFailureType.HTTP_404),
+                (StepName.HARVEST, self.counted_status, StepFailureType.HTTP_404),
             ]
         )
 
@@ -71,6 +75,7 @@ class StepFailureStatisticsEndpointTest(APITestCase):
             [
                 (StepName.HARVEST, Status.COMPLETED),
                 (StepName.ARCHIVE, Status.IN_PROGRESS),
+                (StepName.VALIDATION, self.excluded_status, StepFailureType.TIMEOUT),
             ]
         )
 
@@ -81,7 +86,7 @@ class StepFailureStatisticsEndpointTest(APITestCase):
     def test_only_non_zero_combinations_returned(self):
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.TIMEOUT),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.TIMEOUT),
             ]
         )
 
@@ -95,7 +100,7 @@ class StepFailureStatisticsEndpointTest(APITestCase):
     def test_retried_step_not_counted_when_latest_attempt_succeeds(self):
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.TIMEOUT),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.TIMEOUT),
                 (StepName.ARCHIVE, Status.COMPLETED),
             ]
         )
@@ -107,12 +112,12 @@ class StepFailureStatisticsEndpointTest(APITestCase):
     def test_failed_step_without_failure_type(self):
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.OTHER),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.OTHER),
             ]
         )
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, None),
+                (StepName.ARCHIVE, self.counted_status, None),
             ]
         )
 
@@ -127,8 +132,12 @@ class StepFailureStatisticsEndpointTest(APITestCase):
     def test_retried_step_counted_when_latest_attempt_fails(self):
         self.create_archive_with_steps(
             [
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.TIMEOUT),
-                (StepName.ARCHIVE, Status.FAILED, StepFailureType.CONNECTION_ERROR),
+                (StepName.ARCHIVE, self.counted_status, StepFailureType.TIMEOUT),
+                (
+                    StepName.ARCHIVE,
+                    self.counted_status,
+                    StepFailureType.CONNECTION_ERROR,
+                ),
             ]
         )
 
@@ -144,3 +153,15 @@ class StepFailureStatisticsEndpointTest(APITestCase):
             ),
             1,
         )
+
+
+class StepFailureStatisticsEndpointTest(StepTypeStatisticsTestMixin, APITestCase):
+    url_name = "step_failure_statistics"
+    counted_status = Status.FAILED
+    excluded_status = Status.COMPLETED_WITH_WARNINGS
+
+
+class StepWarningStatisticsEndpointTest(StepTypeStatisticsTestMixin, APITestCase):
+    url_name = "step_warning_statistics"
+    counted_status = Status.COMPLETED_WITH_WARNINGS
+    excluded_status = Status.FAILED

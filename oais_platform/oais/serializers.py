@@ -421,7 +421,7 @@ class StepFailureStatisticsSerializer(serializers.Serializer):
     step = serializers.CharField(help_text="Step name")
     failure_type = serializers.CharField(help_text="Failure type")
     count = serializers.IntegerField(
-        help_text="Number of failed steps with this step/failure type combination"
+        help_text="Number of steps with this step/failure type combination"
     )
 
 
