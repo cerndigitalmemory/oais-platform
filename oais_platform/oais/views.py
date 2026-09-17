@@ -125,8 +125,8 @@ from oais_platform.oais.statistics import (
     avg_in_progress_duration_by_step,
     count_failures_by_type,
     count_steps_by_status,
-    harvested_sources_overview,
     count_warnings_by_type,
+    harvested_sources_overview,
     step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
