@@ -62,12 +62,14 @@ def validate(self, archive_id, step_id):
                     expected_md5, filename = line.split(maxsplit=1)
                 except ValueError:
                     err_msg = f"{err_msg}Malformed manifest line: {line!r}\n"
+                    continue
                 filename = os.path.join(sip_folder_name, filename)
                 logger.info(f"Checking file: {filename}")
                 try:
                     actual_md5 = compute_hash(filename, alg="md5")
                 except (FileNotFoundError, ResourceNotFound):
                     err_msg = f"{err_msg}File not found: {filename}\n"
+                    continue
                 if actual_md5.lower() != expected_md5.lower():
                     err_msg = f"{err_msg}Checksum mismatch for {filename} expected {expected_md5}, got {actual_md5}\n"
 
