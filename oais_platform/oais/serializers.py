@@ -137,8 +137,6 @@ class LastStepSerializer(serializers.ModelSerializer):
 
 class ArchivematicaSerializer(serializers.ModelSerializer):
 
-    failed_blocking_limit = serializers.SerializerMethodField()
-
     class Meta:
         model = ArchivematicaInstance
         fields = [
@@ -149,17 +147,11 @@ class ArchivematicaSerializer(serializers.ModelSerializer):
             "version_checked_at",
             "retry_limit",
             "failed_count",
-            "failed_blocking_limit",
             "storage_service_url",
             "transfer_source",
             "sip_upstream_basepath",
             "aip_upstream_basepath",
         ]
-
-    def get_failed_blocking_limit(self, obj):
-        step_type = StepType.get_by_stepname(StepName.ARCHIVE)
-        return step_type.failed_blocking_limit
-
 
 class ArchiveSerializer(serializers.ModelSerializer):
     approver = UserMinimalSerializer()

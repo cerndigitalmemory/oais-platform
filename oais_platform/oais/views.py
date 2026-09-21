@@ -907,6 +907,16 @@ class ArchivematicaInstanceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [SuperUserPermission]
     pagination_class = None
 
+    def list(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        step_type = StepType.get_by_stepname(StepName.ARCHIVE)
+        return Response(
+            {
+                "failed_blocking_limit": step_type.failed_blocking_limit,
+                "instances": serializer.data,
+            }
+        )
 
 class StepViewSet(viewsets.ReadOnlyModelViewSet):
     """
