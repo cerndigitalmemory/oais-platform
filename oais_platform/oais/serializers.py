@@ -153,6 +153,7 @@ class ArchivematicaSerializer(serializers.ModelSerializer):
             "aip_upstream_basepath",
         ]
 
+
 class ArchiveSerializer(serializers.ModelSerializer):
     approver = UserMinimalSerializer()
     requester = UserMinimalSerializer()
