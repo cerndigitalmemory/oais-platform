@@ -18,10 +18,18 @@ from django.utils import timezone
 from oais_platform.oais.enums import (
     COMPLETED_STATUSES,
     ArchiveState,
+    Status,
     StepFailureType,
     StepName,
 )
-from oais_platform.oais.models import Archive, Status, Step
+from oais_platform.oais.models import (
+    Archive,
+    HarvestRun,
+    ScheduledHarvest,
+    Source,
+    Status,
+    Step,
+)
 
 
 def _completed_step_exists(step_name):
@@ -242,3 +250,78 @@ def avg_duration_per_day(
         )
         .order_by("-day")
     )
+
+
+def _scheduled_harvest_to_dict(scheduled_harvest):
+    last_run = (
+        HarvestRun.objects.filter(scheduled_harvest=scheduled_harvest)
+        .order_by("-created_at")
+        .first()
+    )
+
+    archive_count = (
+        Archive.objects.filter(
+            harvest_batches__harvest_run__scheduled_harvest=scheduled_harvest,
+            state__in=[ArchiveState.SIP, ArchiveState.AIP],
+        )
+        .distinct()
+        .count()
+    )
+
+    return {
+        "name": scheduled_harvest.name,
+        "grace_period_days": last_run.grace_period_days if last_run else None,
+        "last_run_date": last_run.created_at if last_run else None,
+        "scope": "Partial" if scheduled_harvest.extra_query else "Full",
+        "archive_count": archive_count,
+    }
+
+
+def harvested_sources_overview():
+    """
+    Returns, for each Source with at least one harvested Archive, the
+    total number harvested, the latest harvest time, and the list of
+    its ScheduledHarvest (empty if none exist).
+    """
+
+    source_stats = (
+        Archive.objects.filter(
+            state__in=[ArchiveState.SIP, ArchiveState.AIP],
+        )
+        .values("source")
+        .annotate(
+            total_harvested=Count("recid", distinct=True),
+            latest_harvested=Max(
+                "steps__finish_date", filter=Q(steps__step_type__name=StepName.HARVEST)
+            ),
+        )
+    )
+
+    result = []
+
+    for row in source_stats:
+        source_name = row["source"]
+
+        try:
+            source_longname = Source.objects.get(name=source_name).longname
+        except Source.DoesNotExist:
+            # In case if Source has been deleted/renamed
+            source_longname = source_name
+
+        scheduled_harvests = ScheduledHarvest.objects.filter(
+            source__name=source_name, enabled=True
+        )
+
+        result.append(
+            {
+                "source": source_longname,
+                "total_harvested": row["total_harvested"],
+                "latest_harvested": row["latest_harvested"],
+                "scheduled_harvests": [
+                    _scheduled_harvest_to_dict(scheduled_harvest)
+                    for scheduled_harvest in scheduled_harvests
+                ],
+            }
+        )
+
+    return result

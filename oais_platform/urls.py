@@ -118,6 +118,11 @@ urlpatterns = [
                     views.step_duration_statistics,
                     name="step_duration_statistics",
                 ),
+                path(
+                    "stats/harvested-sources",
+                    views.harvested_sources_statistics,
+                    name="harvested_sources_statistics",
+                ),
                 path("sources/", views.sources, name="sources"),
                 path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
                 path(

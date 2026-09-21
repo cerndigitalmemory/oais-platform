@@ -93,6 +93,7 @@ from oais_platform.oais.serializers import (
     DuplicateCheckSerializer,
     FileUploadResultSerializer,
     FileUploadSerializer,
+    HarvestedSourcesStatisticsSerializer,
     HarvestRecidsResultSerializer,
     LoginSerializer,
     LogoutSerializer,
@@ -125,6 +126,7 @@ from oais_platform.oais.statistics import (
     count_failures_by_type,
     count_steps_by_status,
     count_warnings_by_type,
+    harvested_sources_overview,
     step_statistics_counts,
 )
 from oais_platform.oais.tasks.announce import announce_sip, batch_announce_task
@@ -1290,6 +1292,15 @@ def step_warning_statistics(request):
 @api_view(["GET"])
 def step_duration_statistics(request):
     return Response(avg_in_progress_duration_by_step())
+
+
+@extend_schema(
+    request=None,
+    responses={200: HarvestedSourcesStatisticsSerializer(many=True)},
+)
+@api_view(["GET"])
+def harvested_sources_statistics(request):
+    return Response(harvested_sources_overview())
 
 
 @extend_schema(
