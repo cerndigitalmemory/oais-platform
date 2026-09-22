@@ -1,5 +1,16 @@
 # Changes
 
+## Version 5.4.0 (released 2026-09-22)
+- AM: add periodic version fetching for instances
+- Sources: add harvested sources statistics endpoint
+- Fix: integrity check continue loop on error
+- Steps: add endpoint for statistics on steps with warnings
+- Archive: add delete() to clean up Steps and their artifact files
+- Fix: Swagger UI request and response
+- SIP/AIP: stream download-artifact response instead of buffering in memory
+- AM: small bug fixes
+- Fix: remove unused /store path in SIP_STORE_BASEPATH
+
 ## Version 5.3.0 (released 2026-08-21)
 - Archivematica: add support for multiple instances
 - Archive filters: add option to filter on the most recent step
