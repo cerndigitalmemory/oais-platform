@@ -588,13 +588,16 @@ def get_transfer_source(am_instance):
 
 @shared_task(name="get_am_instances_versions")
 def get_am_instances_versions():
-    for instance in ArchivematicaInstance.objects.filter(enabled=True):
-        logger.info("Starting Archivematica instance version refresh")
+    logger.info("Starting Archivematica instance version refresh")
 
+    for instance in ArchivematicaInstance.objects.filter(enabled=True):
         am = ArchivematicaClient()
         am.am_url = instance.url
         am.am_user_name = instance.username
         am.am_api_key = instance.api_key
+
+        logger.info(f"Fetching version for archivematica instance {instance.name}")
+        
         try:
             response = requests.get(
                 f"{am.am_url}/api/processing-configuration",
