@@ -6,6 +6,7 @@ from rest_framework import serializers
 from oais_platform.oais.models import (
     ApiKey,
     Archive,
+    ArchivematicaInstance,
     ArchiveState,
     Collection,
     Profile,
@@ -130,6 +131,25 @@ class LastStepSerializer(serializers.ModelSerializer):
             "start_date",
             "finish_date",
             "status",
+        ]
+
+
+class ArchivematicaSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ArchivematicaInstance
+        fields = [
+            "name",
+            "enabled",
+            "url",
+            "version",
+            "version_checked_at",
+            "retry_limit",
+            "failed_count",
+            "storage_service_url",
+            "transfer_source",
+            "sip_upstream_basepath",
+            "aip_upstream_basepath",
         ]
 
 

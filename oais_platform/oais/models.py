@@ -100,6 +100,8 @@ class ArchivematicaInstance(models.Model):
     retry_limit = models.PositiveIntegerField(default=2)
     failed_count = models.PositiveIntegerField(default=0)
     enabled = models.BooleanField(default=True)
+    version = models.CharField(max_length=32, null=True, blank=True)
+    version_checked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("name",)

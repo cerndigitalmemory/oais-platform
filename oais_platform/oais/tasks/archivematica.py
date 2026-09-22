@@ -586,6 +586,42 @@ def get_transfer_source(am_instance):
     )
 
 
+@shared_task(name="get_am_instances_versions")
+def get_am_instances_versions():
+    logger.info("Starting Archivematica instance version refresh")
+
+    for instance in ArchivematicaInstance.objects.filter(enabled=True):
+        am = ArchivematicaClient()
+        am.am_url = instance.url
+        am.am_user_name = instance.username
+        am.am_api_key = instance.api_key
+
+        logger.info(f"Fetching version for archivematica instance {instance.name}")
+
+        try:
+            response = requests.get(
+                f"{am.am_url}/api/processing-configuration",
+                headers=am._am_auth_headers(),
+            )
+
+            version = response.headers.get("X-Archivematica-Version")
+            if version:
+                instance.version = version
+                instance.version_checked_at = timezone.now()
+                instance.save(update_fields=["version", "version_checked_at"])
+                logger.info(
+                    f"Refreshed version for instance {instance.name}: {version}"
+                )
+        except requests.RequestException as e:
+            logger.warning(
+                f"Could not refresh version for instance {instance.name}: {e}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error refreshing version for instance {instance.name}: {e}"
+            )
+
+
 def get_executed_jobs(am, unit_uuid, check_for_failed=False):
     am.unit_uuid = unit_uuid
     executed_jobs = am.get_jobs()
