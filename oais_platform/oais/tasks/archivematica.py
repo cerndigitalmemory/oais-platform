@@ -597,7 +597,7 @@ def get_am_instances_versions():
         am.am_api_key = instance.api_key
 
         logger.info(f"Fetching version for archivematica instance {instance.name}")
-        
+
         try:
             response = requests.get(
                 f"{am.am_url}/api/processing-configuration",
