@@ -205,6 +205,7 @@ class Archive(models.Model):
     resource = models.ForeignKey("Resource", null=True, on_delete=models.CASCADE)
     state = models.IntegerField(choices=ArchiveState.choices, null=True)
     sip_size = models.BigIntegerField(default=0)
+    aip_size = models.BigIntegerField(default=0)
     original_file_size = models.BigIntegerField(default=0)
     archivematica_instance = models.ForeignKey(
         ArchivematicaInstance,
@@ -269,6 +270,10 @@ class Archive(models.Model):
         self.sip_size = sum(
             file.stat().st_size for file in Path(self.path_to_sip).rglob("*")
         )
+        self.save()
+
+    def update_aip_size(self, aip_size):
+        self.aip_size = aip_size
         self.save()
 
     def set_original_file_size(self, size):

@@ -782,6 +782,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
     if type(aip) is dict:
         aip_path = aip["current_path"]
         aip_uuid = aip["uuid"]
+        aip_size = aip.get('size')
         am_status["aip_uuid"] = aip_uuid
         am_status["aip_path"] = aip_path
 
@@ -808,6 +809,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 f"Archivematica reported {len(errors)} failed jobs for step {step.id}."
             )
             step.set_status(Status.COMPLETED_WITH_WARNINGS)
+            step.archive.update_aip_size(aip_size)
             step.set_output_data(am_status)
             step.set_failure_type(failure_type)
             return False, True  # force cleanup, error
@@ -821,6 +823,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 kwargs=None,
                 einfo=None,
             )
+            step.archive.update_aip_size(aip_size)
             step.refresh_from_db()
             return True, False  # force cleanup, error
     else:
