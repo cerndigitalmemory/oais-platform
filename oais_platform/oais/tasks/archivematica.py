@@ -782,7 +782,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
     if type(aip) is dict:
         aip_path = aip["current_path"]
         aip_uuid = aip["uuid"]
-        aip_size = aip.get('size')
+        aip_size = aip.get("size")
         am_status["aip_uuid"] = aip_uuid
         am_status["aip_path"] = aip_path
 
