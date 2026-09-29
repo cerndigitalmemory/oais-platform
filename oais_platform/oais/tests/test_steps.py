@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth.models import Permission, User
 from django.urls import reverse
@@ -115,9 +116,13 @@ class StepViewTests(APITestCase):
             )
 
             self.client.force_authenticate(user=self.superuser)
-            response = self.client.get(
-                reverse("steps-download-artifact", args=[step.id])
-            )
+            with patch(
+                "oais_platform.oais.tasks.utils.SIP_STORE_BASEPATH",
+                os.path.dirname(sip_dir),
+            ):
+                response = self.client.get(
+                    reverse("steps-download-artifact", args=[step.id])
+                )
 
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertEqual(response["Content-Type"], "application/zip")

@@ -7,8 +7,7 @@ from django.core.management.base import BaseCommand
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
 from oais_platform.oais.models import Step
-from oais_platform.oais.tasks.utils import create_path_artifact, zip_sip_folder
-from oais_platform.settings import SIP_STORE_BASEPATH
+from oais_platform.oais.tasks.utils import zip_sip_folder
 
 
 class Command(BaseCommand):
@@ -52,13 +51,6 @@ class Command(BaseCommand):
             try:
                 statistics["attempted"] += 1
                 zip_path = zip_sip_folder(current_path)
-
-                artifact = create_path_artifact(
-                    "SIP",
-                    os.path.join(SIP_STORE_BASEPATH, zip_path),
-                    zip_path,
-                )
-                step.set_output_data_field("artifact", artifact)
 
                 archive = step.archive
                 if archive.path_to_sip == current_path:
