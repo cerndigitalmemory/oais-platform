@@ -379,23 +379,34 @@ class Archive(models.Model):
             step_type__name=step_name, status=Status.COMPLETED
         ).exists()
 
-    def _delete_artifact_from_disk(self, artifact_path):
+    def _delete_artifact_from_disk(self, artifact):
         # Imported lazily to avoid a circular import with tasks.utils,
         # which itself imports from this module.
-        from oais_platform.oais.tasks.utils import is_path_within_known_base_path
+        from oais_platform.oais.tasks.utils import (
+            cleanup_empty_path,
+            get_matching_base_path,
+        )
 
+        artifact_path = artifact.get("artifact_path")
         try:
             if not artifact_path or not os.path.exists(artifact_path):
                 return
             path = Path(artifact_path)
+            base_path = get_matching_base_path(path)
             if path.is_dir():
-                if not is_path_within_known_base_path(path):
+                if base_path is None:
                     raise ValueError(
                         f"Artifact path {path} is not under any known base path (Archive {self.id})"
                     )
                 shutil.rmtree(path)
             else:
                 path.unlink()
+
+            if base_path is not None:
+                # SIP directories live under base_path/source/..., AIPs are
+                # laid out by Archivematica itself and aren't source-scoped.
+                source = self.source if artifact.get("artifact_name") == "SIP" else None
+                cleanup_empty_path(path.parent, base_path, source)
         except Exception as e:
             logging.error(f"Failed to delete artifact {artifact_path}: {e}")
 
@@ -403,7 +414,7 @@ class Archive(models.Model):
         for step in self.steps.all():
             artifact = (step.output_data_json or {}).get("artifact")
             if artifact:
-                self._delete_artifact_from_disk(artifact.get("artifact_path"))
+                self._delete_artifact_from_disk(artifact)
         return super(Archive, self).delete(*args, **kwargs)
 
 
