@@ -162,15 +162,24 @@ def get_known_base_paths():
     ] + [SIP_STORE_BASEPATH]
 
 
+def get_matching_base_path(path):
+    """
+    Return the known base path that path is strictly inside of
+    (SIP_STORE_BASEPATH, or one of the ArchivematicaInstances' SIP/AIP
+    upstream basepaths), or None if path isn't under any of them.
+    """
+    path = Path(path)
+    for base_path in get_known_base_paths():
+        if path != Path(base_path) and path.is_relative_to(base_path):
+            return base_path
+    return None
+
+
 def is_path_within_known_base_path(path):
     """
     Check that path is strictly inside one of the known base paths
     """
-    path = Path(path)
-    return any(
-        path != Path(base_path) and path.is_relative_to(base_path)
-        for base_path in get_known_base_paths()
-    )
+    return get_matching_base_path(path) is not None
 
 
 def zip_sip_folder(folder_path, remove_original=True):
@@ -253,9 +262,14 @@ def sip_as_directory(path_to_sip):
             yield sip_folder_name
 
 
-def cleanup_empty_path(path_to_clean, base_path, source):
+def cleanup_empty_path(path_to_clean, base_path, source=None):
+    """
+    Remove now-empty directories walking up from path_to_clean, stopping
+    at base_path/source (SIP layout) or at base_path itself when source
+    is not given (e.g. AIP layout, which isn't scoped by source).
+    """
     current = Path(path_to_clean)
-    limit = Path(base_path) / source
+    limit = Path(base_path) / source if source else Path(base_path)
 
     for folder in [current] + list(current.parents):
         if folder == limit or not folder.is_relative_to(limit):
