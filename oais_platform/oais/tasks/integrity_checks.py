@@ -8,11 +8,7 @@ from oais_utils.validate import compute_hash, validate_sip
 from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step
 from oais_platform.oais.tasks.pipeline_actions import finalize
-from oais_platform.oais.tasks.utils import (
-    sip_as_directory,
-    update_sip_artifact_path,
-    zip_sip_folder,
-)
+from oais_platform.oais.tasks.utils import sip_as_directory, zip_sip_folder
 
 logger = get_task_logger(__name__)
 
@@ -90,10 +86,8 @@ def validate(self, archive_id, step_id):
 
     # Zip the SIP
     if os.path.isdir(sip_path):
-        old_sip_path = sip_path
         sip_path = zip_sip_folder(sip_path)
         archive.set_path(sip_path)
         archive.update_sip_size()
-        update_sip_artifact_path(step, old_sip_path, sip_path)
 
     return {"status": 0, "errormsg": None, "foldername": sip_path}

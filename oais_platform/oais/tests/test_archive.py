@@ -1064,7 +1064,7 @@ class ArchiveDeleteModelTests(APITestCase):
             },
         )
 
-        with patch("oais_platform.oais.models.SIP_STORE_BASEPATH", self.temp_dir):
+        with patch("oais_platform.oais.tasks.utils.SIP_STORE_BASEPATH", self.temp_dir):
             self.archive.delete()
 
         self.assertFalse(os.path.exists(artifact_path))
@@ -1087,7 +1087,7 @@ class ArchiveDeleteModelTests(APITestCase):
         )
 
         with patch(
-            "oais_platform.oais.models.SIP_STORE_BASEPATH", "/nonexistent-store"
+            "oais_platform.oais.tasks.utils.SIP_STORE_BASEPATH", "/nonexistent-store"
         ):
             self.archive.delete()
 

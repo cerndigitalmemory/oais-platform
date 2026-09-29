@@ -717,6 +717,12 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
             f"{transfer_sip_path}"
         )
         return
+    if transfer_sip_path == step.archive.path_to_sip:
+        logger.info(
+            f"Archivematica transfer path is the same as the SIP path for step {step.id}, not cleaning up: "
+            f"{transfer_sip_path}"
+        )
+        return
 
     transfer_sip_path = Path(transfer_sip_path)
     base_path = Path(sip_base_path)

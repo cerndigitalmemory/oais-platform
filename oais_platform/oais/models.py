@@ -38,7 +38,7 @@ from oais_platform.oais.enums import (
     StepName,
 )
 from oais_platform.oais.sources.abstract_source import AbstractSource
-from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL, SIP_STORE_BASEPATH
+from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
 
 # re-export for backwards compatibility
 __all__ = [
@@ -380,25 +380,18 @@ class Archive(models.Model):
         ).exists()
 
     def _delete_artifact_from_disk(self, artifact_path):
+        # Imported lazily to avoid a circular import with tasks.utils,
+        # which itself imports from this module.
+        from oais_platform.oais.tasks.utils import is_path_within_known_base_path
+
         try:
             if not artifact_path or not os.path.exists(artifact_path):
                 return
             path = Path(artifact_path)
             if path.is_dir():
-                base_paths = [
-                    base_path
-                    for pair in ArchivematicaInstance.objects.values_list(
-                        "sip_upstream_basepath",
-                        "aip_upstream_basepath",
-                    )
-                    for base_path in pair
-                ] + [SIP_STORE_BASEPATH]
-                if not any(
-                    path != Path(base_path) and path.is_relative_to(base_path)
-                    for base_path in base_paths
-                ):
+                if not is_path_within_known_base_path(path):
                     raise ValueError(
-                        f"Artifact path {path} is not under any known base path"
+                        f"Artifact path {path} is not under any known base path (Archive {self.id})"
                     )
                 shutil.rmtree(path)
             else:
