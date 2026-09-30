@@ -782,6 +782,7 @@ def handle_completed_am_package(celery_task, am, step, am_status):
     if type(aip) is dict:
         aip_path = aip["current_path"]
         aip_uuid = aip["uuid"]
+        aip_size = aip.get("size")
         am_status["aip_uuid"] = aip_uuid
         am_status["aip_path"] = aip_path
 
@@ -801,6 +802,9 @@ def handle_completed_am_package(celery_task, am, step, am_status):
         errors, failure_type = get_executed_jobs(
             am, am_status["uuid"], check_for_failed=True
         )
+
+        step.archive.update_aip_size(aip_size)
+
         if errors and len(errors) > 0:
             am_status["errormsg"] = errors
             am_status["retry"] = True

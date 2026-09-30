@@ -172,6 +172,8 @@ class ArchiveSerializer(serializers.ModelSerializer):
             "timestamp",
             "last_step",
             "last_completed_step",
+            "sip_size",
+            "aip_size",
             "path_to_sip",
             "manifest",
             "staged",

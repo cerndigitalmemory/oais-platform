@@ -107,8 +107,11 @@ class ArchivematicaStatusTests(APITestCase):
         get_package_details.return_value = {
             "current_path": "aip_test_path",
             "uuid": 5678,
+            "size": 12345,
         }
         check_am_status.apply(args=[self.step.id])
+        self.archive.refresh_from_db()
+        self.assertEqual(self.archive.aip_size, 12345)
 
         self.step.refresh_from_db()
 
@@ -595,8 +598,11 @@ class ArchivematicaStatusTests(APITestCase):
         get_package_details.return_value = {
             "current_path": "aip_test_path",
             "uuid": 7890,
+            "size": 12345,
         }
         check_am_status.apply(args=[self.step.id])
+        self.archive.refresh_from_db()
+        self.assertEqual(self.archive.aip_size, 12345)
 
         self.step.refresh_from_db()
 
