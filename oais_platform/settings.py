@@ -100,6 +100,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "get_am_instances_versions",
         "schedule": crontab(hour="*/1", minute=00),
     },
+    "remove-orphans-packages": {
+        "task": "remove_orphans_packages",
+        "schedule": crontab(minute=0, hour=3, day_of_week=0),
+    },
 }
 
 ## Authentication
@@ -388,6 +392,9 @@ STEP_FILTER_CONDITION_LIMIT = 3
 REPROCESS_TOKEN_DEV = environ.get("REPROCESS_TOKEN_DEV")
 REPROCESS_TOKEN_QA = environ.get("REPROCESS_TOKEN_QA")
 REPROCESS_TOKEN_PROD = environ.get("REPROCESS_TOKEN_PROD")
+
+# Whether to run in dry-run mode (True = simulate only, no real deletion)
+REMOVE_ORPHAN_PACKAGES_DRY_RUN = environ.get("REMOVE_ORPHAN_PACKAGES_DRY_RUN", "True").lower() != "false"
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
