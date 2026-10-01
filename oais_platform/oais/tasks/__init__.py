@@ -9,5 +9,6 @@ from . import (
     notify_source,
     pipeline_actions,
     registry,
+    remove_orphan_packages,
     scheduled_harvest,
 )
