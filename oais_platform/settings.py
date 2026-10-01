@@ -394,7 +394,9 @@ REPROCESS_TOKEN_QA = environ.get("REPROCESS_TOKEN_QA")
 REPROCESS_TOKEN_PROD = environ.get("REPROCESS_TOKEN_PROD")
 
 # Whether to run in dry-run mode (True = simulate only, no real deletion)
-REMOVE_ORPHAN_PACKAGES_DRY_RUN = environ.get("REMOVE_ORPHAN_PACKAGES_DRY_RUN", "True").lower() != "false"
+REMOVE_ORPHAN_PACKAGES_DRY_RUN = (
+    environ.get("REMOVE_ORPHAN_PACKAGES_DRY_RUN", "True").lower() != "false"
+)
 
 # Import local settings (overriding defaults and environment variables)
 # this line MUST be kept at the end of the file
