@@ -59,6 +59,8 @@ def create_path_artifact(name, path, localpath):
     #  remove it so we can join it without losing parts of the FILES_URL
     if path[0] == "/":
         non_abs_path = path[1:]
+    else:
+        non_abs_path = path
 
     url = urljoin(FILES_URL, non_abs_path)
 
@@ -193,12 +195,12 @@ def zip_sip_folder(folder_path, remove_original=True):
     if not is_path_within_known_base_path(folder_path):
         raise ValueError(f"SIP folder {folder_path} is not under any known base paths.")
 
-    zip_path = shutil.make_archive(
-        str(folder_path),
-        "zip",
-        root_dir=folder_path.parent,
-        base_dir=folder_path.name,
-    )
+    safe_name = folder_path.name.replace(":", "_")
+    zip_path = folder_path.with_name(safe_name + ".zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as sip_zip:
+        for file in sorted(folder_path.rglob("*")):
+            sip_zip.write(file, Path(safe_name) / file.relative_to(folder_path))
+    zip_path = str(zip_path)
     if remove_original:
         shutil.rmtree(folder_path)
         harvest_steps = Step.objects.filter(

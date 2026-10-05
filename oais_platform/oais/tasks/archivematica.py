@@ -79,18 +79,19 @@ def _setup_archiving(step):
     am, error = get_am_client(step)
 
     if am:
+        transfer_name = get_transfer_name(step.archive, step)
         transfer_sip_path, archivematica_dst, error = _create_sip_directory(
-            step, am.sip_upstream_basepath
+            step, am.sip_upstream_basepath, transfer_name
         )
         if not error:
             am.transfer_directory = archivematica_dst
-            am.transfer_name = get_transfer_name(step.archive, step)
+            am.transfer_name = transfer_name
             return am, transfer_sip_path, archivematica_dst, False
         return am, transfer_sip_path, None, error
     return None, None, None, error
 
 
-def _create_sip_directory(current_step, sip_base_path):
+def _create_sip_directory(current_step, sip_base_path, transfer_name):
     transfer_sip_path = None
     try:
         archive = current_step.archive
@@ -98,7 +99,7 @@ def _create_sip_directory(current_step, sip_base_path):
         transfer_source_path = Path(
             generate_directory_structure(sip_base_path, archive)
         )
-        transfer_sip_path = transfer_source_path / path_to_sip.name
+        transfer_sip_path = transfer_source_path / f"{transfer_name}.zip"
         if not transfer_sip_path.exists():
             shutil.copy2(path_to_sip, transfer_sip_path)
         else:
