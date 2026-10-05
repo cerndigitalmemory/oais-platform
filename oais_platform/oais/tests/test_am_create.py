@@ -67,7 +67,12 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.output_data_json["package_uuid"], "test_package_id")
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(self.step.step_type.current_size_bytes, self.archive.sip_size)
-        self.assertTrue(Path(self.step.output_data_json["transfer_sip_path"]).exists())
+        transfer_sip_path = Path(self.step.output_data_json["transfer_sip_path"])
+        self.assertTrue(transfer_sip_path.exists())
+        self.assertEqual(
+            transfer_sip_path.name,
+            f"{self.step.output_data_json['transfer_name']}.zip",
+        )
 
     def test_archivematica_uses_path_relative_to_transfer_source_root(self):
         class FakeAMClient:
@@ -94,7 +99,7 @@ class ArchivematicaCreateTests(APITestCase):
         expected_transfer_directory = os.path.join(
             "/",
             os.path.relpath(
-                os.path.join(transfer_source_path, os.path.basename(self.path_to_sip)),
+                os.path.join(transfer_source_path, f"{fake_am.transfer_name}.zip"),
                 self.sip_base_path,
             ),
         )
