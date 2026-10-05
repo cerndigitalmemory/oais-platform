@@ -22,13 +22,13 @@ MIN_PACKAGE_AGE_SECONDS = 7 * 24 * 3600  # 7 days
 
 @shared_task(name="remove_orphan_packages")
 def remove_orphan_packages():
-    now = time.time()
+    current_time = time.time()
     dry_run = REMOVE_ORPHAN_PACKAGES_DRY_RUN
 
     known_sips_path, known_aips_path = _known_packages_paths()
 
-    orphan_sips = _find_orphan_sips(known_sips_path, now)
-    orphan_aips = _find_orphan_aips(known_aips_path, now)
+    orphan_sips = _find_orphan_sips(known_sips_path, current_time)
+    orphan_aips = _find_orphan_aips(known_aips_path, current_time)
 
     sips_deleted, sip_errors = _delete_packages(orphan_sips, SIP_ROOT, dry_run)
     aips_deleted, aip_errors = _delete_packages(orphan_aips, AIP_ROOT, dry_run)
@@ -44,25 +44,17 @@ def remove_orphan_packages():
     return report
 
 
-def _normalize(path):
-    return os.path.normpath(path) if path else None
-
-
 def _known_packages_paths():
-    sips_paths = {
-        _normalize(path)
-        for path in Archive.objects.values_list("path_to_sip", flat=True)
-    }
-    aips_paths = {
-        _normalize(path)
-        for path in Archive.objects.exclude(path_to_aip="").values_list(
-            "path_to_aip", flat=True
-        )
-    }
+    sips_paths = _normalize_paths(Archive.objects.values_list("path_to_sip", flat=True))
+    aips_paths = _normalize_paths(
+        Archive.objects.exclude(path_to_aip="").values_list("path_to_aip", flat=True)
+    )
 
-    for current_output_data_json in Step.objects.exclude(
+    output_data_json_list = Step.objects.exclude(
         output_data_json__isnull=True
-    ).values_list("output_data_json", flat=True):
+    ).values_list("output_data_json", flat=True)
+
+    for current_output_data_json in output_data_json_list:
         artifact = current_output_data_json.get("artifact") or {}
         path = artifact.get("artifact_path")
 
@@ -70,14 +62,22 @@ def _known_packages_paths():
             continue
 
         if artifact.get("artifact_name") == "SIP":
-            sips_paths.add(_normalize(path))
+            sips_paths.add(_normalize_path(path))
         elif artifact.get("artifact_name") == "AIP":
-            aips_paths.add(_normalize(path))
+            aips_paths.add(_normalize_path(path))
 
     return sips_paths, aips_paths
 
 
-def _is_package_old_enough(path, now):
+def _normalize_path(path):
+    return os.path.normpath(path) if path else None
+
+
+def _normalize_paths(paths):
+    return {os.path.normpath(path) for path in paths if path}
+
+
+def _is_package_old_enough(path, current_time):
     """
     True if the file hasn't been modified for at least MIN_PACKAGE_AGE_SECONDS.
 
@@ -87,26 +87,12 @@ def _is_package_old_enough(path, now):
     file has already disappeared, instead of raising.
     """
     try:
-        return now - os.path.getmtime(path) >= MIN_PACKAGE_AGE_SECONDS
+        return current_time - os.path.getmtime(path) >= MIN_PACKAGE_AGE_SECONDS
     except FileNotFoundError:
         return False
 
 
-def _find_orphan_aips(known, now):
-    orphans = []
-
-    for root, _dirs, files in os.walk(AIP_ROOT):
-        for file_name in files:
-            if not file_name.endswith(AIP_EXTENSION):
-                continue
-            path = os.path.normpath(os.path.join(root, file_name))
-
-            if path not in known and _is_package_old_enough(path, now):
-                orphans.append(path)
-    return orphans
-
-
-def _find_orphan_sips(known, now):
+def _find_orphan_sips(known_sips_path, current_time):
     orphans = []
     for root, dirs, _files in os.walk(SIP_ROOT):
         dirs_to_skip = []
@@ -114,10 +100,12 @@ def _find_orphan_sips(known, now):
         for current_dir in dirs:
             if not current_dir.startswith(SIP_DIR_PREFIX):
                 continue
-            sip_path = os.path.normpath(os.path.join(root, current_dir))
+            sip_path = _normalize_path(os.path.join(root, current_dir))
             dirs_to_skip.append(current_dir)
 
-            if sip_path not in known and _is_package_old_enough(sip_path, now):
+            if sip_path not in known_sips_path and _is_package_old_enough(
+                sip_path, current_time
+            ):
                 orphans.append(sip_path)
 
         # A SIP folder is the package itself, not a directory to walk into
@@ -125,6 +113,22 @@ def _find_orphan_sips(known, now):
         for subdir in dirs_to_skip:
             dirs.remove(subdir)
 
+    return orphans
+
+
+def _find_orphan_aips(known_aips_path, current_time):
+    orphans = []
+
+    for root, _dirs, files in os.walk(AIP_ROOT):
+        for file_name in files:
+            if not file_name.endswith(AIP_EXTENSION):
+                continue
+            path = _normalize_path(os.path.join(root, file_name))
+
+            if path not in known_aips_path and _is_package_old_enough(
+                path, current_time
+            ):
+                orphans.append(path)
     return orphans
 
 
