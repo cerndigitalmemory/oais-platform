@@ -10,10 +10,6 @@ x-common-variables: &common-variables
   CELERY_RESULT_BACKEND: redis://redis:6379/0
   INVENIO_API_TOKEN: <YOUR_INVENIO_API_TOKEN_HERE>
   INVENIO_SERVER_URL: <YOUR_INVENIO_SERVER_URL_HERE>
-  # If we leave this one empty, the system will attempt to get it from the local archivematica installation
-  # Since there is no archivematica deployment in the pipelines, it fails
-  AM_TRANSFER_SOURCE_UUID: my_uuid
-
 
 
 services:

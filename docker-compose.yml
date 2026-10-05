@@ -1,7 +1,4 @@
 x-common-variables: &common-variables
-  # If we leave this one empty, the system will attempt to get it from the local archivematica installation
-  # Since there is no archivemeatica deployment in the pipelines, it fails
-  AM_TRANSFER_SOURCE_UUID: my_uuid
   ALLOW_LOCAL_LOGIN: True
   CELERY_BROKER_URL: redis://redis:6379/0
   CELERY_RESULT_BACKEND: redis://redis:6379/0
