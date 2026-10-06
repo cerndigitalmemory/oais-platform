@@ -1,5 +1,10 @@
 # Changes
 
+## Version 5.5.0 (released 2026-10-06)
+- Archive: add aip_size field to Archive model
+- AM: remove unused AM transfer source variable
+- Harvest: store SIPs as a zip once validated
+
 ## Version 5.4.0 (released 2026-09-22)
 - AM: add periodic version fetching for instances
 - Sources: add harvested sources statistics endpoint
