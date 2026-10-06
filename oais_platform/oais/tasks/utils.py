@@ -1,14 +1,24 @@
 import hashlib
 import os
+import shutil
+import tempfile
+import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin
 
 from celery.utils.log import get_task_logger
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from oais_platform.oais.enums import StepFailureType
-from oais_platform.oais.models import ApiKey, Profile, Status, Step
-from oais_platform.settings import FILES_URL
+from oais_platform.oais.enums import COMPLETED_STATUSES, StepFailureType
+from oais_platform.oais.models import (
+    ApiKey,
+    ArchivematicaInstance,
+    Profile,
+    Status,
+    Step,
+)
+from oais_platform.settings import FILES_URL, SIP_STORE_BASEPATH
 
 logger = get_task_logger(__name__)
 
@@ -49,6 +59,8 @@ def create_path_artifact(name, path, localpath):
     #  remove it so we can join it without losing parts of the FILES_URL
     if path[0] == "/":
         non_abs_path = path[1:]
+    else:
+        non_abs_path = path
 
     url = urljoin(FILES_URL, non_abs_path)
 
@@ -137,9 +149,129 @@ def generate_directory_structure(base_path, archive):
     return full_path
 
 
-def cleanup_empty_path(path_to_clean, base_path, source):
+def get_known_base_paths():
+    """
+    Return the list of base paths under which SIP/AIP artifacts are
+    expected to live on disk.
+    """
+    return [
+        base_path
+        for pair in ArchivematicaInstance.objects.values_list(
+            "sip_upstream_basepath",
+            "aip_upstream_basepath",
+        )
+        for base_path in pair
+    ] + [SIP_STORE_BASEPATH]
+
+
+def get_matching_base_path(path):
+    """
+    Return the known base path that path is strictly inside of
+    (SIP_STORE_BASEPATH, or one of the ArchivematicaInstances' SIP/AIP
+    upstream basepaths), or None if path isn't under any of them.
+    """
+    path = Path(path)
+    for base_path in get_known_base_paths():
+        if path != Path(base_path) and path.is_relative_to(base_path):
+            return base_path
+    return None
+
+
+def is_path_within_known_base_path(path):
+    """
+    Check that path is strictly inside one of the known base paths
+    """
+    return get_matching_base_path(path) is not None
+
+
+def zip_sip_folder(folder_path, remove_original=True):
+    """
+    Zip the SIP folder at folder_path into folder_path + ".zip",
+    remove the original folder and return the resulting zip file path.
+    """
+    folder_path = Path(folder_path)
+    if not folder_path.is_dir():
+        logger.warning(f"{folder_path} is not a directory (it may already be a zip)")
+    if not is_path_within_known_base_path(folder_path):
+        raise ValueError(f"SIP folder {folder_path} is not under any known base paths.")
+
+    safe_name = folder_path.name.replace(":", "_")
+    zip_path = folder_path.with_name(safe_name + ".zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as sip_zip:
+        for file in sorted(folder_path.rglob("*")):
+            sip_zip.write(file, Path(safe_name) / file.relative_to(folder_path))
+    zip_path = str(zip_path)
+    if remove_original:
+        shutil.rmtree(folder_path)
+        harvest_steps = Step.objects.filter(
+            output_data_json__artifact__artifact_localpath=str(folder_path)
+        ).all()
+        for step in harvest_steps:
+            update_sip_artifact_path(step, str(folder_path), zip_path)
+    return zip_path
+
+
+def update_sip_artifact_path(step, old_sip_path, new_sip_path):
+    """
+    Update the SIP artifact path stored in input step's output_data_json for this archive,
+    after its SIP has been zipped, so that downloading the artifact from those steps doesn't
+    point at the removed directory.
+    """
+    if not step.step_type.has_sip or step.status not in COMPLETED_STATUSES:
+        return
+    artifact = (step.output_data_json or {}).get("artifact")
+    if not artifact or artifact.get("artifact_name") != "SIP":
+        return
+    if artifact.get("artifact_localpath") != old_sip_path:
+        return
+    artifact = create_path_artifact(
+        "SIP",
+        os.path.join(SIP_STORE_BASEPATH, new_sip_path),
+        new_sip_path,
+    )
+    step.set_output_data_field("artifact", artifact)
+
+
+@contextmanager
+def extract_sip_zip(sip_zip_path):
+    """
+    Extract a zipped SIP to a temporary directory and yield the path
+    to the extracted SIP folder. The temporary directory is removed
+    when the context exits.
+    """
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        with zipfile.ZipFile(sip_zip_path) as sip_zip:
+            sip_zip.extractall(tmp_dir)
+        sip_folder_name = os.path.splitext(os.path.basename(sip_zip_path))[0]
+        yield os.path.join(tmp_dir, sip_folder_name)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@contextmanager
+def sip_as_directory(path_to_sip):
+    """
+    Yield the SIP as a directory, extracting it first if it is a zip file.
+    Nothing is extracted (or cleaned up) if the SIP is already an unzipped
+    directory, e.g. when re-running validation before the SIP has been
+    zipped for the first time.
+    """
+    if os.path.isdir(path_to_sip):
+        yield path_to_sip
+    else:
+        with extract_sip_zip(path_to_sip) as sip_folder_name:
+            yield sip_folder_name
+
+
+def cleanup_empty_path(path_to_clean, base_path, source=None):
+    """
+    Remove now-empty directories walking up from path_to_clean, stopping
+    at base_path/source (SIP layout) or at base_path itself when source
+    is not given (e.g. AIP layout, which isn't scoped by source).
+    """
     current = Path(path_to_clean)
-    limit = Path(base_path) / source
+    limit = Path(base_path) / source if source else Path(base_path)
 
     for folder in [current] + list(current.parents):
         if folder == limit or not folder.is_relative_to(limit):

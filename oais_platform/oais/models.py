@@ -38,7 +38,7 @@ from oais_platform.oais.enums import (
     StepName,
 )
 from oais_platform.oais.sources.abstract_source import AbstractSource
-from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL, SIP_STORE_BASEPATH
+from oais_platform.settings import ENCRYPT_KEY, INVENIO_SERVER_URL
 
 # re-export for backwards compatibility
 __all__ = [
@@ -267,9 +267,11 @@ class Archive(models.Model):
         self.save()
 
     def update_sip_size(self):
-        self.sip_size = sum(
-            file.stat().st_size for file in Path(self.path_to_sip).rglob("*")
-        )
+        path = Path(self.path_to_sip)
+        if path.is_file():
+            self.sip_size = path.stat().st_size
+        else:
+            self.sip_size = sum(file.stat().st_size for file in path.rglob("*"))
         self.save()
 
     def update_aip_size(self, aip_size):
@@ -377,30 +379,34 @@ class Archive(models.Model):
             step_type__name=step_name, status=Status.COMPLETED
         ).exists()
 
-    def _delete_artifact_from_disk(self, artifact_path):
+    def _delete_artifact_from_disk(self, artifact):
+        # Imported lazily to avoid a circular import with tasks.utils,
+        # which itself imports from this module.
+        from oais_platform.oais.tasks.utils import (
+            cleanup_empty_path,
+            get_matching_base_path,
+        )
+
+        artifact_path = artifact.get("artifact_path")
         try:
             if not artifact_path or not os.path.exists(artifact_path):
                 return
             path = Path(artifact_path)
+            base_path = get_matching_base_path(path)
             if path.is_dir():
-                base_paths = [
-                    base_path
-                    for pair in ArchivematicaInstance.objects.values_list(
-                        "sip_upstream_basepath",
-                        "aip_upstream_basepath",
-                    )
-                    for base_path in pair
-                ] + [SIP_STORE_BASEPATH]
-                if not any(
-                    path != Path(base_path) and path.is_relative_to(base_path)
-                    for base_path in base_paths
-                ):
+                if base_path is None:
                     raise ValueError(
-                        f"Artifact path {path} is not under any known base path"
+                        f"Artifact path {path} is not under any known base path (Archive {self.id})"
                     )
                 shutil.rmtree(path)
             else:
                 path.unlink()
+
+            if base_path is not None:
+                # SIP directories live under base_path/source/..., AIPs are
+                # laid out by Archivematica itself and aren't source-scoped.
+                source = self.source if artifact.get("artifact_name") == "SIP" else None
+                cleanup_empty_path(path.parent, base_path, source)
         except Exception as e:
             logging.error(f"Failed to delete artifact {artifact_path}: {e}")
 
@@ -408,7 +414,7 @@ class Archive(models.Model):
         for step in self.steps.all():
             artifact = (step.output_data_json or {}).get("artifact")
             if artifact:
-                self._delete_artifact_from_disk(artifact.get("artifact_path"))
+                self._delete_artifact_from_disk(artifact)
         return super(Archive, self).delete(*args, **kwargs)
 
 

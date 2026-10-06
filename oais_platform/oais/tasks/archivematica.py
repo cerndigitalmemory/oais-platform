@@ -79,18 +79,19 @@ def _setup_archiving(step):
     am, error = get_am_client(step)
 
     if am:
+        transfer_name = get_transfer_name(step.archive, step)
         transfer_sip_path, archivematica_dst, error = _create_sip_directory(
-            step, am.sip_upstream_basepath
+            step, am.sip_upstream_basepath, transfer_name
         )
         if not error:
             am.transfer_directory = archivematica_dst
-            am.transfer_name = get_transfer_name(step.archive, step)
+            am.transfer_name = transfer_name
             return am, transfer_sip_path, archivematica_dst, False
         return am, transfer_sip_path, None, error
     return None, None, None, error
 
 
-def _create_sip_directory(current_step, sip_base_path):
+def _create_sip_directory(current_step, sip_base_path, transfer_name):
     transfer_sip_path = None
     try:
         archive = current_step.archive
@@ -98,9 +99,9 @@ def _create_sip_directory(current_step, sip_base_path):
         transfer_source_path = Path(
             generate_directory_structure(sip_base_path, archive)
         )
-        transfer_sip_path = transfer_source_path / path_to_sip.name
+        transfer_sip_path = transfer_source_path / f"{transfer_name}.zip"
         if not transfer_sip_path.exists():
-            shutil.copytree(path_to_sip, transfer_sip_path)
+            shutil.copy2(path_to_sip, transfer_sip_path)
         else:
             logger.info(
                 f"Transfer path for Archive step: {current_step.id} for Archive: {archive.id} already exists"
@@ -525,6 +526,7 @@ def get_am_client(step):
         am.transfer_source = am_instance.transfer_source
         am.aip_upstream_basepath = am_instance.aip_upstream_basepath
         am.sip_upstream_basepath = am_instance.sip_upstream_basepath
+        am.transfer_type = "zipfile"
         return am, False
     except Exception as e:
         logger.error(
@@ -716,6 +718,12 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
             f"{transfer_sip_path}"
         )
         return
+    if transfer_sip_path == step.archive.path_to_sip:
+        logger.info(
+            f"Archivematica transfer path is the same as the SIP path for step {step.id}, not cleaning up: "
+            f"{transfer_sip_path}"
+        )
+        return
 
     transfer_sip_path = Path(transfer_sip_path)
     base_path = Path(sip_base_path)
@@ -734,7 +742,10 @@ def _cleanup_transfer_sip_path(step, sip_base_path, transfer_sip_path=None):
             raise ValueError(
                 f"Refusing to clean path outside {base_path}: {transfer_sip_path}"
             )
-        shutil.rmtree(transfer_sip_path)
+        if transfer_sip_path.is_file():
+            transfer_sip_path.unlink()
+        else:
+            shutil.rmtree(transfer_sip_path)
         cleanup_empty_path(
             transfer_sip_path.parent,
             sip_base_path,
