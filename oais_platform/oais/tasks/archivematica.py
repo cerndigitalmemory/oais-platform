@@ -526,7 +526,7 @@ def get_am_client(step):
         am.transfer_source = am_instance.transfer_source
         am.aip_upstream_basepath = am_instance.aip_upstream_basepath
         am.sip_upstream_basepath = am_instance.sip_upstream_basepath
-        am.transfer_type = "zipfile"
+        am.transfer_type = "zipped bag"
         return am, False
     except Exception as e:
         logger.error(
