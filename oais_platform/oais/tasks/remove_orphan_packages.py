@@ -5,14 +5,10 @@ import time
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
-from oais_platform.oais.models import Archive, Step
-from oais_platform.settings import ENVIRONMENT, REMOVE_ORPHAN_PACKAGES_DRY_RUN
+from oais_platform.oais.models import Archive, ArchivematicaInstance, Step
+from oais_platform.settings import REMOVE_ORPHAN_PACKAGES_DRY_RUN, SIP_STORE_BASEPATH
 
 logger = get_task_logger(__name__)
-
-BASE_PATH = f"/eos/project-p/preserve-{ENVIRONMENT}/platform/{ENVIRONMENT}"
-AIP_ROOT = os.path.join(BASE_PATH, "aips")
-SIP_ROOT = os.path.join(BASE_PATH, "sips")
 
 AIP_EXTENSION = ".7z"
 SIP_DIR_PREFIX = "sip::"
@@ -27,15 +23,29 @@ def remove_orphan_packages():
 
     known_sips_path, known_aips_path = _known_packages_paths()
 
-    orphan_sips = _find_orphan_sips(known_sips_path, current_time)
-    orphan_aips = _find_orphan_aips(known_aips_path, current_time)
+    sip_root = _normalize_path(SIP_STORE_BASEPATH)
+    orphan_sips = _find_orphan_sips(sip_root, known_sips_path, current_time)
+    sips_deleted, sip_errors = _delete_packages(orphan_sips, sip_root, dry_run)
 
-    sips_deleted, sip_errors = _delete_packages(orphan_sips, SIP_ROOT, dry_run)
-    aips_deleted, aip_errors = _delete_packages(orphan_aips, AIP_ROOT, dry_run)
+    aip_roots = _normalize_paths(
+        ArchivematicaInstance.objects.values_list("aip_upstream_basepath", flat=True)
+    )
+
+    aips_deleted = 0
+    aip_orphans_found = 0
+    aip_errors = []
+
+    for aip_root in aip_roots:
+        orphan_aips = _find_orphan_aips(aip_root, known_aips_path, current_time)
+        deleted, errors = _delete_packages(orphan_aips, aip_root, dry_run)
+
+        aip_orphans_found += len(orphan_aips)
+        aips_deleted += deleted
+        aip_errors += errors
 
     report = {
         "dry_run": dry_run,
-        "aips": {"orphans found": len(orphan_aips), "deleted": aips_deleted},
+        "aips": {"orphans found": aip_orphans_found, "deleted": aips_deleted},
         "sips": {"orphans found": len(orphan_sips), "deleted": sips_deleted},
         "errors": aip_errors + sip_errors,
     }
@@ -92,9 +102,9 @@ def _is_package_old_enough(path, current_time):
         return False
 
 
-def _find_orphan_sips(known_sips_path, current_time):
+def _find_orphan_sips(sip_root, known_sips_path, current_time):
     orphans = []
-    for root, dirs, _files in os.walk(SIP_ROOT):
+    for root, dirs, _files in os.walk(sip_root):
         dirs_to_skip = []
 
         for current_dir in dirs:
@@ -116,10 +126,10 @@ def _find_orphan_sips(known_sips_path, current_time):
     return orphans
 
 
-def _find_orphan_aips(known_aips_path, current_time):
+def _find_orphan_aips(aip_root, known_aips_path, current_time):
     orphans = []
 
-    for root, _dirs, files in os.walk(AIP_ROOT):
+    for root, _dirs, files in os.walk(aip_root):
         for file_name in files:
             if not file_name.endswith(AIP_EXTENSION):
                 continue
@@ -135,9 +145,9 @@ def _find_orphan_aips(known_aips_path, current_time):
 def _remove_empty_parents(directory, stop_at):
     """
     Walk up from `directory` (the folder the deleted package was in) toward
-    `stop_at` (AIP_ROOT or SIP_ROOT), deleting each folder that is now empty.
-    Stops as soon as a folder still has something in it (meaning it might
-    still be useful), or at `stop_at` itself (never deleted).
+    `stop_at` (an AIP root or the SIP root), deleting each folder that is now
+    empty. Stops as soon as a folder still has something in it (meaning it
+    might still be useful), or at `stop_at` itself (never deleted).
     """
     while directory.startswith(stop_at + os.sep):
         try:

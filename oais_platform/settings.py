@@ -100,8 +100,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "get_am_instances_versions",
         "schedule": crontab(hour="*/1", minute=00),
     },
-    "remove-orphans-packages": {
-        "task": "remove_orphans_packages",
+    "remove-orphan-packages": {
+        "task": "remove_orphan_packages",
         "schedule": crontab(minute=0, hour=3, day_of_week=0),
     },
 }
