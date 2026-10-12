@@ -601,6 +601,8 @@ class ArchiveTests(APITestCase):
         self.requester.user_permissions.add(self.approve_permission)
         self.requester.save()
         self.client.force_authenticate(user=self.requester)
+        self.private_archive.staged = True
+        self.private_archive.save()
 
         other_archive = Archive.objects.create(
             recid="1",
@@ -641,6 +643,8 @@ class ArchiveTests(APITestCase):
     @patch("oais_platform.oais.tasks.pipeline_actions.dispatch_task")
     def test_archive_mlt_unstage_superuser(self, mock_dispatch):
         self.client.force_authenticate(user=self.superuser)
+        self.private_archive.staged = True
+        self.private_archive.save()
 
         other_archive = Archive.objects.create(
             recid="1",

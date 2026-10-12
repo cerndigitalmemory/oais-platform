@@ -676,30 +676,44 @@ class ArchiveViewSet(viewsets.ReadOnlyModelViewSet, PaginationMixin):
         Unstages the passed Archives, setting them to the Harvest stage
         Archives are also grouped under the same job tag
         """
-        archives = request.data["archives"]
+        archive_ids = [archive["id"] for archive in request.data["archives"]]
         job_title = (
             request.data.get("job_title") or f"Job {timezone.now():%Y-%m-%d %H:%M}"
         )
 
-        job_tag = Collection.objects.create(
-            internal=True,
-            creator=request.user,
-            title=job_title,
-        )
+        if not archive_ids:
+            raise BadRequest("No archives provided.")
 
-        for archive in archives:
-            archive = Archive.objects.get(id=archive["id"])
-            archive.set_unstaged(approver=request.user)
-            job_tag.add_archive(archive)
-
-            step = Step.objects.create(
-                archive=archive,
-                step_name=StepName.HARVEST,
-                status=Status.NOT_RUN,
-                initiated_by_user=request.user,
+        with transaction.atomic():
+            staged_archives = list(
+                Archive.objects.select_for_update()
+                .filter(id__in=archive_ids, staged=True)
+                .order_by("id")
             )
-            # Step is auto-approved and harvest step runs
-            run_step(step, archive.id)
+            if not staged_archives:
+                raise BadRequest("Archives must be staged.")
+
+            job_tag = Collection.objects.create(
+                internal=True,
+                creator=request.user,
+                title=job_title,
+            )
+            steps = []
+            for archive in staged_archives:
+                archive.set_unstaged(approver=request.user)
+                job_tag.add_archive(archive)
+                steps.append(
+                    Step.objects.create(
+                        archive=archive,
+                        step_name=StepName.HARVEST,
+                        status=Status.NOT_RUN,
+                        initiated_by_user=request.user,
+                    )
+                )
+
+        # Steps are auto-approved and run once the unstaging is committed
+        for step in steps:
+            run_step(step, step.archive.id)
 
         serializer = CollectionMinimalSerializer(
             job_tag,
