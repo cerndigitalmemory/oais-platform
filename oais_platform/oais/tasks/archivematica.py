@@ -837,6 +837,9 @@ def handle_completed_am_package(celery_task, am, step, am_status):
                 einfo=None,
             )
             step.refresh_from_db()
+            outdate_previous_archive_steps(
+                step.archive, step, am_status["artifact"]["artifact_path"]
+            )
             return True, False  # force cleanup, error
     else:
         retry_limit = 5
@@ -887,6 +890,64 @@ def outdate_aip_dependent_steps(archive):
         logger.info(
             f"Outdated {len(steps)} steps that depend on AIP for Archive {archive.id}"
         )
+
+
+def outdate_previous_archive_steps(archive, current_step, new_aip_path):
+    """Outdate older Archive steps and delete their AIP file."""
+    previous_steps = archive.steps.filter(
+        step_type__name=StepName.ARCHIVE,
+        status__in=COMPLETED_STATUSES,
+    ).exclude(id=current_step.id)
+
+    for step in previous_steps:
+        step.set_status(Status.OUTDATED)
+        step.set_output_data_field("outdated_at", timezone.now().isoformat())
+
+        old_path = (step.output_data_json.get("artifact") or {}).get("artifact_path")
+        if not old_path or old_path == new_aip_path:
+            continue
+
+        am_instance = ArchivematicaInstance.objects.filter(
+            name=step.input_data_json.get("archivematica_instance")
+        ).first()
+        if not am_instance:
+            logger.warning(
+                f"No Archivematica instance found for step {step.id}, AIP not deleted"
+            )
+            continue
+
+        if _delete_aip(step, old_path, am_instance.aip_upstream_basepath):
+            step.set_output_data_field("aip_deleted_at", timezone.now().isoformat())
+
+
+def _delete_aip(step, aip_path, aip_base_path):
+    """Delete the AIP file of an outdated step and its now-empty parent folders."""
+    if not aip_path or not aip_base_path:
+        return False
+
+    path = Path(aip_path)
+    base = Path(aip_base_path)
+
+    if not path.exists():
+        logger.info(f"AIP of step {step.id} not found: {path}")
+        return False
+
+    if not path.is_relative_to(base):
+        logger.error(f"Refusing to delete AIP outside {base}: {path}")
+        return False
+
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    except OSError as e:
+        logger.error(f"Error deleting AIP of step {step.id}: {path}: {e}")
+        return False
+
+    cleanup_empty_path(path.parent, base)
+    logger.info(f"Deleted outdated AIP of step {step.id}: {path}")
+    return True
 
 
 @shared_task(
