@@ -2,18 +2,22 @@
 # step's artifact path and the archive's path and size.
 # Run the script via python manage.py zip_sips
 import os
+import time
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 
 from oais_platform.oais.enums import COMPLETED_STATUSES
-from oais_platform.oais.models import Step
+from oais_platform.oais.models import Archive, Step
 from oais_platform.oais.tasks.utils import zip_sip_folder
 
 
 class Command(BaseCommand):
     help = (
         "Zips SIPs that are still stored as a directory and updates the "
-        "producing step's artifact path and the archive's path and size."
+        "producing step's artifact path and the archive's path and size. "
+        "Already zipped SIPs are skipped, so the script can be interrupted "
+        "and re-run to continue where it stopped."
     )
 
     def handle(self, *args, **options):
@@ -25,57 +29,94 @@ class Command(BaseCommand):
             "failed": 0,
         }
 
-        steps = Step.objects.filter(
-            step_type__has_sip=True, status__in=COMPLETED_STATUSES
+        self.stdout.write("Looking for SIPs that are still stored as a directory...")
+
+        steps = list(
+            Step.objects.filter(
+                step_type__has_sip=True,
+                status__in=COMPLETED_STATUSES,
+                output_data_json__artifact__artifact_name="SIP",
+            )
+            .exclude(output_data_json__artifact__artifact_path__endswith=".zip")
+            .order_by("pk")
+            .values_list("pk", "output_data_json", "archive_id")
+        )
+        total = len(steps)
+        self.stdout.write(
+            self.style.SUCCESS(f"Found {total} SIPs stored as a directory.")
         )
 
-        for step in steps:
-            artifact = (step.output_data_json or {}).get("artifact")
-            if not artifact or artifact.get("artifact_name") != "SIP":
-                continue
+        started_at = time.monotonic()
 
-            current_path = artifact.get("artifact_path")
+        try:
+            for position, (step_id, output_data, archive_id) in enumerate(
+                steps, start=1
+            ):
+                prefix = f"[{position}/{total}]"
+                current_path = (
+                    (output_data or {}).get("artifact", {}).get("artifact_path")
+                )
 
-            if not current_path or not os.path.exists(current_path):
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Skipping step {step.id}: Path does not exist ({current_path})"
+                if not current_path or not os.path.exists(current_path):
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"{prefix} Skipping step {step_id}: "
+                            f"Path does not exist ({current_path})"
+                        )
                     )
+                    continue
+
+                if not os.path.isdir(current_path):
+                    self.stdout.write(
+                        f"{prefix} Skipping step {step_id}: SIP is already zipped"
+                    )
+                    continue
+
+                try:
+                    statistics["attempted"] += 1
+                    zip_path = zip_sip_folder(current_path)
+
+                    archive = Archive.objects.get(pk=archive_id)
+                    if archive.path_to_sip == current_path:
+                        archive.set_path(zip_path)
+                        archive.update_sip_size()
+
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"{prefix} Successfully zipped SIP for step {step_id}"
+                        )
+                    )
+                    statistics["succeeded"] += 1
+                except Exception as err:
+                    self.stderr.write(
+                        self.style.ERROR(
+                            f"{prefix} Error zipping step {step_id}: {err}"
+                        )
+                    )
+                    statistics["failed"] += 1
+        except KeyboardInterrupt:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"\nInterrupted: {total - position} of {total} steps were not "
+                    "processed. Re-run the same command to continue where this "
+                    "run stopped."
                 )
-                continue
-
-            if not os.path.isdir(current_path):
-                self.stdout.write(f"Skipping step {step.id}: SIP is already zipped")
-                continue
-
-            try:
-                statistics["attempted"] += 1
-                zip_path = zip_sip_folder(current_path)
-
-                archive = step.archive
-                if archive.path_to_sip == current_path:
-                    archive.set_path(zip_path)
-                    archive.update_sip_size()
-
-                self.stdout.write(
-                    self.style.SUCCESS(f"Successfully zipped SIP for step {step.id}")
-                )
-                statistics["succeeded"] += 1
-            except Exception as e:
-                self.stderr.write(
-                    self.style.ERROR(f"Error zipping step {step.id}: {str(e)}")
-                )
-                statistics["failed"] += 1
+            )
 
         style = (
             self.style.ERROR
-            if statistics["failed"] == statistics["attempted"]
+            if statistics["failed"] and statistics["failed"] == statistics["attempted"]
             else self.style.WARNING if statistics["failed"] > 0 else self.style.SUCCESS
         )
 
-        self.stdout.write(
-            style(
-                f"Script completed. Out of {statistics['attempted']} steps with an unzipped SIP, "
-                f"{statistics['succeeded']} were successfully zipped and {statistics['failed']} failed."
-            )
+        elapsed = time.monotonic() - started_at
+        summary = (
+            f"Script completed in {timedelta(seconds=int(elapsed))}. "
+            f"Out of {statistics['attempted']} steps with an unzipped SIP, "
+            f"{statistics['succeeded']} were successfully zipped and "
+            f"{statistics['failed']} failed."
         )
+        if statistics["succeeded"]:
+            average = timedelta(seconds=int(elapsed / statistics["succeeded"]))
+            summary += f" On average {average} per zipped SIP."
+        self.stdout.write(style(summary))

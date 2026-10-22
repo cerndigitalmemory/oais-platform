@@ -197,17 +197,18 @@ def zip_sip_folder(folder_path, remove_original=True):
 
     safe_name = folder_path.name.replace(":", "_")
     zip_path = folder_path.with_name(safe_name + ".zip")
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as sip_zip:
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as sip_zip:
         for file in sorted(folder_path.rglob("*")):
-            sip_zip.write(file, Path(safe_name) / file.relative_to(folder_path))
+            if file.is_file():
+                sip_zip.write(file, file.relative_to(folder_path))
     zip_path = str(zip_path)
     if remove_original:
-        shutil.rmtree(folder_path)
         harvest_steps = Step.objects.filter(
             output_data_json__artifact__artifact_localpath=str(folder_path)
         ).all()
         for step in harvest_steps:
             update_sip_artifact_path(step, str(folder_path), zip_path)
+        shutil.rmtree(folder_path)
     return zip_path
 
 
@@ -243,8 +244,7 @@ def extract_sip_zip(sip_zip_path):
     try:
         with zipfile.ZipFile(sip_zip_path) as sip_zip:
             sip_zip.extractall(tmp_dir)
-        sip_folder_name = os.path.splitext(os.path.basename(sip_zip_path))[0]
-        yield os.path.join(tmp_dir, sip_folder_name)
+        yield tmp_dir
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
