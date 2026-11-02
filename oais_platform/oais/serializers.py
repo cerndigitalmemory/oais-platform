@@ -262,6 +262,7 @@ class CollectionSerializer(serializers.ModelSerializer):
     archives_sip_count = serializers.SerializerMethodField()
     archives_aip_count = serializers.SerializerMethodField()
     archives_no_package_count = serializers.SerializerMethodField()
+    size_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -277,6 +278,7 @@ class CollectionSerializer(serializers.ModelSerializer):
             "archives_sip_count",
             "archives_aip_count",
             "archives_no_package_count",
+            "size_summary",
         ]
 
     @extend_schema_field(serializers.IntegerField)
@@ -290,6 +292,10 @@ class CollectionSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.IntegerField)
     def get_archives_no_package_count(self, obj):
         return obj.archives.filter(state=ArchiveState.NONE).count()
+
+    @extend_schema_field(serializers.DictField)
+    def get_size_summary(self, obj):
+        return obj.get_size_summary()
 
 
 class CollectionNameSerializer(serializers.ModelSerializer):
