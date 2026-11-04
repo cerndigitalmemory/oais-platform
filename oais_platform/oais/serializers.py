@@ -259,6 +259,7 @@ class CollectionMinimalSerializer(serializers.ModelSerializer):
 class CollectionSerializer(serializers.ModelSerializer):
     creator = UserMinimalSerializer()
     archives_count = serializers.IntegerField(source="archives.count", read_only=True)
+    archives_distinct_count = serializers.SerializerMethodField()
     archives_sip_count = serializers.SerializerMethodField()
     archives_aip_count = serializers.SerializerMethodField()
     archives_no_package_count = serializers.SerializerMethodField()
@@ -275,11 +276,16 @@ class CollectionSerializer(serializers.ModelSerializer):
             "last_modification_date",
             "internal",
             "archives_count",
+            "archives_distinct_count",
             "archives_sip_count",
             "archives_aip_count",
             "archives_no_package_count",
             "size_summary",
         ]
+
+    @extend_schema_field(serializers.IntegerField)
+    def get_archives_distinct_count(self, obj):
+        return obj.archives.values("source", "recid").distinct().count()
 
     @extend_schema_field(serializers.IntegerField)
     def get_archives_aip_count(self, obj):
