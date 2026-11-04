@@ -113,6 +113,12 @@ class CollectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_collection_detail_with_perms(self):
+        self.archive1.sip_size = 100
+        self.archive1.aip_size = 300
+        self.archive1.save()
+        self.collection.add_archive(
+            Archive.objects.create(recid="2", source="test_archive", sip_size=200)
+        )
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
         self.client.force_authenticate(user=self.other_user)
@@ -125,7 +131,14 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.collection.id)
-        self.assertEqual(response.data["archives_count"], 1)
+        self.assertEqual(response.data["archives_count"], 2)
+        self.assertEqual(
+            response.data["size_summary"],
+            {
+                "sip": {"total": 300, "avg": 150},
+                "aip": {"total": 300, "avg": 300},
+            },
+        )
 
     def test_collection_detail_with_object_perms(self):
         assign_perm("oais.view_collection", self.other_user, self.collection)

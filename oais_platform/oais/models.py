@@ -908,6 +908,22 @@ class Collection(models.Model):
             )
         return summary
 
+    def get_size_summary(self):
+        stats = self.archives.aggregate(
+            sip_total=models.Sum("sip_size"),
+            sip_avg=Avg("sip_size", filter=models.Q(sip_size__gt=0)),
+            aip_total=models.Sum("aip_size"),
+            aip_avg=Avg("aip_size", filter=models.Q(aip_size__gt=0)),
+        )
+        summary = {}
+        for package in ("sip", "aip"):
+            average = stats[f"{package}_avg"]
+            summary[package] = {
+                "total": stats[f"{package}_total"] or 0,
+                "avg": round(average) if average is not None else None,
+            }
+        return summary
+
     @staticmethod
     def get_source_collection_title(source):
         return f"Source: {source}"
