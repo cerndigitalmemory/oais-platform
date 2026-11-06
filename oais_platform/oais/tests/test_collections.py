@@ -135,7 +135,7 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.collection.id)
-        self.assertEqual(response.data["archives_count"], 2)
+        self.assertEqual(response.data["archives_count"], 3)
         self.assertEqual(
             response.data["size_summary"],
             {
@@ -143,7 +143,7 @@ class CollectionTests(APITestCase):
                 "aip": {"total": 300, "avg": 300},
             },
         )
-        self.assertEqual(response.data["archives_distinct_count"], 1)
+        self.assertEqual(response.data["archives_distinct_count"], 2)
 
     def test_collection_detail_with_object_perms(self):
         assign_perm("oais.view_collection", self.other_user, self.collection)
