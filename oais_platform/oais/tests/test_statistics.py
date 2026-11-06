@@ -9,9 +9,9 @@ class StatisticsEndpointTest(APITestCase):
     def setUp(self):
         self.url = reverse("statistics")
 
-        self.harvested_archive = Archive.objects.create()
-        self.preserved_archive = Archive.objects.create()
-        self.pushed_archive = Archive.objects.create()
+        self.harvested_archive = Archive.objects.create(source="test", recid="1")
+        self.preserved_archive = Archive.objects.create(source="test", recid="2")
+        self.pushed_archive = Archive.objects.create(source="test", recid="3")
         step_data = {
             self.harvested_archive: [StepName.HARVEST],
             self.preserved_archive: [StepName.HARVEST, StepName.ARCHIVE],
@@ -30,12 +30,23 @@ class StatisticsEndpointTest(APITestCase):
             archive.save()
 
     def test_statistics(self):
+        duplicate_archive = Archive.objects.create(source="test", recid="3")
+        for step in (StepName.HARVEST, StepName.ARCHIVE, StepName.PUSH_TO_CTA):
+            Step.objects.create(
+                step_name=step, status=Status.COMPLETED, archive=duplicate_archive
+            )
+        duplicate_archive.save()
+
         response = self.client.get(self.url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["harvested_count"], 3)
-        self.assertEqual(response.data["preserved_count"], 2)
-        self.assertEqual(response.data["pushed_to_tape_count"], 1)
+        self.assertEqual(response.data["harvested_count"], 4)
+        self.assertEqual(response.data["preserved_count"], 3)
+        self.assertEqual(response.data["pushed_to_tape_count"], 2)
         self.assertEqual(response.data["pushed_to_registry_count"], 1)
+        self.assertEqual(response.data["harvested_distinct_count"], 3)
+        self.assertEqual(response.data["preserved_distinct_count"], 2)
+        self.assertEqual(response.data["pushed_to_tape_distinct_count"], 1)
+        self.assertEqual(response.data["pushed_to_registry_distinct_count"], 1)
 
     def test_statistics_multiple_pushes(self):
         for step in (StepName.INVENIO_RDM_PUSH, StepName.PUSH_TO_CTA):

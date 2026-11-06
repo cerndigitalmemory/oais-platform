@@ -382,6 +382,18 @@ class StatisticsSerializer(serializers.Serializer):
     pushed_to_registry_count = serializers.IntegerField(
         help_text="Number of archives successfully pushed to registry"
     )
+    harvested_distinct_count = serializers.IntegerField(
+        help_text="Number of distinct archives with SIPs"
+    )
+    preserved_distinct_count = serializers.IntegerField(
+        help_text="Number of distinct archives with AIPs"
+    )
+    pushed_to_tape_distinct_count = serializers.IntegerField(
+        help_text="Number of distinct archives successfully pushed to CTA"
+    )
+    pushed_to_registry_distinct_count = serializers.IntegerField(
+        help_text="Number of distinct archives successfully pushed to registry"
+    )
 
 
 class StepStatisticsSerializer(serializers.Serializer):

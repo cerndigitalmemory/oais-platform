@@ -1274,23 +1274,27 @@ class StepTypeViewSet(viewsets.ReadOnlyModelViewSet):
 @extend_schema(request=None, responses={200: StatisticsSerializer})
 @api_view(["GET"])
 def statistics(request):
-    harvested_count = Archive.objects.filter(state=ArchiveState.SIP).count()
-    preserved_count = Archive.objects.filter(state=ArchiveState.AIP).count()
+    def distinct_records(queryset):
+        return queryset.values("source", "recid").distinct().count()
+
+    def pushed_archives(step_name):
+        return Archive.objects.filter(
+            steps__step_type__name=step_name, steps__status=Status.COMPLETED
+        )
+
+    harvested = Archive.objects.filter(state__in=[ArchiveState.SIP, ArchiveState.AIP])
+    preserved = Archive.objects.filter(state=ArchiveState.AIP)
+    pushed_to_tape = pushed_archives(StepName.PUSH_TO_CTA)
+    pushed_to_registry = pushed_archives(StepName.INVENIO_RDM_PUSH)
     data = {
-        "harvested_count": harvested_count + preserved_count,
-        "preserved_count": preserved_count,
-        "pushed_to_tape_count": Step.objects.filter(
-            step_name=StepName.PUSH_TO_CTA, status=Status.COMPLETED
-        )
-        .values("archive")
-        .distinct()
-        .count(),
-        "pushed_to_registry_count": Step.objects.filter(
-            step_name=StepName.INVENIO_RDM_PUSH, status=Status.COMPLETED
-        )
-        .values("archive")
-        .distinct()
-        .count(),
+        "harvested_count": harvested.count(),
+        "preserved_count": preserved.count(),
+        "pushed_to_tape_count": pushed_to_tape.distinct().count(),
+        "pushed_to_registry_count": pushed_to_registry.distinct().count(),
+        "harvested_distinct_count": distinct_records(harvested),
+        "preserved_distinct_count": distinct_records(preserved),
+        "pushed_to_tape_distinct_count": distinct_records(pushed_to_tape),
+        "pushed_to_registry_distinct_count": distinct_records(pushed_to_registry),
     }
     return Response(data)
 
