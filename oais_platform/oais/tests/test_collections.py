@@ -122,6 +122,10 @@ class CollectionTests(APITestCase):
         self.other_user.user_permissions.add(self.permission)
         self.other_user.save()
         self.client.force_authenticate(user=self.other_user)
+        duplicate_archive = Archive.objects.create(
+            recid="1", source="test_archive", requester=self.requester
+        )
+        self.collection.add_archive(duplicate_archive)
 
         url = reverse("tags-detail", args=[self.collection.id])
         response = self.client.get(
@@ -131,7 +135,7 @@ class CollectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.collection.id)
-        self.assertEqual(response.data["archives_count"], 2)
+        self.assertEqual(response.data["archives_count"], 3)
         self.assertEqual(
             response.data["size_summary"],
             {
@@ -139,6 +143,7 @@ class CollectionTests(APITestCase):
                 "aip": {"total": 300, "avg": 300},
             },
         )
+        self.assertEqual(response.data["archives_distinct_count"], 2)
 
     def test_collection_detail_with_object_perms(self):
         assign_perm("oais.view_collection", self.other_user, self.collection)
