@@ -1,5 +1,6 @@
 from rest_framework.test import APITestCase
 
+from oais_platform.oais.enums import StepFailureType
 from oais_platform.oais.models import Archive, Status, Step, StepName
 from oais_platform.oais.tasks.warning_analysis import warning_analysis
 
@@ -34,7 +35,8 @@ class WarningAnalysisTests(APITestCase):
 
         step.refresh_from_db()
         self.assertEqual(step.status, Status.COMPLETED)
-        self.assertFalse(step.output_data_json["manual_intervention_required"])
+        self.assertIsNone(step.output_data_json["errormsg"])
+        self.assertEqual(len(step.output_data_json["non_blocking_warnings"]), 1)
         self.assertTrue(
             Step.objects.filter(
                 archive=self.archive,
@@ -50,8 +52,8 @@ class WarningAnalysisTests(APITestCase):
 
         step.refresh_from_db()
         self.assertEqual(step.status, Status.COMPLETED_WITH_WARNINGS)
-        self.assertTrue(step.output_data_json["manual_intervention_required"])
-        self.assertEqual(len(step.output_data_json["blocking_warnings"]), 1)
+        self.assertEqual(step.failure_type, StepFailureType.FORMAT_NOT_IDENTIFIED)
+        self.assertEqual(len(step.output_data_json["errormsg"]), 1)
         self.assertFalse(
             Step.objects.filter(
                 archive=self.archive, step_type__name=StepName.PUSH_TO_CTA

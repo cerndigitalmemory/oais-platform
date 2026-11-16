@@ -4,6 +4,7 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 
 from oais_platform.oais.models import Status, Step
+from oais_platform.oais.tasks.archivematica import get_am_failure_type_from_failed_job
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import set_and_return_error
 from oais_platform.settings import RECOGNIZED_FILE_EXTENSIONS
@@ -17,12 +18,15 @@ def warning_analysis(self, archive_id, step_id):
     step.set_status(Status.IN_PROGRESS)
 
     try:
-        warnings = step.input_data_json.get("errormsg", [])
+        warnings = step.input_data_json.get("errormsg") or []
 
+        non_blocking_warnings = []
         blocking_warnings = []
         for warning in warnings:
             if warning.get("task") == "Identify file format":
-                if not has_recognized_extensions(warning.get("filenames")):
+                if has_recognized_extensions(warning.get("filenames")):
+                    non_blocking_warnings.append(warning)
+                else:
                     blocking_warnings.append(warning)
             else:
                 blocking_warnings.append(warning)
@@ -31,20 +35,21 @@ def warning_analysis(self, archive_id, step_id):
         set_and_return_error(step, str(err))
         return
 
-    manual_intervention_required = len(blocking_warnings) > 0
-    output_data = {
-        "status": 1 if manual_intervention_required else 0,
-        "manual_intervention_required": manual_intervention_required,
-        "warnings": warnings,
-        "blocking_warnings": blocking_warnings,
-    }
-
-    if manual_intervention_required:
+    if blocking_warnings:
         logger.info(
             f"Manual intervention required for archive {archive_id}: "
             f"{len(blocking_warnings)} blocking warnings"
         )
-        step.set_output_data(output_data)
+        step.set_failure_type(
+            get_am_failure_type_from_failed_job(blocking_warnings[0].get("task"))
+        )
+        step.set_output_data(
+            {
+                "status": 1,
+                "errormsg": blocking_warnings,
+                "non_blocking_warnings": non_blocking_warnings,
+            }
+        )
         step.set_status(Status.COMPLETED_WITH_WARNINGS)
         step.set_finish_date()
         return
@@ -53,7 +58,11 @@ def warning_analysis(self, archive_id, step_id):
     finalize(
         self=self,
         current_status=states.SUCCESS,
-        retval=output_data,
+        retval={
+            "status": 0,
+            "errormsg": None,
+            "non_blocking_warnings": non_blocking_warnings,
+        },
         task_id=None,
         args=[archive_id, step_id, None],
         kwargs=None,
