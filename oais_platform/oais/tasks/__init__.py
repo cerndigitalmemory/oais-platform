@@ -10,4 +10,5 @@ from . import (
     pipeline_actions,
     registry,
     scheduled_harvest,
+    warning_analysis,
 )

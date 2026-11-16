@@ -23,10 +23,15 @@ from oais_platform.oais.models import (
     StepName,
     StepType,
 )
-from oais_platform.oais.tasks.pipeline_actions import create_retry_step, finalize
+from oais_platform.oais.tasks.pipeline_actions import (
+    create_retry_step,
+    finalize,
+    run_step,
+)
 from oais_platform.oais.tasks.utils import (
     cleanup_empty_path,
     create_path_artifact,
+    create_step,
     generate_directory_structure,
     get_failure_type_from_status_code,
     set_and_return_error,
@@ -255,6 +260,25 @@ def _handle_am_retry(step, am_status):
         )
 
     step.set_output_data(am_status)
+
+    if (
+        am_status.get("retry_limit_exceeded")
+        and step.status == Status.COMPLETED_WITH_WARNINGS
+    ):
+        _start_warning_analysis(step)
+
+
+def _start_warning_analysis(step):
+    logger.info(f"Starting warning analysis for archive {step.archive.id}")
+    analysis_step = create_step(
+        step_name=StepName.WARNING_ANALYSIS,
+        archive=step.archive,
+        input_step_id=step.id,
+        input_data=step.output_data_json,
+        user=step.initiated_by_user,
+        harvest_batch=step.initiated_by_harvest_batch,
+    )
+    run_step(analysis_step, step.archive.id)
 
 
 def _get_am_status(am, step):
@@ -649,18 +673,10 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
                     for task in job["tasks"]:
                         if task["exit_code"] == 1:
                             task_uuid = task["uuid"]
-                            filename = None
-                            result = requests.get(
-                                f"{am.am_url}/api/v2beta/task/{task_uuid}",
-                                headers=am._am_auth_headers(),
-                            )
-                            if result.ok:
-                                task_info = result.json()
-                                filename = task_info.get("file_name", None)
                             errors.append(
                                 {
                                     "task": job["name"],
-                                    "filename": filename,
+                                    "filename": _get_task_file_name(am, task_uuid),
                                     "link": f"{am.am_url}/task/{task_uuid}",
                                 }
                             )
@@ -673,13 +689,18 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
 
                     if key not in seen:
                         seen.add(key)
-                        errors.append(
-                            {
-                                "task": job["name"],
-                                "microservice": job.get("microservice"),
-                                "link": f"{am.am_url}/tasks/{job['uuid']}",
-                            }
-                        )
+                        error = {
+                            "task": job["name"],
+                            "microservice": job.get("microservice"),
+                            "link": f"{am.am_url}/tasks/{job['uuid']}",
+                        }
+                        if job["name"] == "Identify file format":
+                            error["filenames"] = [
+                                _get_task_file_name(am, task["uuid"])
+                                for task in job.get("tasks", [])
+                                if task.get("exit_code") != 0
+                            ]
+                        errors.append(error)
                         if not failure_type:
                             failure_type = get_am_failure_type_from_failed_job(
                                 job["name"]
@@ -700,14 +721,26 @@ def get_executed_jobs(am, unit_uuid, check_for_failed=False):
             return [], failure_type
 
 
+def _get_task_file_name(am, task_uuid):
+    result = requests.get(
+        f"{am.am_url}/api/v2beta/task/{task_uuid}",
+        headers=am._am_auth_headers(),
+    )
+    if result.ok:
+        return result.json().get("file_name", None)
+    return None
+
+
 def get_am_failure_type_from_failed_job(job):
     match job:
         case "Scan for viruses in directories" | "Scan for viruses on extracted files":
             return StepFailureType.VIRUS_FLAGGED
         case "Extract contents from compressed archives":
             return StepFailureType.EXTRACTION_FAILED
-        case "Normalize for preservation", "Validate preservation derivatives":
+        case "Normalize for preservation" | "Validate preservation derivatives":
             return StepFailureType.NORMALIZATION_FAILED
+        case "Identify file format":
+            return StepFailureType.FORMAT_NOT_IDENTIFIED
         case _:
             return StepFailureType.AM_JOB_FAILED_OTHER
 

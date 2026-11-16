@@ -815,8 +815,9 @@ class Collection(models.Model):
         When(step_type__name=StepName.VALIDATION, then=1),
         When(step_type__name=StepName.EXTRACT_TITLE, then=2),
         When(step_type__name=StepName.ARCHIVE, then=3),
-        When(step_type__name=StepName.NOTIFY_SOURCE, then=4),
-        When(step_type__name=StepName.PUSH_TO_CTA, then=5),
+        When(step_type__name=StepName.WARNING_ANALYSIS, then=4),
+        When(step_type__name=StepName.NOTIFY_SOURCE, then=5),
+        When(step_type__name=StepName.PUSH_TO_CTA, then=6),
         default=99,
         output_field=IntegerField(),
     )
