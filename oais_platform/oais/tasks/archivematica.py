@@ -270,15 +270,20 @@ def _handle_am_retry(step, am_status):
 
 def _start_warning_analysis(step):
     logger.info(f"Starting warning analysis for archive {step.archive.id}")
-    analysis_step = create_step(
-        step_name=StepName.WARNING_ANALYSIS,
-        archive=step.archive,
-        input_step_id=step.id,
-        input_data=step.output_data_json,
-        user=step.initiated_by_user,
-        harvest_batch=step.initiated_by_harvest_batch,
-    )
-    run_step(analysis_step, step.archive.id)
+    try:
+        analysis_step = create_step(
+            step_name=StepName.WARNING_ANALYSIS,
+            archive=step.archive,
+            input_step_id=step.id,
+            input_data=step.output_data_json,
+            user=step.initiated_by_user,
+            harvest_batch=step.initiated_by_harvest_batch,
+        )
+        run_step(analysis_step, step.archive.id)
+    except Exception as err:
+        logger.error(
+            f"Could not start warning analysis for archive {step.archive.id}: {err}"
+        )
 
 
 def _get_am_status(am, step):
