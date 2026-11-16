@@ -15,6 +15,7 @@ from oais_platform.oais.models import (
     StepName,
 )
 from oais_platform.oais.tasks.archivematica import (
+    _handle_am_retry,
     archive_failed_count_reset,
     check_am_status,
 )
@@ -588,7 +589,23 @@ class ArchivematicaStatusTests(APITestCase):
                         "uuid": 1234,
                     },
                 ],
-            }
+            },
+            {
+                "name": "Identify file format",
+                "status": "FAILED",
+                "microservice": "Identify file format",
+                "uuid": "4321",
+                "tasks": [
+                    {
+                        "exit_code": 255,
+                        "uuid": 5678,
+                    },
+                    {
+                        "exit_code": 0,
+                        "uuid": 1234,
+                    },
+                ],
+            },
         ]
         get_unit_status.return_value = {
             "status": "COMPLETE",
@@ -618,7 +635,7 @@ class ArchivematicaStatusTests(APITestCase):
         self.assertIsNotNone(self.step.finish_date)
         self.assertEqual(self.step.output_data_json["retry_count"], 2)
         self.assertEqual(self.step.output_data_json["retry"], True)
-        self.assertEqual(len(self.step.output_data_json["errormsg"]), 1)
+        self.assertEqual(len(self.step.output_data_json["errormsg"]), 2)
         self.assertEqual(
             self.step.output_data_json["errormsg"][0],
             {
@@ -627,6 +644,16 @@ class ArchivematicaStatusTests(APITestCase):
                 "link": f"{am_instance_url}/task/5678",
             },
         )
+        self.assertEqual(
+            self.step.output_data_json["errormsg"][1],
+            {
+                "task": "Identify file format",
+                "microservice": "Identify file format",
+                "link": f"{am_instance_url}/tasks/4321",
+                "filenames": ["failed.txt"],
+            },
+        )
+        self.assertEqual(self.step.failure_type, StepFailureType.FORMAT_NOT_IDENTIFIED)
         mock_create_retry_step.assert_called_once()
 
     @patch("oais_platform.oais.tasks.archivematica.create_retry_step.apply_async")
