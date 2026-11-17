@@ -4,7 +4,6 @@ from celery import shared_task, states
 from celery.utils.log import get_task_logger
 
 from oais_platform.oais.models import Status, Step
-from oais_platform.oais.tasks.archivematica import get_am_failure_type_from_failed_job
 from oais_platform.oais.tasks.pipeline_actions import finalize
 from oais_platform.oais.tasks.utils import set_and_return_error
 from oais_platform.settings import RECOGNIZED_FILE_EXTENSIONS
@@ -40,18 +39,15 @@ def warning_analysis(self, archive_id, step_id):
             f"Manual intervention required for archive {archive_id}: "
             f"{len(blocking_warnings)} blocking warnings"
         )
-        step.set_failure_type(
-            get_am_failure_type_from_failed_job(blocking_warnings[0].get("task"))
-        )
-        step.set_output_data(
-            {
+        set_and_return_error(
+            step,
+            output_data={
                 "status": 1,
                 "errormsg": blocking_warnings,
                 "non_blocking_warnings": non_blocking_warnings,
-            }
+            },
+            failure_type=step.input_step.failure_type if step.input_step else None,
         )
-        step.set_status(Status.COMPLETED_WITH_WARNINGS)
-        step.set_finish_date()
         return
 
     logger.info(f"No blocking warnings for archive {archive_id}, continuing pipeline")

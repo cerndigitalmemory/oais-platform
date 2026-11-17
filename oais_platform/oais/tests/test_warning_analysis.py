@@ -11,9 +11,16 @@ class WarningAnalysisTests(APITestCase):
         self.archive.add_step_to_pipeline(StepName.PUSH_TO_CTA)
 
     def create_analysis_step(self, filename):
+        archive_step = Step.objects.create(
+            archive=self.archive,
+            step_name=StepName.ARCHIVE,
+            status=Status.COMPLETED_WITH_WARNINGS,
+            failure_type=StepFailureType.FORMAT_NOT_IDENTIFIED,
+        )
         step = Step.objects.create(
             archive=self.archive,
             step_name=StepName.WARNING_ANALYSIS,
+            input_step=archive_step,
             input_data_json={
                 "errormsg": [
                     {
@@ -45,13 +52,13 @@ class WarningAnalysisTests(APITestCase):
             ).exists()
         )
 
-    def test_warning_analysis_unknown_format_requires_intervention(self):
+    def test_warning_analysis_unknown_format_fails(self):
         step = self.create_analysis_step("data.xyz")
 
         warning_analysis.apply(args=[self.archive.id, step.id])
 
         step.refresh_from_db()
-        self.assertEqual(step.status, Status.COMPLETED_WITH_WARNINGS)
+        self.assertEqual(step.status, Status.FAILED)
         self.assertEqual(step.failure_type, StepFailureType.FORMAT_NOT_IDENTIFIED)
         self.assertEqual(len(step.output_data_json["errormsg"]), 1)
         self.assertFalse(
