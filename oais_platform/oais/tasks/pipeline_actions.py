@@ -114,21 +114,19 @@ def execute_pipeline(archive_id, force_continue=False, return_signature=False):
 def _create_retry_step(
     archive_id,
     user_id=None,
-    execute=False,
     step_name=None,
 ):
     archive = Archive.objects.get(pk=archive_id)
     last_step = archive.last_step
     if not last_step:
-        return {"errormsg": "Retry operation not permitted, no last step found."}
+        return None, "Retry operation not permitted, no last step found."
     if last_step.status not in RETRY_CONTINUE_STATUSES:
-        return {
-            "errormsg": f"Retry operation not permitted, last step status is not one of {', '.join(status.label for status in RETRY_CONTINUE_STATUSES)}."
-        }
+        return (
+            None,
+            f"Retry operation not permitted, last step status is not one of {', '.join(status.label for status in RETRY_CONTINUE_STATUSES)}.",
+        )
     if step_name and last_step.step_type.name != step_name:
-        return {
-            "errormsg": f"Retry operation not permitted, last step is not {step_name}."
-        }
+        return None, f"Retry operation not permitted, last step is not {step_name}."
     step = create_step(
         step_name=last_step.step_type.name,
         archive=archive,
@@ -145,15 +143,15 @@ def _create_retry_step(
     for next_step in next_steps:
         next_step.set_input_step(step)
 
-    if execute:
-        run_step(step, archive.id)
-
-    return {"errormsg": None}
+    return step, None
 
 
 @shared_task(name="create_retry_step", bind=True, ignore_result=True)
-def create_retry_step(self, archive_id, user_id=None, execute=False, step_name=None):
-    return _create_retry_step(archive_id, user_id, execute, step_name)
+def create_retry_step(self, archive_id, user_id=None, step_name=None):
+    step, errormsg = _create_retry_step(archive_id, user_id, step_name)
+    if step:
+        run_step(step, archive_id)
+    return {"errormsg": errormsg}
 
 
 def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
@@ -227,6 +225,7 @@ def finalize(self, current_status, retval, task_id, args, kwargs, einfo):
 
 
 def create_pipeline(archive_id, step_types, run_type, user):
+    retry_step = None
     with transaction.atomic():
         archive = Archive.objects.select_for_update().get(pk=archive_id)
         force_continue = False
@@ -237,11 +236,9 @@ def create_pipeline(archive_id, step_types, run_type, user):
                     archive.add_step_to_pipeline(step_type, user=user)
 
             case "retry":
-                force_continue = True
-                result = _create_retry_step(archive_id, user.id, execute=True)
-                if result.get("errormsg"):
-                    raise Exception(result["errormsg"])
-                return
+                retry_step, errormsg = _create_retry_step(archive_id, user.id)
+                if errormsg:
+                    raise Exception(errormsg)
 
             case "continue":
                 force_continue = True
@@ -265,6 +262,10 @@ def create_pipeline(archive_id, step_types, run_type, user):
                 raise Exception(
                     "Invalid run_type param, possible values: ('run', 'retry', 'continue')."
                 )
+
+    if retry_step:
+        run_step(retry_step, archive_id)
+        return
 
     execute_pipeline(archive.id, force_continue=force_continue)
 

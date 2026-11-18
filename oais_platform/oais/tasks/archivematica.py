@@ -254,7 +254,6 @@ def _handle_am_retry(step, am_status):
             args=(
                 step.archive.id,
                 step.initiated_by_user.id if step.initiated_by_user else None,
-                True,
                 StepName.ARCHIVE,
             )
         )
