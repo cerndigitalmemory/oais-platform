@@ -1,6 +1,6 @@
 stages:
   - format
-  - test
+  - prebuild
   - tag
   - build
   - deploy-dev
@@ -28,7 +28,7 @@ check-black:
     - black . --check --exclude "oais_platform/oais/migrations"
 
 django-tests:
-  stage: test
+  stage: prebuild
   image: registry.cern.ch/docker.io/library/docker:20.10.16
   services:
     - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
