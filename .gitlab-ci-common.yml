@@ -3,7 +3,7 @@
 build-image:
   stage: build
   image:
-    name: registry.cern.ch/quay.io/buildah/stable:latest
+    name: registry.cern.ch/quay.io/buildah/stable:v1.43
   variables:
     FQ_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:$CI_COMMIT_TAG"
     CONTAINER_STORAGE: "/builds/container-storage"
