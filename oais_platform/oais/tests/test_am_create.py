@@ -40,7 +40,7 @@ class ArchivematicaCreateTests(APITestCase):
             step_name=StepName.ARCHIVE,
             input_data_json={"archivematica_instance": AM_INSTANCES[0]["AM_INSTANCE"]},
         )
-        self.step.step_type.size_limit_bytes = 2000
+        self.step.step_type.size_limit_bytes = 3000
         self.step.step_type.concurrency_limit = 5
         self.step.step_type.save()
         create_archivematica_instance(
@@ -212,7 +212,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertFalse(Path(self.step.output_data_json["transfer_sip_path"]).exists())
 
     def test_archivematica_file_size_exceeded(self):
-        self.archive.sip_size = self.step.step_type.size_limit_bytes + 1
+        self.archive.sip_size = self.step.step_type.size_limit_bytes // 3 + 1
         self.archive.save()
         archivematica.apply(args=[self.step.id])
 
@@ -226,7 +226,7 @@ class ArchivematicaCreateTests(APITestCase):
 
     def test_archivematica_aggr_file_size_exceeded(self):
         self._create_with_current_size(
-            self.step.step_type.size_limit_bytes - self.archive.sip_size + 1
+            self.step.step_type.size_limit_bytes // 3 - self.archive.sip_size + 1
         )
         archivematica.apply(args=[self.step.id])
 
@@ -237,7 +237,7 @@ class ArchivematicaCreateTests(APITestCase):
         self.assertEqual(self.step.step_type.current_count, 1)
         self.assertEqual(
             self.step.step_type.current_size_bytes,
-            self.step.step_type.size_limit_bytes - self.archive.sip_size + 1,
+            self.step.step_type.size_limit_bytes // 3 - self.archive.sip_size + 1,
         )
 
     @patch("amclient.AMClient.create_package")
