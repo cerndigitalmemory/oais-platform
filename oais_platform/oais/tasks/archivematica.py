@@ -452,7 +452,9 @@ def resource_check(task, current_step, archive):
         archive.update_sip_size()
     archive_step_type = StepType.get_by_stepname(StepName.ARCHIVE)
     am_instance = current_step.input_data_json.get("archivematica_instance")
-    if archive.sip_size > archive_step_type.size_limit_bytes:
+    disk_usage_factor = 3
+    required_size_bytes = archive.sip_size * disk_usage_factor
+    if required_size_bytes > archive_step_type.size_limit_bytes:
         return set_and_return_error(
             current_step,
             f"SIP exceeds the Archivematica file size limit ({archive_step_type.size_limit_bytes // (1024**3)}GB).",
@@ -471,7 +473,7 @@ def resource_check(task, current_step, archive):
             or 0
         )
         if (
-            instance_current_size_bytes + archive.sip_size
+            instance_current_size_bytes * disk_usage_factor + required_size_bytes
             > locked_archive_step_type.size_limit_bytes
         ):
             logger.warning(
