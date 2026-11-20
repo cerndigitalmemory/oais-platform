@@ -315,7 +315,7 @@ def _retry_push_to_cta(archive_id, retry_count):
             f"Retrying pushing archive {archive_id} to CTA (attempt {retry_count + 1})"
         )
         create_retry_step.apply_async(
-            args=(archive_id, None, True, StepName.PUSH_TO_CTA),
+            args=(archive_id, None, StepName.PUSH_TO_CTA),
             eta=timezone.now() + timedelta(hours=1),
         )
         return True

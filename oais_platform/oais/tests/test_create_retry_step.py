@@ -21,7 +21,7 @@ class CreateRetryStepTests(APITestCase):
 
     @patch("oais_platform.oais.tasks.pipeline_actions.run_step")
     def test_create_retry_step_success(self, mock_run_step):
-        create_retry_step.apply(args=[self.archive.id, self.user.id, True])
+        create_retry_step.apply(args=[self.archive.id, self.user.id])
         retry_step = Step.objects.filter(
             step_type=self.step.step_type,
             archive=self.archive,
