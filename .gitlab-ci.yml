@@ -1,6 +1,6 @@
 stages:
   - format
-  - test
+  - prebuild
   - tag
   - build
   - deploy-dev
@@ -17,6 +17,8 @@ check-isort:
     - pip install isort==5.13
   script:
     - isort --profile black -c --skip "migrations" .
+  except:
+    - schedules
 
 check-black:
   stage: format
@@ -26,9 +28,11 @@ check-black:
     - pip install black==24.10
   script:
     - black . --check --exclude "oais_platform/oais/migrations"
+  except:
+    - schedules
 
 django-tests:
-  stage: test
+  stage: prebuild
   image: registry.cern.ch/docker.io/library/docker:20.10.16
   services:
     - name: registry.cern.ch/docker.io/library/docker:20.10.16-dind
