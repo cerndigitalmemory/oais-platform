@@ -31,7 +31,11 @@ from oais_platform.oais.tasks.utils import (
     get_failure_type_from_status_code,
     set_and_return_error,
 )
-from oais_platform.settings import AM_PROCESSING_TIME_LIMIT, AM_WAITING_TIME_LIMIT
+from oais_platform.settings import (
+    AM_DISK_USAGE_FACTOR,
+    AM_PROCESSING_TIME_LIMIT,
+    AM_WAITING_TIME_LIMIT,
+)
 
 logger = get_task_logger(__name__)
 
@@ -452,8 +456,7 @@ def resource_check(task, current_step, archive):
         archive.update_sip_size()
     archive_step_type = StepType.get_by_stepname(StepName.ARCHIVE)
     am_instance = current_step.input_data_json.get("archivematica_instance")
-    disk_usage_factor = 3
-    required_size_bytes = archive.sip_size * disk_usage_factor
+    required_size_bytes = archive.sip_size * AM_DISK_USAGE_FACTOR
     if required_size_bytes > archive_step_type.size_limit_bytes:
         return set_and_return_error(
             current_step,
@@ -473,7 +476,7 @@ def resource_check(task, current_step, archive):
             or 0
         )
         if (
-            instance_current_size_bytes * disk_usage_factor + required_size_bytes
+            instance_current_size_bytes * AM_DISK_USAGE_FACTOR + required_size_bytes
             > locked_archive_step_type.size_limit_bytes
         ):
             logger.warning(
