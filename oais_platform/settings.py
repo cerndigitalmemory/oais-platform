@@ -375,6 +375,8 @@ BATCH_ANNOUNCE_LIMIT = 20
 AM_WAITING_TIME_LIMIT = 5
 # Max processing time in AM (to time out stuck in progress - mins)
 AM_PROCESSING_TIME_LIMIT = 60  # in mins
+# How many times the SIP size is needed for processing in AM
+AM_DISK_USAGE_FACTOR = 3
 
 # Pipeline creation step limit
 PIPELINE_SIZE_LIMIT = 10
