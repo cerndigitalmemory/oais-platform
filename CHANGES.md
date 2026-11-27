@@ -1,5 +1,16 @@
 # Changes
 
+## Version 5.6.0 (released 2026-11-27)
+- Fix: improve unstage endpoint to avoid uintended behavior
+- Fix: improvements for zipping SIPs
+- Collections: return AIP and SIP size information, return count of distinct archives
+- Statistics: add count of only distinct archives
+- Build: pin buildah version to 1.43
+- CI: update .gitlab-ci.yml
+- AM: account for 3x SIP size when checking for resources
+- Steps: create a warning analysis step
+- Requirements: bump bagit-create
+
 ## Version 5.5.0 (released 2026-10-06)
 - Archive: add aip_size field to Archive model
 - AM: remove unused AM transfer source variable
